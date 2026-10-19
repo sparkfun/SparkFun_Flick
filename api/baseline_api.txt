@@ -1,0 +1,275 @@
+# Baseline API - single source of truth.
+#
+# Run `python tools/gen_api.py` after editing. It regenerates:
+#   sdk/include/baseline_api.h       (bl_api_t + sketch-side wrappers)
+#   baseline/src/gen/bl_impl.h       (prototypes Baseline implements)
+#   baseline/src/gen/api_table.c     (Baseline's table instance)
+#   docs/API.md
+# and checks api/abi.lock so the table stays append-only.
+#
+# RULES
+#   * Append new entries at the END only, with minor = current minor + 1.
+#   * Never reorder, remove, or change an existing line's return/name/params.
+#     That needs abi_major + 1 (and every sketch must be rebuilt).
+#   * Use plain C types / bl_* types from baseline_types.h. No IDF types.
+#   * Callback parameters must use a typedef from baseline_types.h.
+#
+# Format:  minor | return type | field | params | sketch wrapper | description
+#   field           -> member of bl_api_t, implemented in Baseline as bl_impl_<field>
+#   sketch wrapper  -> name sketches call ("-" for none). Variadic entries become macros.
+
+abi_major = 1
+
+# ---- time -------------------------------------------------------------------
+0 | uint32_t    | millis        | void                                         | millis            | Milliseconds since boot.
+0 | uint64_t    | micros        | void                                         | micros            | Microseconds since boot.
+0 | void        | delay_ms      | uint32_t ms                                  | -                 | delay(ms): block the sketch task for ms milliseconds (other tasks keep running).
+0 | void        | delay_us      | uint32_t us                                  | delayMicroseconds | Busy-wait for us microseconds.
+0 | void        | yield         | void                                         | -                 | yield(): let other tasks run.
+
+# ---- console / logging --------------------------------------------------------
+0 | int         | printf        | const char *fmt, ...                         | bl_printf         | printf to the Baseline console.
+0 | int         | vprintf       | const char *fmt, va_list ap                  | bl_vprintf        | vprintf to the Baseline console.
+0 | int         | snprintf      | char *buf, size_t size, const char *fmt, ... | bl_snprintf       | Format into a buffer.
+0 | int         | vsnprintf     | char *buf, size_t size, const char *fmt, va_list ap | bl_vsnprintf | Format into a buffer (va_list).
+0 | void        | log           | int level, const char *tag, const char *fmt, ... | bl_log        | Log through ESP-IDF logging. level: BL_LOG_*.
+
+# ---- memory -----------------------------------------------------------------
+0 | void *      | malloc        | size_t size                                  | bl_malloc         | Allocate from the Baseline heap.
+0 | void *      | calloc        | size_t n, size_t size                        | bl_calloc         | Allocate zeroed memory.
+0 | void *      | realloc       | void *ptr, size_t size                       | bl_realloc        | Resize an allocation.
+0 | void        | free          | void *ptr                                    | bl_free           | Free an allocation.
+0 | uint32_t    | free_heap     | void                                         | bl_free_heap      | Free heap bytes.
+
+# ---- system -----------------------------------------------------------------
+0 | void        | restart       | void                                         | bl_restart        | Reboot the device.
+0 | const char *| baseline_version | void                                      | bl_baseline_version | Baseline firmware version string.
+
+# ---- GPIO -------------------------------------------------------------------
+0 | int         | gpio_mode     | int pin, int mode                            | pinMode           | Configure a pin. mode: INPUT, OUTPUT, INPUT_PULLUP, INPUT_PULLDOWN, OUTPUT_OPEN_DRAIN. Returns 0 or BL_ERR_*.
+0 | int         | gpio_write    | int pin, int level                           | digitalWrite      | Drive an output pin HIGH or LOW. Returns 0 or BL_ERR_*.
+0 | int         | gpio_read     | int pin                                      | digitalRead       | Read a pin. Returns HIGH, LOW, or BL_ERR_*.
+
+# ======================= ABI 1.1 ==========================================
+# ---- USB console as a byte stream (backs the C++ Serial object) ----
+1 | int         | console_write     | const uint8_t *data, size_t len          | bl_console_write     | Write raw bytes to the USB console. Returns bytes written.
+1 | int         | console_available | void                                     | bl_console_available | Bytes waiting to be read from the USB console.
+1 | int         | console_read      | void                                     | bl_console_read      | Read one byte from the USB console, or -1 if none.
+
+# ---- analog, PWM, RGB LED ----
+1 | int         | adc_read      | int pin                                      | analogRead        | Read a pin's ADC value (0-4095), or BL_ERR_*.
+1 | int         | adc_read_mv   | int pin                                      | analogReadMilliVolts | Read a pin's voltage in millivolts, or BL_ERR_*.
+1 | int         | pwm_write     | int pin, int value                           | analogWrite       | PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*.
+1 | int         | rgb_write     | int pin, uint8_t red, uint8_t green, uint8_t blue | rgbLedWrite  | Set a WS2812 RGB LED (Thing Plus: pin 46). Returns 0 or BL_ERR_*.
+
+# ---- I2C (Qwiic) ----
+1 | int         | i2c_begin     | int sda, int scl, uint32_t freq              | bl_i2c_begin      | Start I2C. sda/scl -1 = board Qwiic pins (8/9). freq in Hz (0 = 100 kHz).
+1 | int         | i2c_write     | uint8_t addr, const uint8_t *data, size_t len, bool stop | bl_i2c_write | Write bytes (len 0 = probe). 0, BL_ERR_NACK, BL_ERR_TIMEOUT or BL_ERR_FAIL.
+1 | int         | i2c_read      | uint8_t addr, uint8_t *data, size_t len      | bl_i2c_read       | Read bytes. Returns the number read, or BL_ERR_*.
+
+# ---- WiFi ----
+1 | int         | wifi_begin    | const char *ssid, const char *password       | bl_wifi_begin     | Start connecting as a station (returns at once). password may be NULL.
+1 | int         | wifi_status   | void                                         | bl_wifi_status    | BL_WIFI_* status (same values as Arduino's WL_*).
+1 | void        | wifi_disconnect | void                                       | bl_wifi_disconnect | Disconnect from the access point.
+1 | int         | wifi_local_ip | char *buf, size_t size                       | bl_wifi_local_ip  | Write the IP address as text ("192.168.1.20"). Returns 0 or BL_ERR_STATE.
+1 | int         | wifi_rssi     | void                                         | bl_wifi_rssi      | Signal strength in dBm (0 when not connected).
+1 | int         | wifi_mac      | uint8_t *mac                                 | bl_wifi_mac       | Copy the 6-byte station MAC address into mac. Returns 0.
+
+# ---- HTTP ----
+1 | int         | http_get      | const char *url, char *body, size_t size, int *status | bl_http_get | HTTP(S) GET; follows redirects, verifies TLS with the built-in CA bundle. Body is NUL-terminated and truncated to size-1. Returns body length or BL_ERR_*.
+
+# ---- BLE serial (Nordic UART Service) ----
+1 | int         | ble_serial_begin     | const char *name                      | bl_ble_serial_begin     | Start advertising a BLE UART (Nordic UART Service) named `name`.
+1 | int         | ble_serial_connected | void                                  | bl_ble_serial_connected | 1 if a central is connected.
+1 | int         | ble_serial_write     | const uint8_t *data, size_t len       | bl_ble_serial_write     | Send bytes as notifications. Returns bytes sent (0 if not connected).
+1 | int         | ble_serial_available | void                                  | bl_ble_serial_available | Bytes received and not yet read.
+1 | int         | ble_serial_read      | void                                  | bl_ble_serial_read      | Read one received byte, or -1.
+
+# ---- ESP-NOW ----
+1 | int         | espnow_begin   | void                                        | bl_espnow_begin   | Start ESP-NOW (puts WiFi in station mode if needed).
+1 | int         | espnow_send    | const uint8_t *mac, const uint8_t *data, size_t len | bl_espnow_send | Send up to 250 bytes. mac NULL = broadcast. Returns 0 or BL_ERR_*.
+1 | int         | espnow_receive | uint8_t *mac, uint8_t *data, size_t size    | bl_espnow_receive | Take the next received packet: copies sender MAC (6 bytes, may be NULL) and data. Returns length, 0 if none.
+
+# ======================= ABI 1.2 ==========================================
+# ---- backs the Arduino-compatible HTTPClient, esp_now send callback, ESP, random() ----
+2 | int         | http_request  | const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char **response, size_t *response_len | bl_http_request | HTTP(S) request. headers: "Name: value\r\n" lines or NULL. *response gets a malloc'd NUL-terminated body (free with bl_free); may be NULL. Returns HTTP status or BL_ERR_*.
+2 | int         | espnow_send_status | uint8_t *mac                            | bl_espnow_send_status | Take the next delivery report: copies the peer MAC; returns 1 delivered, 0 failed, -1 none pending.
+2 | uint32_t    | system_info   | int what                                     | bl_system_info    | System facts: what = BL_INFO_* (CPU MHz, heap/PSRAM/flash sizes).
+2 | uint32_t    | random        | void                                         | bl_random         | 32-bit hardware random number.
+
+# ======================= ABI 1.3 ==========================================
+# Handles: functions that create something (client, server, characteristic...)
+# return a small non-negative handle, or BL_ERR_* (< 0). The SDK wraps handles
+# in the classic Arduino classes, so sketches never see them.
+
+# ---- GPIO interrupts (deferred: Baseline's ISR queues the pin, the SDK runs the handler on the sketch task) ----
+3 | int         | gpio_attach_interrupt | int pin, int mode                     | bl_gpio_attach_interrupt | Watch a pin. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH.
+3 | int         | gpio_detach_interrupt | int pin                               | bl_gpio_detach_interrupt | Stop watching a pin.
+3 | int         | gpio_interrupt_take   | void                                  | bl_gpio_interrupt_take | Next pin that fired, or -1.
+
+# ---- SPI (default pins = board SCK/MISO/MOSI/SS) ----
+3 | int         | spi_begin             | int sck, int miso, int mosi, int ss   | bl_spi_begin | Start the SPI bus. -1 = board default pin.
+3 | void        | spi_end               | void                                  | bl_spi_end | Release the SPI bus.
+3 | void        | spi_begin_transaction | uint32_t clock, int bit_order, int data_mode | bl_spi_begin_transaction | Lock the bus with these settings. bit_order: BL_MSBFIRST/BL_LSBFIRST, data_mode 0-3.
+3 | void        | spi_end_transaction   | void                                  | bl_spi_end_transaction | Unlock the bus.
+3 | void        | spi_transfer          | uint8_t *data, size_t len             | bl_spi_transfer | Full-duplex transfer; received bytes replace data.
+3 | void        | spi_write             | const uint8_t *data, size_t len       | bl_spi_write | Send bytes, discard what comes back.
+
+# ---- WiFi: modes, access point, scan, addressing ----
+3 | int         | wifi_set_mode     | int mode                                  | bl_wifi_set_mode | BL_WIFI_MODE_OFF/STA/AP/AP_STA.
+3 | int         | wifi_get_mode     | void                                      | bl_wifi_get_mode | Current BL_WIFI_MODE_*.
+3 | int         | wifi_softap       | const char *ssid, const char *password, int channel, int hidden, int max_clients | bl_wifi_softap | Start an access point (password NULL or >= 8 chars).
+3 | int         | wifi_softap_stop  | void                                      | bl_wifi_softap_stop | Stop the access point.
+3 | int         | wifi_softap_stations | void                                   | bl_wifi_softap_stations | Stations connected to our access point.
+3 | uint32_t    | wifi_ip           | int which                                 | bl_wifi_ip | IPv4 address, first octet in the low byte. which: BL_IP_*.
+3 | int         | wifi_scan         | void                                      | bl_wifi_scan | Scan for access points (blocks ~2-4 s). Returns the count or BL_ERR_*.
+3 | int         | wifi_scan_result  | int index, bl_wifi_ap_t *ap               | bl_wifi_scan_result | Copy one scan result.
+3 | int         | wifi_channel      | void                                      | bl_wifi_channel | Current WiFi channel.
+3 | int         | wifi_ssid         | char *buf, size_t size                    | bl_wifi_ssid | SSID we are connected to. Returns its length.
+3 | int         | wifi_config       | uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dns | bl_wifi_config | Static IP (all 0 = DHCP).
+3 | int         | wifi_set_hostname | const char *name                          | bl_wifi_set_hostname | Hostname used for DHCP (call before begin).
+3 | int         | net_resolve       | const char *host, uint32_t *ip            | bl_net_resolve | DNS lookup. Returns 0 or BL_ERR_*.
+
+# ---- TCP client (WiFiClient / WiFiClientSecure) ----
+3 | int         | tcp_client_new        | int secure                            | bl_tcp_client_new | New client handle (secure = TLS). Reference count starts at 1.
+3 | void        | tcp_client_retain     | int h                                 | bl_tcp_client_retain | Add a reference (the SDK copies clients like Arduino does).
+3 | void        | tcp_client_release    | int h                                 | bl_tcp_client_release | Drop a reference; the connection closes at zero.
+3 | int         | tcp_client_tls_config | int h, int insecure, const char *ca_pem | bl_tcp_client_tls_config | TLS: skip verification, or use this CA (NULL = built-in CA bundle). Must stay valid.
+3 | int         | tcp_client_connect    | int h, const char *host, uint16_t port, int32_t timeout_ms | bl_tcp_client_connect | Connect. Returns 1 or 0.
+3 | int         | tcp_client_write      | int h, const uint8_t *data, size_t len | bl_tcp_client_write | Returns bytes written.
+3 | int         | tcp_client_available  | int h                                 | bl_tcp_client_available | Bytes ready to read.
+3 | int         | tcp_client_read       | int h, uint8_t *buf, size_t size      | bl_tcp_client_read | Read up to size bytes; -1 if none.
+3 | int         | tcp_client_peek       | int h                                 | bl_tcp_client_peek | Next byte without consuming it, or -1.
+3 | int         | tcp_client_connected  | int h                                 | bl_tcp_client_connected | 1 while connected or data is still buffered.
+3 | void        | tcp_client_stop       | int h                                 | bl_tcp_client_stop | Close the connection (the handle stays valid).
+3 | int         | tcp_client_remote     | int h, uint32_t *ip, uint16_t *port   | bl_tcp_client_remote | Peer address.
+
+# ---- TCP server (WiFiServer) ----
+3 | int         | tcp_server_new        | uint16_t port, int max_clients        | bl_tcp_server_new | Listen on port.
+3 | int         | tcp_server_accept     | int h                                 | bl_tcp_server_accept | A newly connected client handle, or -1.
+3 | void        | tcp_server_close      | int h                                 | bl_tcp_server_close | Stop listening and free the handle.
+
+# ---- UDP (WiFiUDP) ----
+3 | int         | udp_new               | uint16_t port                         | bl_udp_new | Open a UDP socket (port 0 = any).
+3 | void        | udp_close             | int h                                 | bl_udp_close | Close and free.
+3 | int         | udp_begin_packet      | int h, const char *host, uint16_t port | bl_udp_begin_packet | Start a packet to host (name or dotted IP).
+3 | int         | udp_write             | int h, const uint8_t *data, size_t len | bl_udp_write | Add bytes to the packet.
+3 | int         | udp_end_packet        | int h                                 | bl_udp_end_packet | Send it. Returns 1 or 0.
+3 | int         | udp_parse_packet      | int h                                 | bl_udp_parse_packet | Size of the next received packet, or 0.
+3 | int         | udp_read              | int h, uint8_t *buf, size_t size      | bl_udp_read | Read from the current packet.
+3 | int         | udp_remote            | int h, uint32_t *ip, uint16_t *port   | bl_udp_remote | Sender of the current packet.
+
+# ---- WebServer: handlers run synchronously inside web_handle_client(), on the sketch task ----
+3 | int         | web_new               | uint16_t port                         | bl_web_new | Create and start a web server.
+3 | void        | web_close             | int h                                 | bl_web_close | Stop and free.
+3 | int         | web_on                | int h, const char *uri, int method, bl_callback_t fn, void *arg | bl_web_on | Route uri (method BL_HTTP_* or BL_HTTP_ANY) to fn(arg).
+3 | int         | web_on_not_found      | int h, bl_callback_t fn, void *arg    | bl_web_on_not_found | Handler for unmatched requests.
+3 | void        | web_handle_client     | int h                                 | bl_web_handle_client | Serve pending requests (call from loop()).
+3 | void        | web_send              | int h, int code, const char *content_type, const uint8_t *content, size_t len | bl_web_send | Send the response.
+3 | void        | web_send_header       | int h, const char *name, const char *value, int first | bl_web_send_header | Add a response header (before web_send).
+3 | int         | web_request           | int h, int what, int index, const char *name, char *buf, size_t size | bl_web_request | Request details (what = BL_WEB_*). Copies text, returns its full length, or -1 if absent.
+3 | void        | web_collect_headers   | int h, const char **names, size_t count | bl_web_collect_headers | Request headers to keep for BL_WEB_HEADER.
+
+# ---- BLE: device, GATT server, advertising ----
+3 | int         | ble_init              | const char *name                      | bl_ble_init | Start BLE with this device name (safe to call twice).
+3 | void        | ble_deinit            | void                                  | bl_ble_deinit | Stop BLE.
+3 | int         | ble_address           | char *buf, size_t size                | bl_ble_address | Our BLE address "aa:bb:cc:dd:ee:ff".
+3 | int         | ble_set_mtu           | uint16_t mtu                          | bl_ble_set_mtu | Preferred ATT MTU.
+3 | int         | ble_server_create     | void                                  | bl_ble_server_create | The GATT server (one per device).
+3 | int         | ble_server_connected_count | void                             | bl_ble_server_connected_count | Connected centrals.
+3 | void        | ble_server_disconnect | uint16_t conn_id                      | bl_ble_server_disconnect | Drop a connection.
+3 | int         | ble_service_create    | const char *uuid, int num_handles     | bl_ble_service_create | New service on the server.
+3 | int         | ble_service_start     | int svc                               | bl_ble_service_start | Publish the service.
+3 | int         | ble_char_create       | int svc, const char *uuid, uint32_t properties | bl_ble_char_create | New characteristic. properties: BL_BLE_PROP_* bits.
+3 | int         | ble_char_set_value    | int ch, const uint8_t *data, size_t len | bl_ble_char_set_value | Set the value centrals read / get notified with.
+3 | int         | ble_char_get_value    | int ch, uint8_t *buf, size_t size     | bl_ble_char_get_value | Copy the value; returns its full length.
+3 | int         | ble_char_notify       | int ch, int indicate                  | bl_ble_char_notify | Send the value as a notification (or indication).
+3 | int         | ble_char_add_descriptor | int ch, const char *uuid, const uint8_t *value, size_t len | bl_ble_char_add_descriptor | Add a descriptor (e.g. 2901 user description).
+3 | int         | ble_adv_config        | int what, const char *text, const uint8_t *data, size_t value | bl_ble_adv_config | Advertising setting: what = BL_BLE_ADV_*.
+3 | int         | ble_adv_start         | void                                  | bl_ble_adv_start | Start advertising.
+3 | int         | ble_adv_stop          | void                                  | bl_ble_adv_stop | Stop advertising.
+
+# ---- BLE: scanning ----
+3 | int         | ble_scan_start        | uint32_t seconds, int active, uint16_t interval_ms, uint16_t window_ms | bl_ble_scan_start | Start scanning in the background.
+3 | int         | ble_scan_stop         | void                                  | bl_ble_scan_stop | Stop scanning.
+3 | int         | ble_scan_running      | void                                  | bl_ble_scan_running | 1 while a scan is in progress.
+3 | int         | ble_scan_count        | void                                  | bl_ble_scan_count | Devices found by the last scan.
+3 | int         | ble_scan_result       | int index, bl_ble_adv_t *dev          | bl_ble_scan_result | Copy one scan result.
+3 | void        | ble_scan_clear        | void                                  | bl_ble_scan_clear | Forget scan results.
+
+# ---- BLE: client ----
+3 | int         | ble_client_connect    | const char *address, int addr_type    | bl_ble_client_connect | Connect to a peripheral (blocks up to ~5 s). Returns a client handle.
+3 | void        | ble_client_disconnect | int cl                                | bl_ble_client_disconnect | Disconnect.
+3 | int         | ble_client_connected  | int cl                                | bl_ble_client_connected | 1 while connected.
+3 | int         | ble_client_rssi       | int cl                                | bl_ble_client_rssi | Signal strength of the connection.
+3 | int         | ble_remote_char       | int cl, const char *service_uuid, const char *char_uuid | bl_ble_remote_char | Find a characteristic on the peripheral. Returns a handle.
+3 | int         | ble_remote_read       | int rc, uint8_t *buf, size_t size     | bl_ble_remote_read | Read the value; returns its length.
+3 | int         | ble_remote_write      | int rc, const uint8_t *data, size_t len, int response | bl_ble_remote_write | Write the value.
+3 | int         | ble_remote_subscribe  | int rc, int mode                      | bl_ble_remote_subscribe | 0 off, 1 notifications, 2 indications (delivered as BL_BLE_EV_NOTIFY).
+3 | uint32_t    | ble_remote_props      | int rc                                | bl_ble_remote_props | BL_BLE_PROP_* bits of a remote characteristic.
+
+# ---- BLE: events (connect, write, notify, scan results...) for the SDK's callback pump ----
+3 | int         | ble_event_take        | bl_ble_event_t *ev                    | bl_ble_event_take | Take the next BLE event. Returns 1, or 0 if none.
+
+# ======================= ABI 1.4 ==========================================
+
+# ---- Preferences (NVS key/value; namespace "baseline" is reserved) ----
+4 | int         | prefs_open        | const char *name, int read_only            | bl_prefs_open        | Open a namespace. Returns a handle.
+4 | void        | prefs_close       | int h                                      | bl_prefs_close       | Close it.
+4 | int         | prefs_clear       | int h                                      | bl_prefs_clear       | Delete every key in the namespace.
+4 | int         | prefs_remove      | int h, const char *key                     | bl_prefs_remove      | Delete one key.
+4 | int         | prefs_put         | int h, const char *key, int type, const void *data, size_t len | bl_prefs_put | Store a value (type BL_PREF_*). Returns bytes stored, 0 on failure.
+4 | int         | prefs_get         | int h, const char *key, int type, void *buf, size_t size | bl_prefs_get | Read a value. Returns its length (strings: without NUL), or -1 if the key is missing.
+4 | int         | prefs_info        | int h, const char *key, int what           | bl_prefs_info        | BL_PREF_INFO_*: key exists, stored type, length, free entries.
+
+# ---- LittleFS on the "userfs" partition ----
+4 | int         | fs_begin          | int format_if_failed                       | bl_fs_begin          | Mount (optionally format a blank partition).
+4 | void        | fs_end            | void                                       | bl_fs_end            | Unmount.
+4 | int         | fs_format         | void                                       | bl_fs_format         | Erase everything.
+4 | uint32_t    | fs_info           | int what                                   | bl_fs_info           | BL_FS_TOTAL_BYTES or BL_FS_USED_BYTES.
+4 | int         | fs_open           | const char *path, const char *mode, int create | bl_fs_open       | Open a file or directory ("r", "w", "a", ...). Returns a handle (reference count 1).
+4 | void        | fs_retain         | int h                                      | bl_fs_retain         | Add a reference (File objects are copyable).
+4 | void        | fs_release        | int h                                      | bl_fs_release        | Drop a reference; the file closes at zero.
+4 | int         | fs_read           | int h, uint8_t *buf, size_t size           | bl_fs_read           | Read up to size bytes.
+4 | int         | fs_write          | int h, const uint8_t *data, size_t len     | bl_fs_write          | Write bytes.
+4 | int         | fs_peek           | int h                                      | bl_fs_peek           | Next byte without consuming it, or -1.
+4 | int         | fs_seek           | int h, uint32_t pos, int mode              | bl_fs_seek           | Move (mode 0 set, 1 current, 2 end). Returns 1 or 0.
+4 | void        | fs_flush          | int h                                      | bl_fs_flush          | Flush writes.
+4 | uint32_t    | fs_file_info      | int h, int what                            | bl_fs_file_info      | BL_FS_FILE_*: position, size, is directory, last write time.
+4 | int         | fs_file_name      | int h, int full_path, char *buf, size_t size | bl_fs_file_name    | Name (or full path). Returns its length.
+4 | int         | fs_next           | int h                                      | bl_fs_next           | Next entry of an open directory: a new handle, or -1 at the end.
+4 | int         | fs_path_op        | int op, const char *path, const char *path2 | bl_fs_path_op      | BL_FS_* path operation (exists, delete, rename, mkdir, rmdir). Returns 1 or 0.
+
+# ---- Hardware UARTs: Serial1 (default pins RX 44 / TX 43, the board's RX/TX) and Serial2 ----
+4 | int         | uart_begin        | int port, uint32_t baud, uint32_t config, int rx, int tx | bl_uart_begin | Start UART 1 or 2. config = SERIAL_8N1 etc. -1 pins = defaults.
+4 | void        | uart_end          | int port                                   | bl_uart_end          | Stop it.
+4 | int         | uart_write        | int port, const uint8_t *data, size_t len  | bl_uart_write        | Send bytes.
+4 | int         | uart_available    | int port                                   | bl_uart_available    | Bytes waiting.
+4 | int         | uart_read         | int port, uint8_t *buf, size_t size        | bl_uart_read         | Read up to size bytes (0 if none).
+4 | int         | uart_peek         | int port                                   | bl_uart_peek         | Next byte without consuming it, or -1.
+4 | void        | uart_flush        | int port                                   | bl_uart_flush        | Wait until everything is sent.
+
+# ---- mDNS ----
+4 | int         | mdns_begin        | const char *hostname                       | bl_mdns_begin        | Answer to hostname.local.
+4 | void        | mdns_end          | void                                       | bl_mdns_end          | Stop mDNS.
+4 | int         | mdns_add_service  | const char *service, const char *proto, uint16_t port | bl_mdns_add_service | Advertise a service ("http", "tcp", 80).
+4 | int         | mdns_add_txt      | const char *service, const char *proto, const char *key, const char *value | bl_mdns_add_txt | Add a TXT record to a service.
+4 | uint32_t    | mdns_query_host   | const char *host, uint32_t timeout_ms      | bl_mdns_query_host   | Resolve name.local (without ".local"). Returns the IPv4 address or 0.
+4 | int         | mdns_query_service | const char *service, const char *proto    | bl_mdns_query_service | Browse for a service. Returns how many were found.
+4 | int         | mdns_result       | int index, int what, char *buf, size_t size | bl_mdns_result      | One browse result: BL_MDNS_HOSTNAME (text), BL_MDNS_IP, BL_MDNS_PORT (numbers).
+
+# ---- MQTT (ESP-IDF esp-mqtt; backs the PubSubClient-compatible class) ----
+4 | int         | mqtt_new          | void                                       | bl_mqtt_new          | New MQTT client handle.
+4 | void        | mqtt_free         | int h                                      | bl_mqtt_free         | Disconnect and free.
+4 | int         | mqtt_config       | int h, int what, const char *text, int32_t value | bl_mqtt_config | Setting BL_MQTT_* (server, client id, credentials, will, TLS, ...). Text is copied.
+4 | int         | mqtt_connect      | int h, uint32_t timeout_ms                 | bl_mqtt_connect      | Connect with the current settings. Returns 1 or 0.
+4 | void        | mqtt_disconnect   | int h                                      | bl_mqtt_disconnect   | Disconnect.
+4 | int         | mqtt_state        | int h                                      | bl_mqtt_state        | PubSubClient-style state (0 = connected, negative = not).
+4 | int         | mqtt_publish      | int h, const char *topic, const uint8_t *payload, size_t len, int qos, int retain | bl_mqtt_publish | Publish. Returns 1 or 0.
+4 | int         | mqtt_subscribe    | int h, const char *topic, int qos          | bl_mqtt_subscribe    | Subscribe. Returns 1 or 0.
+4 | int         | mqtt_unsubscribe  | int h, const char *topic                   | bl_mqtt_unsubscribe  | Unsubscribe. Returns 1 or 0.
+4 | int         | mqtt_take         | int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size | bl_mqtt_take | Next received message: copies topic and payload; returns the payload length, or -1 if none.
+
+# ---- OTA: upload sketches over WiFi (bsk upload --host NAME) ----
+4 | int         | ota_begin         | const char *hostname, const char *password, uint16_t port | bl_ota_begin | Accept sketch uploads over WiFi (and advertise NAME.local). password may be NULL.
+4 | void        | ota_end           | void                                       | bl_ota_end           | Stop accepting uploads over WiFi.

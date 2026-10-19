@@ -1,0 +1,67 @@
+/*
+ * Sketch linker script for ESP32-S3. Passed through the C preprocessor
+ * (gcc -E -P -x c -DBL_LINKER_SCRIPT) so addresses come from sketch_abi.h.
+ *
+ * Image layout (byte offset N in the sketch partition):
+ *   [0, 0x100)            header          read via DBUS_BASE + N
+ *   [0x100, text_end)     .text/.literal  executed via IBUS_BASE + N
+ *   [ro_off, ...)         .rodata, .init_array   read via DBUS_BASE + N
+ *   [after rodata)        .data initial values   copied to RAM by Baseline
+ */
+#include "sketch_abi.h"
+
+ENTRY(sketch_entry)
+
+SECTIONS
+{
+    .sketch_header BL_SKETCH_DBUS_BASE :
+    {
+        KEEP(*(.sketch_header))
+        . = BL_SKETCH_HEADER_SIZE;
+    }
+
+    .text BL_SKETCH_IBUS_BASE + BL_SKETCH_HEADER_SIZE :
+    {
+        _sketch_text_start = ABSOLUTE(.);
+        *(.literal .text .literal.* .text.*)
+        . = ALIGN(4);
+        _sketch_text_end = ABSOLUTE(.);
+    }
+
+    .rodata BL_SKETCH_DBUS_BASE + ALIGN(_sketch_text_end - BL_SKETCH_IBUS_BASE, 16) :
+    {
+        *(.rodata .rodata.* .srodata .srodata.*)
+        . = ALIGN(4);
+        _sketch_init_array_start = ABSOLUTE(.);
+        KEEP(*(SORT_BY_INIT_PRIORITY(.init_array.*)))
+        KEEP(*(.init_array .ctors))
+        _sketch_init_array_end = ABSOLUTE(.);
+        . = ALIGN(16);
+    }
+
+    .data BL_SKETCH_RAM_BASE : AT(ADDR(.rodata) + SIZEOF(.rodata))
+    {
+        _sketch_data_start = ABSOLUTE(.);
+        *(.data .data.* .sdata .sdata.*)
+        . = ALIGN(4);
+        _sketch_data_end = ABSOLUTE(.);
+    }
+    _sketch_data_load = LOADADDR(.data);
+
+    .bss (NOLOAD) :
+    {
+        . = ALIGN(4);
+        _sketch_bss_start = ABSOLUTE(.);
+        *(.bss .bss.* .sbss .sbss.* COMMON)
+        . = ALIGN(4);
+        _sketch_bss_end = ABSOLUTE(.);
+    }
+
+    _sketch_image_size = _sketch_data_load + SIZEOF(.data) - BL_SKETCH_DBUS_BASE;
+
+    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .fini_array* .dtors* .comment .note.*) }
+}
+
+ASSERT(SIZEOF(.sketch_header) == BL_SKETCH_HEADER_SIZE, "sketch header must be exactly BL_SKETCH_HEADER_SIZE bytes")
+ASSERT(_sketch_image_size <= BL_SKETCH_MAX_SIZE, "sketch image is larger than one sketch slot (512 KB)")
+ASSERT(_sketch_bss_end <= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE, "sketch .data+.bss exceed the 64 KB sketch RAM window; use bl_malloc() for big buffers")

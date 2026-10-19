@@ -1,0 +1,186 @@
+abi_major=1
+0|uint32_t|millis|void
+0|uint64_t|micros|void
+0|void|delay_ms|uint32_t ms
+0|void|delay_us|uint32_t us
+0|void|yield|void
+0|int|printf|const char *fmt, ...
+0|int|vprintf|const char *fmt, va_list ap
+0|int|snprintf|char *buf, size_t size, const char *fmt, ...
+0|int|vsnprintf|char *buf, size_t size, const char *fmt, va_list ap
+0|void|log|int level, const char *tag, const char *fmt, ...
+0|void *|malloc|size_t size
+0|void *|calloc|size_t n, size_t size
+0|void *|realloc|void *ptr, size_t size
+0|void|free|void *ptr
+0|uint32_t|free_heap|void
+0|void|restart|void
+0|const char *|baseline_version|void
+0|int|gpio_mode|int pin, int mode
+0|int|gpio_write|int pin, int level
+0|int|gpio_read|int pin
+1|int|console_write|const uint8_t *data, size_t len
+1|int|console_available|void
+1|int|console_read|void
+1|int|adc_read|int pin
+1|int|adc_read_mv|int pin
+1|int|pwm_write|int pin, int value
+1|int|rgb_write|int pin, uint8_t red, uint8_t green, uint8_t blue
+1|int|i2c_begin|int sda, int scl, uint32_t freq
+1|int|i2c_write|uint8_t addr, const uint8_t *data, size_t len, bool stop
+1|int|i2c_read|uint8_t addr, uint8_t *data, size_t len
+1|int|wifi_begin|const char *ssid, const char *password
+1|int|wifi_status|void
+1|void|wifi_disconnect|void
+1|int|wifi_local_ip|char *buf, size_t size
+1|int|wifi_rssi|void
+1|int|wifi_mac|uint8_t *mac
+1|int|http_get|const char *url, char *body, size_t size, int *status
+1|int|ble_serial_begin|const char *name
+1|int|ble_serial_connected|void
+1|int|ble_serial_write|const uint8_t *data, size_t len
+1|int|ble_serial_available|void
+1|int|ble_serial_read|void
+1|int|espnow_begin|void
+1|int|espnow_send|const uint8_t *mac, const uint8_t *data, size_t len
+1|int|espnow_receive|uint8_t *mac, uint8_t *data, size_t size
+2|int|http_request|const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char * *response, size_t *response_len
+2|int|espnow_send_status|uint8_t *mac
+2|uint32_t|system_info|int what
+2|uint32_t|random|void
+3|int|gpio_attach_interrupt|int pin, int mode
+3|int|gpio_detach_interrupt|int pin
+3|int|gpio_interrupt_take|void
+3|int|spi_begin|int sck, int miso, int mosi, int ss
+3|void|spi_end|void
+3|void|spi_begin_transaction|uint32_t clock, int bit_order, int data_mode
+3|void|spi_end_transaction|void
+3|void|spi_transfer|uint8_t *data, size_t len
+3|void|spi_write|const uint8_t *data, size_t len
+3|int|wifi_set_mode|int mode
+3|int|wifi_get_mode|void
+3|int|wifi_softap|const char *ssid, const char *password, int channel, int hidden, int max_clients
+3|int|wifi_softap_stop|void
+3|int|wifi_softap_stations|void
+3|uint32_t|wifi_ip|int which
+3|int|wifi_scan|void
+3|int|wifi_scan_result|int index, bl_wifi_ap_t *ap
+3|int|wifi_channel|void
+3|int|wifi_ssid|char *buf, size_t size
+3|int|wifi_config|uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dns
+3|int|wifi_set_hostname|const char *name
+3|int|net_resolve|const char *host, uint32_t *ip
+3|int|tcp_client_new|int secure
+3|void|tcp_client_retain|int h
+3|void|tcp_client_release|int h
+3|int|tcp_client_tls_config|int h, int insecure, const char *ca_pem
+3|int|tcp_client_connect|int h, const char *host, uint16_t port, int32_t timeout_ms
+3|int|tcp_client_write|int h, const uint8_t *data, size_t len
+3|int|tcp_client_available|int h
+3|int|tcp_client_read|int h, uint8_t *buf, size_t size
+3|int|tcp_client_peek|int h
+3|int|tcp_client_connected|int h
+3|void|tcp_client_stop|int h
+3|int|tcp_client_remote|int h, uint32_t *ip, uint16_t *port
+3|int|tcp_server_new|uint16_t port, int max_clients
+3|int|tcp_server_accept|int h
+3|void|tcp_server_close|int h
+3|int|udp_new|uint16_t port
+3|void|udp_close|int h
+3|int|udp_begin_packet|int h, const char *host, uint16_t port
+3|int|udp_write|int h, const uint8_t *data, size_t len
+3|int|udp_end_packet|int h
+3|int|udp_parse_packet|int h
+3|int|udp_read|int h, uint8_t *buf, size_t size
+3|int|udp_remote|int h, uint32_t *ip, uint16_t *port
+3|int|web_new|uint16_t port
+3|void|web_close|int h
+3|int|web_on|int h, const char *uri, int method, bl_callback_t fn, void *arg
+3|int|web_on_not_found|int h, bl_callback_t fn, void *arg
+3|void|web_handle_client|int h
+3|void|web_send|int h, int code, const char *content_type, const uint8_t *content, size_t len
+3|void|web_send_header|int h, const char *name, const char *value, int first
+3|int|web_request|int h, int what, int index, const char *name, char *buf, size_t size
+3|void|web_collect_headers|int h, const char * *names, size_t count
+3|int|ble_init|const char *name
+3|void|ble_deinit|void
+3|int|ble_address|char *buf, size_t size
+3|int|ble_set_mtu|uint16_t mtu
+3|int|ble_server_create|void
+3|int|ble_server_connected_count|void
+3|void|ble_server_disconnect|uint16_t conn_id
+3|int|ble_service_create|const char *uuid, int num_handles
+3|int|ble_service_start|int svc
+3|int|ble_char_create|int svc, const char *uuid, uint32_t properties
+3|int|ble_char_set_value|int ch, const uint8_t *data, size_t len
+3|int|ble_char_get_value|int ch, uint8_t *buf, size_t size
+3|int|ble_char_notify|int ch, int indicate
+3|int|ble_char_add_descriptor|int ch, const char *uuid, const uint8_t *value, size_t len
+3|int|ble_adv_config|int what, const char *text, const uint8_t *data, size_t value
+3|int|ble_adv_start|void
+3|int|ble_adv_stop|void
+3|int|ble_scan_start|uint32_t seconds, int active, uint16_t interval_ms, uint16_t window_ms
+3|int|ble_scan_stop|void
+3|int|ble_scan_running|void
+3|int|ble_scan_count|void
+3|int|ble_scan_result|int index, bl_ble_adv_t *dev
+3|void|ble_scan_clear|void
+3|int|ble_client_connect|const char *address, int addr_type
+3|void|ble_client_disconnect|int cl
+3|int|ble_client_connected|int cl
+3|int|ble_client_rssi|int cl
+3|int|ble_remote_char|int cl, const char *service_uuid, const char *char_uuid
+3|int|ble_remote_read|int rc, uint8_t *buf, size_t size
+3|int|ble_remote_write|int rc, const uint8_t *data, size_t len, int response
+3|int|ble_remote_subscribe|int rc, int mode
+3|uint32_t|ble_remote_props|int rc
+3|int|ble_event_take|bl_ble_event_t *ev
+4|int|prefs_open|const char *name, int read_only
+4|void|prefs_close|int h
+4|int|prefs_clear|int h
+4|int|prefs_remove|int h, const char *key
+4|int|prefs_put|int h, const char *key, int type, const void *data, size_t len
+4|int|prefs_get|int h, const char *key, int type, void *buf, size_t size
+4|int|prefs_info|int h, const char *key, int what
+4|int|fs_begin|int format_if_failed
+4|void|fs_end|void
+4|int|fs_format|void
+4|uint32_t|fs_info|int what
+4|int|fs_open|const char *path, const char *mode, int create
+4|void|fs_retain|int h
+4|void|fs_release|int h
+4|int|fs_read|int h, uint8_t *buf, size_t size
+4|int|fs_write|int h, const uint8_t *data, size_t len
+4|int|fs_peek|int h
+4|int|fs_seek|int h, uint32_t pos, int mode
+4|void|fs_flush|int h
+4|uint32_t|fs_file_info|int h, int what
+4|int|fs_file_name|int h, int full_path, char *buf, size_t size
+4|int|fs_next|int h
+4|int|fs_path_op|int op, const char *path, const char *path2
+4|int|uart_begin|int port, uint32_t baud, uint32_t config, int rx, int tx
+4|void|uart_end|int port
+4|int|uart_write|int port, const uint8_t *data, size_t len
+4|int|uart_available|int port
+4|int|uart_read|int port, uint8_t *buf, size_t size
+4|int|uart_peek|int port
+4|void|uart_flush|int port
+4|int|mdns_begin|const char *hostname
+4|void|mdns_end|void
+4|int|mdns_add_service|const char *service, const char *proto, uint16_t port
+4|int|mdns_add_txt|const char *service, const char *proto, const char *key, const char *value
+4|uint32_t|mdns_query_host|const char *host, uint32_t timeout_ms
+4|int|mdns_query_service|const char *service, const char *proto
+4|int|mdns_result|int index, int what, char *buf, size_t size
+4|int|mqtt_new|void
+4|void|mqtt_free|int h
+4|int|mqtt_config|int h, int what, const char *text, int32_t value
+4|int|mqtt_connect|int h, uint32_t timeout_ms
+4|void|mqtt_disconnect|int h
+4|int|mqtt_state|int h
+4|int|mqtt_publish|int h, const char *topic, const uint8_t *payload, size_t len, int qos, int retain
+4|int|mqtt_subscribe|int h, const char *topic, int qos
+4|int|mqtt_unsubscribe|int h, const char *topic
+4|int|mqtt_take|int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size
+4|int|ota_begin|const char *hostname, const char *password, uint16_t port
+4|void|ota_end|void

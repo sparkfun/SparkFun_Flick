@@ -1,0 +1,51 @@
+{
+    // Ctrl+Shift+B runs the default build task: build the sketch whose file is
+    // open in the editor, upload it to the Baseline already on the board, and
+    // show its serial output. Pressing it again stops the monitor and re-uploads.
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Sketch: build + upload + monitor",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/tools/bsk.py", "upload", "${fileDirname}", "--monitor"],
+            "group": { "kind": "build", "isDefault": true },
+            "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+            "runOptions": { "instanceLimit": 1, "instancePolicy": "terminateOldest" }
+        },
+        {
+            "label": "Sketch: build only",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/tools/bsk.py", "build", "${fileDirname}"],
+            "group": "build",
+            "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+        {
+            "label": "Serial monitor",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/tools/bsk.py", "monitor"],
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        },
+        {
+            "label": "Baseline: flash firmware (one time)",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/tools/bsk.py", "baseline", "flash"],
+            "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+        {
+            "label": "Baseline: reboot into safe mode",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/tools/bsk.py", "safe"],
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated" }
+        }
+    ]
+}

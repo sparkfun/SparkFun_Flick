@@ -1,0 +1,12 @@
+# Baseline Sketcher partition table - SparkFun ESP32-S3 Thing Plus (4 MB flash)
+# Arduino copies this file into the build because it sits next to baseline.ino.
+# Arduino's uploader writes boot_app0.bin to 0xE000 and the app to 0x10000, so
+# those two offsets are fixed. Sketch slots must be 64 KB aligned (flash MMU page).
+# Name,       Type, SubType,  Offset,    Size
+nvs,          data, nvs,      0x9000,    0x5000
+otadata,      data, ota,      0xE000,    0x2000
+baseline,     app,  factory,  0x10000,   0x230000
+sketch_a,     data, 0x40,     0x240000,  0x40000
+sketch_b,     data, 0x40,     0x280000,  0x40000
+userfs,       data, spiffs,   0x2C0000,  0x130000
+coredump,     data, coredump, 0x3F0000,  0x10000
