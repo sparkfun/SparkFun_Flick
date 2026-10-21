@@ -121,3 +121,4 @@ double strtod(const char *s, char **end)
 
 double atof(const char *s) { return strtod(s, NULL); }
 float strtof(const char *s, char **end) { return (float)strtod(s, end); }
+

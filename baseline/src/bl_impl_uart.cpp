@@ -1,11 +1,8 @@
-/* API table: hardware UARTs 1 and 2 (sketch Serial1 / Serial2). UART0 stays
- * with the ESP-IDF console; sketch Serial is the native USB port. */
+/* API table: hardware UARTs 1 and 2 (sketch Serial1 / Serial2). Sketch Serial
+ * is the console (native USB or UART0, depending on the target). */
 #include <Arduino.h>
 #include "gen/bl_impl.h"
-#include "bl_pins.h"
-
-#define SERIAL1_RX 44   // the pins labeled RX/TX on the Thing Plus
-#define SERIAL1_TX 43
+#include "bl_port.h"
 
 static HardwareSerial *uart_of(int port)
 {
@@ -19,11 +16,11 @@ extern "C" int bl_impl_uart_begin(int port, uint32_t baud, uint32_t config, int 
         return BL_ERR_ARG;
     }
     if (rx < 0 || tx < 0) {
-        if (port != 1) {
-            return BL_ERR_ARG;      // Serial2 has no free default pins on this board: pass them
+        rx = port == 1 ? BL_SERIAL1_RX : BL_SERIAL2_RX;
+        tx = port == 1 ? BL_SERIAL1_TX : BL_SERIAL2_TX;
+        if (rx < 0 || tx < 0) {
+            return BL_ERR_ARG;      // no free default pins on this board: pass them
         }
-        rx = SERIAL1_RX;
-        tx = SERIAL1_TX;
     }
     if (!bl_pin_usable(rx) || !bl_pin_usable(tx)) {
         return BL_ERR_ARG;

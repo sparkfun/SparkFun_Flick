@@ -67,6 +67,127 @@ void detachInterrupt(uint8_t pin)
     }
 }
 
+/* ---- touch interrupts (deferred, like attachInterrupt) ---- */
+
+static PinHandler s_touch[MAX_PINS];
+
+static void touch_pump()
+{
+    int pin;
+    while ((pin = bl_touch_take()) >= 0) {
+        if (pin >= MAX_PINS) {
+            continue;
+        }
+        PinHandler h = s_touch[pin];
+        if (h.plain) {
+            h.plain();
+        } else if (h.with_arg) {
+            h.with_arg(h.arg);
+        }
+    }
+}
+
+static void touch_attach(uint8_t pin, PinHandler h, touch_value_t threshold)
+{
+    if (pin >= MAX_PINS) {
+        return;
+    }
+    s_touch[pin] = h;
+    bl_sketch_add_pump(touch_pump);
+    bl_touch_attach(pin, threshold);
+}
+
+void touchAttachInterrupt(uint8_t pin, void (*handler)(void), touch_value_t threshold)
+{
+    touch_attach(pin, PinHandler{ handler, 0, 0 }, threshold);
+}
+
+void touchAttachInterruptArg(uint8_t pin, void (*handler)(void *), void *arg, touch_value_t threshold)
+{
+    touch_attach(pin, PinHandler{ 0, handler, arg }, threshold);
+}
+
+void touchDetachInterrupt(uint8_t pin)
+{
+    bl_touch_detach(pin);
+    if (pin < MAX_PINS) {
+        s_touch[pin] = PinHandler{};
+    }
+}
+
+/* ---- Servo ---- */
+
+int Servo::attach(int pin, int min_us, int max_us)
+{
+    detach();
+    if (!bl_ledc_attach(pin, hz_, 14)) {
+        return 0;
+    }
+    pin_ = pin;
+    min_ = min_us;
+    max_ = max_us;
+    writeMicroseconds(us_);
+    return 1;
+}
+
+void Servo::detach()
+{
+    if (pin_ >= 0) {
+        bl_ledc_detach(pin_);
+        pin_ = -1;
+    }
+}
+
+void Servo::write(int value)
+{
+    if (value < 500) {     // degrees
+        value = constrain(value, 0, 180);
+        value = map(value, 0, 180, min_, max_);
+    }
+    writeMicroseconds(value);
+}
+
+void Servo::writeMicroseconds(int us)
+{
+    us_ = constrain(us, min_, max_);
+    if (pin_ >= 0) {
+        uint32_t period_us = 1000000UL / hz_;
+        bl_ledc_write(pin_, (uint32_t)((uint64_t)us_ * 16383 / period_us));
+    }
+}
+
+/* ---- I2S ---- */
+
+size_t I2SClass::readBytes(char *buffer, size_t size)
+{
+    size_t n = 0;
+    while (n < size && rxPos_ < rxLen_) {   // buffered bytes first
+        buffer[n++] = (char)rx_[rxPos_++];
+    }
+    if (n < size) {
+        int r = bl_i2s_read((uint8_t *)buffer + n, size - n);
+        if (r > 0) {
+            n += r;
+        }
+    }
+    return n;
+}
+
+int I2SClass::available()
+{
+    if (rxPos_ >= rxLen_) {
+        int r = bl_i2s_read(rx_, sizeof(rx_));
+        rxLen_ = r > 0 ? r : 0;
+        rxPos_ = 0;
+    }
+    return rxLen_ - rxPos_;
+}
+
+int I2SClass::read()
+{
+    return available() ? rx_[rxPos_++] : -1;
+}
+
 /* ---- SPI ---- */
 
 uint16_t SPIClass::transfer16(uint16_t data)

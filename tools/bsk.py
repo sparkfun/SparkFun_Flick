@@ -1,20 +1,24 @@
 #!/usr/bin/env python3
-"""bsk - Baseline Sketcher command-line tool (ESP32-S3).
+"""bsk - Baseline Sketcher command-line tool.
 
+  bsk targets                       list the targets (chips/boards) in targets/
   bsk new <dir>                     create a sketch project
-  bsk build [dir]                   compile + link + package -> <dir>/build/<name>.bsk
-  bsk upload [dir] [-m]             build, then send to Baseline's loader and run it
+  bsk build [dir] [-t TARGET]       compile + link + package -> <dir>/build/<target>/<name>.bsk
+  bsk upload [dir] [-m]             ask the board which target it is, build for it, upload, run
   bsk upload [dir] --host NAME      same, over WiFi (the running sketch called ArduinoOTA.begin())
   bsk monitor                       serial console (Ctrl+C to quit)
-  bsk info                          ask Baseline for its version / ABI / active slot
+  bsk info                          ask Baseline for its version / ABI / chip / active slot
   bsk safe                          reboot Baseline into safe mode (sketch not started)
-  bsk baseline build                compile the Baseline firmware (arduino-cli)
-  bsk baseline flash                compile and flash Baseline (rarely needed)
+  bsk baseline build -t TARGET      compile a Baseline blob -> dist/<target>/baseline-<target>.bin
+  bsk baseline flash -t TARGET      compile and flash Baseline (rarely needed)
 
-Commands that talk to the board find the plugged-in ESP32-S3 by its USB ID;
-pass -p PORT to choose one yourself.
+The build target is taken from -t, else `target = ...` in the sketch's
+sketch.cfg, else esp32s3. `upload` always builds for the chip on the board.
 
-The toolchain is found in this order: $BSK_GCC, xtensa-esp32s3-elf-gcc on PATH,
+Commands that talk to the board find it by its USB ID (any target's
+usb_vids in target.json); pass -p PORT to choose one yourself.
+
+The toolchain is found in this order: $BSK_GCC, the target's gcc on PATH,
 then an Arduino-ESP32 install (%LOCALAPPDATA%/Arduino15 or ~/.arduino15).
 arduino-cli: $BSK_ARDUINO_CLI, PATH, then the copy bundled with Arduino IDE 2.
 """
@@ -23,7 +27,9 @@ import base64
 import codecs
 import glob
 import hashlib
+import json
 import os
+import re
 import shutil
 import struct
 import subprocess
@@ -34,12 +40,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SDK = ROOT / "sdk"
-GCC_NAME = "xtensa-esp32s3-elf-gcc"
+TARGETS = ROOT / "targets"
+DIST = ROOT / "dist"
+DEFAULT_TARGET = "esp32s3"
 
-# Must match sdk/include/sketch_abi.h
-IBUS_BASE = 0x43800000
-DBUS_BASE = 0x3D800000
-MAX_SIZE = 0x80000
+# Must match sdk/include/sketch_abi.h (the target addresses come from bl_target.h)
 HEADER_SIZE = 0x100
 MAGIC = 0x4B534C42
 HDR_OFF_IMAGE_SIZE = 12
@@ -61,16 +66,52 @@ PROTO_PREFIX = "@BSK"
 CHUNK = 768          # raw bytes per DATA line (1024 chars of base64)
 
 
+# ---------------------------------------------------------------- targets
+
+def target_names():
+    return sorted(p.name for p in TARGETS.iterdir() if (p / "target.json").exists())
+
+
+def header_defines(path):
+    """Numeric and string #defines from a header (bl_target.h)."""
+    out = {}
+    for m in re.finditer(r'^\s*#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+|"[^"]*")', path.read_text(), re.M):
+        v = m.group(2)
+        out[m.group(1)] = v.strip('"') if v.startswith('"') else int(v, 0)
+    return out
+
+
+def load_target(name):
+    """targets/<name>/target.json plus the addresses from its bl_target.h."""
+    d = TARGETS / name
+    if not (d / "target.json").exists():
+        sys.exit(f"error: unknown target '{name}'. Targets: {', '.join(target_names())}")
+    t = json.loads((d / "target.json").read_text())
+    t["name"] = name
+    t["dir"] = d
+    defs = header_defines(d / "sdk" / "bl_target.h")
+    t["ibus"], t["dbus"] = defs["BL_SKETCH_IBUS_BASE"], defs["BL_SKETCH_DBUS_BASE"]
+    t["max_size"] = defs["BL_SKETCH_MAX_SIZE"]
+    return t
+
+
+def cmd_targets(args):
+    for name in target_names():
+        t = load_target(name)
+        print(f"{name:10} {t['description']}")
+
+
 # ---------------------------------------------------------------- toolchain
 
-def find_gcc():
+def find_gcc(target):
     env = os.environ.get("BSK_GCC")
     if env:
         return env
-    on_path = shutil.which(GCC_NAME)
+    gcc_name = target["gcc"]
+    on_path = shutil.which(gcc_name)
     if on_path:
         return on_path
-    exe = GCC_NAME + (".exe" if os.name == "nt" else "")
+    exe = gcc_name + (".exe" if os.name == "nt" else "")
     roots = []
     if os.environ.get("LOCALAPPDATA"):
         roots.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15")
@@ -80,7 +121,7 @@ def find_gcc():
         hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-x32" / "*" / "bin" / exe)))
         if hits:
             return hits[-1]
-    sys.exit(f"error: {GCC_NAME} not found. Set BSK_GCC or install ESP-IDF / Arduino-ESP32.")
+    sys.exit(f"error: {gcc_name} not found. Set BSK_GCC or install ESP-IDF / Arduino-ESP32.")
 
 
 def run(cmd, **kw):
@@ -95,19 +136,17 @@ def run(cmd, **kw):
 SKETCH_TEMPLATE = """\
 // {name}.ino - a Baseline Sketcher sketch. baseline.h is included automatically.
 
-const int LED_PIN = 0;  // blue STAT LED on the SparkFun ESP32-S3 Thing Plus
-
 void setup()
 {
-    pinMode(LED_PIN, OUTPUT);
-    bl_printf("Hello from {name} on Baseline %s\\n", bl_baseline_version());
+    pinMode(LED_BUILTIN, OUTPUT);
+    Serial.printf("Hello from {name} on Baseline %s (%s)\\n", bl_baseline_version(), ESP.getChipModel());
 }
 
 void loop()
 {
-    digitalWrite(LED_PIN, HIGH);
+    digitalWrite(LED_BUILTIN, HIGH);
     delay(500);
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(LED_BUILTIN, LOW);
     delay(500);
 }
 """
@@ -115,7 +154,7 @@ void loop()
 
 def load_config(proj):
     """Name defaults to the folder name. An optional sketch.cfg may set
-    `name = ...` and `stack = <bytes>`."""
+    `name = ...`, `stack = <bytes>` and `target = <target>`."""
     cfg = {"name": proj.name, "stack": "8192"}
     f = proj / "sketch.cfg"
     if f.exists():
@@ -144,7 +183,7 @@ def cmd_new(args):
 ARDUINO_BENCH = ROOT / "benchmarks" / "arduino"
 
 
-def build(proj):
+def build(proj, target_name=None):
     proj = Path(proj).resolve()
     if proj == ARDUINO_BENCH or ARDUINO_BENCH in proj.parents:
         sys.exit(f"error: {proj.relative_to(ROOT)} is a plain Arduino sketch, kept only for the build-time "
@@ -158,12 +197,14 @@ def build(proj):
     if inos and not (proj / (proj.name + ".ino")).exists():
         print(f"warning: expected {proj.name}.ino (Arduino names the main file after its folder)")
     cxx = any(s.suffix in (".ino", ".cpp") for s in user)
-    out = proj / "build"
-    out.mkdir(exist_ok=True)
-    gcc = find_gcc()
+    target = load_target(target_name or cfg.get("target") or DEFAULT_TARGET)
+    out = proj / "build" / target["name"]
+    out.mkdir(parents=True, exist_ok=True)
+    gcc = find_gcc(target)
     t0 = time.time()
 
-    inc = ["-I", str(SDK / "include"), "-I", str(SDK / "include" / "compat"), "-I", str(proj)]
+    tsdk = target["dir"] / "sdk"
+    inc = ["-I", str(SDK / "include"), "-I", str(SDK / "include" / "compat"), "-I", str(tsdk), "-I", str(proj)]
     defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}"]
 
     def compile_one(src, obj, extra_defs=()):
@@ -174,7 +215,7 @@ def build(proj):
             lang = CXXFLAGS
         else:
             lang = CFLAGS
-        run([gcc, *lang, *inc, *extra_defs, "-c", str(src), "-o", str(obj)])
+        run([gcc, *lang, *target["cflags"], *inc, *extra_defs, "-c", str(src), "-o", str(obj)])
 
     objs = []
     for src in user + [SDK / "src" / "sketch_crt.c"]:     # crt carries the sketch's name/stack
@@ -182,13 +223,15 @@ def build(proj):
         compile_one(src, obj, defs)
         objs.append(str(obj))
     # The C library shim, C++ runtime and Arduino-style objects are the same for
-    # every sketch: compile them once into sdk/build and reuse them.
-    cache = SDK / "build"
-    cache.mkdir(exist_ok=True)
-    newest_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"), Path(__file__)])
-    shared = ["sketch_libc.c"] + (["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
-                                  "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
-                                  "sketch_mqtt.cpp"] if cxx else [])
+    # every sketch: compile them once per target into sdk/build/<target> and reuse them.
+    cache = SDK / "build" / target["name"]
+    cache.mkdir(parents=True, exist_ok=True)
+    newest_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"), *tsdk.glob("*"),
+                                                 target["dir"] / "target.json", Path(__file__)])
+    shared = ["sketch_libc.c", "sketch_time.c", *target["sdk_sources"]] + (
+        ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
+         "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
+         "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp"] if cxx else [])
     for name in shared:
         src = SDK / "src" / name
         obj = cache / (name + ".o")
@@ -198,15 +241,15 @@ def build(proj):
 
     ld = out / "sketch.ld"
     run([gcc, "-E", "-P", "-x", "c", "-DBL_LINKER_SCRIPT", *inc,
-         str(SDK / "ld" / "sketch_esp32s3.ld.in"), "-o", str(ld)])
+         str(ROOT / target["linker_script"]), "-o", str(ld)])
 
     elf = out / (cfg["name"] + ".elf")
     run([gcc, "-mlongcalls", "-nostdlib", "-nostartfiles",
-         "-T", str(ld), "-T", str(SDK / "ld" / "rom_esp32s3.ld"),
+         "-T", str(ld), "-T", str(tsdk / "rom.ld"),
          "-Wl,--gc-sections", "-Wl,--no-undefined", "-Wl,-Map," + str(out / (cfg["name"] + ".map")),
          *objs, "-lgcc", "-o", str(elf)])
 
-    image = make_image(elf.read_bytes())
+    image = make_image(elf.read_bytes(), target)
     bsk = out / (cfg["name"] + ".bsk")
     bsk.write_bytes(image)
     sha = image[HDR_OFF_SHA256:HDR_OFF_SHA256 + 32].hex()
@@ -215,9 +258,10 @@ def build(proj):
     return bsk
 
 
-def make_image(elf):
+def make_image(elf, target):
     """Lay the ELF's loadable segments out by their load address in the sketch
     window, then patch image_size, build_id and sha256 into the header."""
+    IBUS_BASE, DBUS_BASE, MAX_SIZE = target["ibus"], target["dbus"], target["max_size"]
     if elf[:4] != b"\x7fELF" or elf[4] != 1 or elf[5] != 1:
         sys.exit("error: expected a 32-bit little-endian ELF")
     e_phoff, = struct.unpack_from("<I", elf, 28)
@@ -253,12 +297,14 @@ def make_image(elf):
 
 
 def cmd_build(args):
-    build(args.dir)
+    build(args.dir, args.target)
 
 
 # ---------------------------------------------------------------- serial
 
-ESPRESSIF_VID = 0x303A      # ESP32-S3 native USB (USB-Serial-JTAG)
+def board_vids():
+    """USB vendor IDs of every target's board (target.json usb_vids)."""
+    return {int(v, 16) for name in target_names() for v in load_target(name)["usb_vids"]}
 
 
 def import_serial():
@@ -271,17 +317,18 @@ def import_serial():
 
 
 def find_port(port=None):
-    """The given port, or the single Espressif USB device that is plugged in."""
+    """The given port, or the single supported board that is plugged in."""
     if port:
         return port
     serial = import_serial()
-    found = [p for p in serial.tools.list_ports.comports() if p.vid == ESPRESSIF_VID]
+    vids = board_vids()
+    found = [p for p in serial.tools.list_ports.comports() if p.vid in vids]
     if len(found) == 1:
         return found[0].device
     if not found:
-        sys.exit("error: no ESP32-S3 found on USB. Plug in the board, or pass -p PORT.")
+        sys.exit("error: no supported board found on USB. Plug in the board, or pass -p PORT.")
     names = ", ".join(f"{p.device} ({p.description})" for p in found)
-    sys.exit(f"error: several ESP32 boards found: {names}. Pass -p PORT to pick one.")
+    sys.exit(f"error: several boards found: {names}. Pass -p PORT to pick one.")
 
 
 def open_port(port, baud):
@@ -405,17 +452,25 @@ def cmd_safe(args):
         print("rebooting into safe mode")
 
 
+def info_fields(info):
+    """'baseline=0.1.0 abi=1.5 chip=esp32 ...' -> dict"""
+    return dict(re.findall(r'(\w+)=("[^"]*"|\S+)', info))
+
+
 def cmd_upload(args):
-    bsk = build(args.dir)
-    image = bsk.read_bytes()
-    digest = hashlib.sha256(image).hexdigest()
     if args.host and args.monitor:
         sys.exit("error: --monitor needs the USB port; it cannot be combined with --host")
     port, s = open_link_port(args)
     with s:
         link = Link(s)
+        info = link.request("INFO")
+        print(f"Baseline on {port}:", info)
+        chip = info_fields(info).get("chip", DEFAULT_TARGET)   # the board decides the target
+        if args.target and args.target != chip:
+            sys.exit(f"error: the board runs the {chip} Baseline, not {args.target}")
+        image = build(args.dir, chip).read_bytes()
+        digest = hashlib.sha256(image).hexdigest()
         t0 = time.time()
-        print(f"Baseline on {port}:", link.request("INFO"))
         link.request(f"BEGIN {len(image)} {digest}", timeout=15)   # erases the slot
         for off in range(0, len(image), CHUNK):
             data = base64.b64encode(image[off:off + CHUNK]).decode()
@@ -425,20 +480,30 @@ def cmd_upload(args):
         print("installed:", link.request("END", timeout=10))
         print(f"upload took {time.time() - t0:.2f}s")
         if args.monitor:
-            monitor(s, port, args.baud, link)
+            monitor(s, port, args.baud, link, follow=not args.port)
 
 
-def reopen(port, baud):
-    """Wait for the port to come back (the board re-enumerates when it reboots)."""
+def board_ports():
+    serial = import_serial()
+    vids = board_vids()
+    return [p.device for p in serial.tools.list_ports.comports() if p.vid in vids]
+
+
+def reopen(port, baud, follow=False):
+    """Wait for the board to come back after a reboot. With follow, accept any
+    board port: USB device mode on the S3 changes the COM port number."""
     serial = import_serial()
     while True:
-        try:
-            return open_port(port, baud)
-        except (serial.SerialException, OSError):
-            time.sleep(0.3)
+        candidates = [port] + ([p for p in board_ports() if p != port] if follow else [])
+        for p in candidates:
+            try:
+                return p, open_port(p, baud)
+            except (serial.SerialException, OSError):
+                pass
+        time.sleep(0.3)
 
 
-def monitor(s, port, baud, link=None):
+def monitor(s, port, baud, link=None, follow=True):
     serial = import_serial()
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
     print(f"--- monitor on {port} (Ctrl+C to quit) ---", flush=True)
@@ -451,8 +516,8 @@ def monitor(s, port, baud, link=None):
             except (serial.SerialException, OSError):
                 s.close()
                 print("\n--- board disconnected, waiting for it ---", flush=True)
-                s = reopen(port, baud)
-                print("--- reconnected ---", flush=True)
+                port, s = reopen(port, baud, follow)
+                print(f"--- reconnected on {port} ---", flush=True)
                 continue
             if data:
                 sys.stdout.write(decoder.decode(data))
@@ -465,16 +530,40 @@ def monitor(s, port, baud, link=None):
 
 def cmd_monitor(args):
     port = find_port(args.port)
-    monitor(open_port(port, args.baud), port, args.baud)
+    monitor(open_port(port, args.baud), port, args.baud, follow=not args.port)
 
 
 # ---------------------------------------------------------------- baseline firmware
 
-BASELINE_DIR = ROOT / "baseline"
 # Thousands of intermediate files: keep them out of synced folders (Dropbox locks them).
-BASELINE_BUILD = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "BaselineSketcher" / "baseline-build"
-BASELINE_FQBN = ("esp32:esp32:sparkfun_esp32s3_thing_plus:"
-                 "USBMode=default,CDCOnBoot=cdc,PartitionScheme=custom,PSRAM=enabled")
+BUILD_ROOT = Path(os.environ.get("LOCALAPPDATA") or tempfile.gettempdir()) / "BaselineSketcher"
+
+
+def baseline_build_path(target_name):
+    return BUILD_ROOT / target_name / "build"
+
+
+def stage_baseline(target):
+    """Arduino compiles one sketch folder, so assemble one per target: the
+    shared Baseline source plus the target's own files (partitions.csv,
+    bl_port.h, bl_port_mmu.c), target files winning. Copies keep their
+    timestamps, so arduino-cli recompiles only what changed."""
+    dst = BUILD_ROOT / target["name"] / "baseline"
+    wanted = {}
+    for root in (ROOT / target["baseline_source"], target["dir"] / "baseline"):
+        for f in root.rglob("*"):
+            if f.is_file():
+                wanted[f.relative_to(root)] = f
+    if dst.exists():
+        for f in list(dst.rglob("*")):
+            if f.is_file() and f.relative_to(dst) not in wanted:
+                f.unlink()
+    for rel, src in wanted.items():
+        out = dst / rel
+        if not out.exists() or out.stat().st_mtime != src.stat().st_mtime or out.stat().st_size != src.stat().st_size:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, out)
+    return dst
 
 
 def find_arduino_cli():
@@ -526,27 +615,65 @@ def newest_esp32_core():
     return best
 
 
-MIN_CORE = (3, 3, 0)    # Baseline is verified against Arduino-ESP32 3.3.x (ESP-IDF 5.5)
+def leave_usb_device_mode(port, fixed_port):
+    """In USB device mode (S3) the USB port is a TinyUSB serial port that esptool
+    cannot reset into the bootloader. Ask Baseline to switch it off first.
+    Returns the port to flash through (it may change)."""
+    try:
+        with open_port(port, 115200) as s:
+            link = Link(s, echo=False)
+            info = info_fields(link.request("INFO", timeout=2))
+            if info.get("usb", "0") in ("0", ""):
+                return port
+            print("Baseline is in USB device mode: switching it off before flashing")
+            link.request("USBOFF")
+    except SystemExit:
+        return port     # no Baseline answering (blank board, or another firmware): flash anyway
+    time.sleep(2)
+    if fixed_port:
+        return fixed_port
+    new_port, s = reopen(port, 115200, follow=True)
+    s.close()
+    return new_port
 
 
 def cmd_baseline(args):
+    target = load_target(args.target or DEFAULT_TARGET)
+    min_core = tuple(int(x) for x in target["min_core"].split("."))
     core = newest_esp32_core()
-    if not core or core[0] < MIN_CORE:
+    if not core or core[0] < min_core:
         found = ".".join(map(str, core[0])) if core else "none"
-        sys.exit(f"error: Baseline needs Arduino-ESP32 core >= 3.3.0 (found {found}). "
+        sys.exit(f"error: Baseline needs Arduino-ESP32 core >= {target['min_core']} (found {found}). "
                  "Install it with the Arduino IDE Boards Manager.")
+    print(f"target {target['name']}: {target['description']}")
     print(f"using Arduino-ESP32 {'.'.join(map(str, core[0]))} from {core[1]}")
     os.environ["ARDUINO_DIRECTORIES_DATA"] = str(core[1])
-    inc = f'-I{SDK / "include"}'
-    cmd = [find_arduino_cli(), "compile", "--fqbn", BASELINE_FQBN,
-           "--build-path", str(BASELINE_BUILD),
+    sketch = stage_baseline(target)
+    build_path = baseline_build_path(target["name"])
+    # Quoted: arduino-cli splits the expanded recipe on spaces (e.g. "C:\Users\Jane Doe").
+    inc = f'"-I{SDK / "include"}" "-I{target["dir"] / "sdk"}"'
+    cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"],
+           "--build-path", str(build_path),
            "--build-property", f"compiler.c.extra_flags={inc}",
            "--build-property", f"compiler.cpp.extra_flags={inc}",
            "--warnings", "default"]
+    for prop in target.get("build_properties", []):
+        cmd += ["--build-property", prop]
     if args.action == "flash":
-        cmd += ["--upload", "-p", find_port(args.port)]
-    cmd.append(str(BASELINE_DIR))
+        cmd += ["--upload", "-p", leave_usb_device_mode(find_port(args.port), args.port)]
+    cmd.append(str(sketch))
     run(cmd)
+    # The finished blob: bootloader + partition table + Baseline in one image,
+    # written at flash offset 0 (esptool write_flash 0x0 <file>). Arduino pads
+    # it with 0xFF to the full flash size; the padding is dropped.
+    merged = build_path / "baseline.ino.merged.bin"
+    if merged.exists():
+        blob = merged.read_bytes().rstrip(b"\xff")
+        blob += b"\xff" * (-len(blob) % 4)
+        out = DIST / target["name"] / f"baseline-{target['name']}.bin"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(blob)
+        print(f"Baseline blob: {out.relative_to(ROOT)} ({len(blob):,} bytes; flash at 0x0)")
 
 
 # ---------------------------------------------------------------- main
@@ -556,12 +683,18 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    targets_help = f"target ({', '.join(target_names())})"
+
+    p = sub.add_parser("targets", help="list the targets")
+    p.set_defaults(fn=cmd_targets)
+
     p = sub.add_parser("new", help="create a sketch project")
     p.add_argument("dir")
     p.set_defaults(fn=cmd_new)
 
     p = sub.add_parser("build", help="build a sketch")
     p.add_argument("dir", nargs="?", default=".")
+    p.add_argument("-t", "--target", help=targets_help + "; default: sketch.cfg, else " + DEFAULT_TARGET)
     p.set_defaults(fn=cmd_build)
 
     for name, fn, hlp in (("upload", cmd_upload, "build and upload a sketch"),
@@ -572,15 +705,17 @@ def main():
         if name == "upload":
             p.add_argument("dir", nargs="?", default=".")
             p.add_argument("-m", "--monitor", action="store_true", help="open the monitor after upload")
+            p.add_argument("-t", "--target", help="optional check: fail unless the board runs this target")
         if name in ("upload", "info"):
             p.add_argument("--host", help="upload over WiFi to NAME[.local][:port] (sketch must call ArduinoOTA.begin())")
             p.add_argument("--password", help="OTA password (or set BSK_OTA_PASSWORD)")
-        p.add_argument("-p", "--port", help="serial port (default: the plugged-in ESP32-S3)")
+        p.add_argument("-p", "--port", help="serial port (default: the plugged-in board)")
         p.add_argument("-b", "--baud", type=int, default=115200)
         p.set_defaults(fn=fn)
 
-    p = sub.add_parser("baseline", help="build or flash the Baseline firmware")
+    p = sub.add_parser("baseline", help="build or flash a Baseline blob")
     p.add_argument("action", choices=["build", "flash"])
+    p.add_argument("-t", "--target", help=targets_help + "; default " + DEFAULT_TARGET)
     p.add_argument("-p", "--port")
     p.set_defaults(fn=cmd_baseline)
 

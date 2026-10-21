@@ -1,7 +1,7 @@
 /* API table: GPIO, implemented on Arduino's GPIO layer. */
 #include <Arduino.h>
 #include "gen/bl_impl.h"
-#include "bl_pins.h"
+#include "bl_port.h"
 
 static_assert(BL_INPUT == INPUT && BL_OUTPUT == OUTPUT && BL_INPUT_PULLUP == INPUT_PULLUP &&
               BL_INPUT_PULLDOWN == INPUT_PULLDOWN && BL_OUTPUT_OPEN_DRAIN == OUTPUT_OPEN_DRAIN,

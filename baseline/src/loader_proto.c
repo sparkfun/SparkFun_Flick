@@ -102,9 +102,10 @@ static void restart_soon(void)
 static void cmd_info(void)
 {
     const char *safe = bl_state_safe_mode_reason();
-    OK("baseline=%s abi=%d.%d chip=esp32s3 slot=%c sketch=%s status=\"%s\" safe=%s",
-       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, 'a' + bl_state_active_slot(),
-       sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no");
+    OK("baseline=%s abi=%d.%d chip=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u",
+       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
+       sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
+       (unsigned)bl_impl_usb_devices());
 }
 
 static void cmd_begin(char *args)
@@ -201,6 +202,7 @@ static void cmd_end(void)
     int slot = s_up.slot;
     upload_reset();
     bl_state_set_pending(slot);
+    bl_usb_forget();    // USB devices belong to the old sketch; the new one asks again
     OK("slot=%c name=%s rebooting", 'a' + slot, hdr.name);
     restart_soon();
 }
@@ -235,6 +237,10 @@ static void handle_line(char *line)
         restart_soon();
     } else if (!strcmp(cmd, "RESET")) {
         OK("rebooting");
+        restart_soon();
+    } else if (!strcmp(cmd, "USBOFF")) {
+        bl_usb_forget();    // back to the plain USB serial port (needed before flashing Baseline)
+        OK("rebooting without USB devices");
         restart_soon();
     } else {
         ERR("unknown command '%s'", cmd);

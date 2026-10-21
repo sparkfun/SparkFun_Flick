@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include "gen/bl_impl.h"
-#include "bl_pins.h"
+#include "bl_port.h"
 
 /* ---- analog / PWM / RGB ---- */
 
@@ -30,7 +30,11 @@ extern "C" int bl_impl_rgb_write(int pin, uint8_t red, uint8_t green, uint8_t bl
     if (!bl_pin_usable(pin) || !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         return BL_ERR_ARG;
     }
+#ifdef BL_PORT_RGB_WRITE
+    bl_port_rgb_write(pin, red, green, blue);
+#else
     rgbLedWrite(pin, red, green, blue);
+#endif
     return BL_OK;
 }
 

@@ -10,9 +10,10 @@ void bl_main(void)
 {
     bl_console_init();
     bl_state_init();
+    bl_usb_boot(bl_state_safe_mode_reason() != NULL);     // USB device mode, if the sketch asked for it
 
-    BLOG_I("Baseline %s, ABI %d.%d, ESP32-S3, reset reason %d, free heap %u",
-           BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, (int)esp_reset_reason(),
+    BLOG_I("Baseline %s, ABI %d.%d, %s (%s), reset reason %d, free heap %u",
+           BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP_NAME, BL_BOARD_NAME, (int)esp_reset_reason(),
            (unsigned)esp_get_free_heap_size());
 
     loader_start();

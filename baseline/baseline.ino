@@ -1,9 +1,10 @@
 /*
  * Baseline - the precompiled half of Baseline Sketcher.
- * Target: SparkFun ESP32-S3 Thing Plus. Build and flash with:
- *   python tools/bsk.py baseline flash -p COMx
- * (bsk sets the board options and the SDK include path; the Arduino IDE alone
- * will not build this sketch.)
+ * This folder is the source shared by every ESP32-family target; each target
+ * adds its own files from targets/<target>/baseline/. Build and flash with:
+ *   python tools/bsk.py baseline flash --target esp32s3     (or esp32, ...)
+ * (bsk assembles the target's copy of this folder and sets the board options
+ * and include paths; the Arduino IDE alone will not build this sketch.)
  */
 #include "src/bl_main.h"
 

@@ -2,6 +2,8 @@
 #include "baseline.h"
 
 LittleFSFS LittleFS;
+SDFS SD;
+SDMMCFS SD_MMC;
 
 /* ---- Preferences ---- */
 
@@ -74,7 +76,7 @@ void File::rewindDirectory()
     char dir[sizeof(path_)];
     snprintf(dir, sizeof(dir), "%s", path());
     close();
-    int h = bl_fs_open(dir, FILE_READ, 0);
+    int h = bl_fsx_open(fs_, dir, FILE_READ, 0);
     if (h >= 0) {
         h_ = h;
     }

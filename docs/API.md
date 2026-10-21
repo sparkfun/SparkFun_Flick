@@ -1,4 +1,4 @@
-# Baseline API reference (ABI 1.4)
+# Baseline API reference (ABI 1.6)
 
 Generated from `api/baseline_api.txt` by `tools/gen_api.py`. Do not edit.
 
@@ -32,7 +32,7 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `analogRead` | `int adc_read(int pin)` | 1.1 | Read a pin's ADC value (0-4095), or BL_ERR_*. |
 | `analogReadMilliVolts` | `int adc_read_mv(int pin)` | 1.1 | Read a pin's voltage in millivolts, or BL_ERR_*. |
 | `analogWrite` | `int pwm_write(int pin, int value)` | 1.1 | PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*. |
-| `rgbLedWrite` | `int rgb_write(int pin, uint8_t red, uint8_t green, uint8_t blue)` | 1.1 | Set a WS2812 RGB LED (Thing Plus: pin 46). Returns 0 or BL_ERR_*. |
+| `rgbLedWrite` | `int rgb_write(int pin, uint8_t red, uint8_t green, uint8_t blue)` | 1.1 | Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. |
 | `bl_i2c_begin` | `int i2c_begin(int sda, int scl, uint32_t freq)` | 1.1 | Start I2C. sda/scl -1 = board Qwiic pins (8/9). freq in Hz (0 = 100 kHz). |
 | `bl_i2c_write` | `int i2c_write(uint8_t addr, const uint8_t *data, size_t len, bool stop)` | 1.1 | Write bytes (len 0 = probe). 0, BL_ERR_NACK, BL_ERR_TIMEOUT or BL_ERR_FAIL. |
 | `bl_i2c_read` | `int i2c_read(uint8_t addr, uint8_t *data, size_t len)` | 1.1 | Read bytes. Returns the number read, or BL_ERR_*. |
@@ -191,3 +191,64 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_mqtt_take` | `int mqtt_take(int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size)` | 1.4 | Next received message: copies topic and payload; returns the payload length, or -1 if none. |
 | `bl_ota_begin` | `int ota_begin(const char *hostname, const char *password, uint16_t port)` | 1.4 | Accept sketch uploads over WiFi (and advertise NAME.local). password may be NULL. |
 | `bl_ota_end` | `void ota_end(void)` | 1.4 | Stop accepting uploads over WiFi. |
+| `bl_bt_spp_begin` | `int bt_spp_begin(const char *name)` | 1.5 | Start an SPP serial port visible as `name`. BL_ERR_UNSUPPORTED on chips without Bluetooth Classic. |
+| `bl_bt_spp_end` | `void bt_spp_end(void)` | 1.5 | Stop it. |
+| `bl_bt_spp_connected` | `int bt_spp_connected(void)` | 1.5 | 1 if a device is connected. |
+| `bl_bt_spp_write` | `int bt_spp_write(const uint8_t *data, size_t len)` | 1.5 | Send bytes. Returns bytes sent. |
+| `bl_bt_spp_available` | `int bt_spp_available(void)` | 1.5 | Bytes received and not yet read. |
+| `bl_bt_spp_read` | `int bt_spp_read(uint8_t *buf, size_t size)` | 1.5 | Read up to size bytes (0 if none). |
+| `bl_bt_spp_peek` | `int bt_spp_peek(void)` | 1.5 | Next byte without consuming it, or -1. |
+| `bl_bt_spp_flush` | `void bt_spp_flush(void)` | 1.5 | Wait until everything is sent. |
+| `bl_bt_spp_set_pin` | `int bt_spp_set_pin(const char *pin)` | 1.5 | Legacy pairing PIN (call before begin). 0 or BL_ERR_*. |
+| `bl_sd_begin` | `int sd_begin(int bus, int cs, uint32_t freq_hz, int format_if_empty)` | 1.6 | Mount the microSD card. bus = BL_SD_SPI (cs pin, -1 = board default) or BL_SD_MMC (board pins; cs = 1 for 1-bit mode). |
+| `bl_sd_end` | `void sd_end(void)` | 1.6 | Unmount the card. |
+| `bl_sd_info` | `uint64_t sd_info(int what)` | 1.6 | BL_SD_CARD_TYPE / CARD_SIZE / TOTAL_BYTES / USED_BYTES. |
+| `bl_fsx_open` | `int fsx_open(int fs, const char *path, const char *mode, int create)` | 1.6 | Open a file or directory on a file system. Returns a handle. |
+| `bl_fsx_path_op` | `int fsx_path_op(int fs, int op, const char *path, const char *path2)` | 1.6 | BL_FS_EXISTS / REMOVE / RENAME / MKDIR / RMDIR. Returns 1 or 0. |
+| `bl_sleep_wake` | `int sleep_wake(int source, uint64_t value, int pin, int level)` | 1.6 | Enable a wake source (BL_WAKE_*): TIMER value = us; EXT0 pin+level; EXT1 value = pin mask, level = mode; TOUCH; GPIO/UART (light sleep). |
+| `bl_sleep_disable_wake` | `int sleep_disable_wake(int source)` | 1.6 | Disable a wake source (BL_WAKE_ALL = every source). |
+| `bl_sleep_deep` | `void sleep_deep(void)` | 1.6 | Deep sleep. The board restarts on wake: Baseline boots and starts the sketch again. |
+| `bl_sleep_light` | `int sleep_light(void)` | 1.6 | Light sleep; returns after wake with 0 or BL_ERR_*. |
+| `bl_sleep_wake_cause` | `int sleep_wake_cause(void)` | 1.6 | Why the chip woke (esp_sleep_wakeup_cause_t values; 0 = not from sleep). |
+| `bl_sleep_ext1_status` | `uint64_t sleep_ext1_status(void)` | 1.6 | Pin mask that caused an EXT1 wake. |
+| `bl_rtc_memory` | `void * rtc_memory(uint32_t *size)` | 1.6 | 1 KB of RTC memory kept through deep sleep and resets (cleared at power-on). |
+| `bl_timer_new` | `int timer_new(void)` | 1.6 | New timer handle. |
+| `bl_timer_free` | `void timer_free(int h)` | 1.6 | Stop and free it. |
+| `bl_timer_start` | `int timer_start(int h, uint64_t period_us, int periodic)` | 1.6 | Fire after period_us (repeatedly if periodic). |
+| `bl_timer_stop` | `void timer_stop(int h)` | 1.6 | Stop it. |
+| `bl_timer_active` | `int timer_active(int h)` | 1.6 | 1 while running. |
+| `bl_timer_take` | `int timer_take(void)` | 1.6 | Next timer that fired (one result per firing), or -1. |
+| `bl_time_ntp_start` | `void time_ntp_start(const char *server1, const char *server2, const char *server3)` | 1.6 | Start NTP time sync (WiFi must be connected). NULL server1 = pool.ntp.org. |
+| `bl_time_get` | `int time_get(int64_t *sec, int32_t *usec)` | 1.6 | gettimeofday(): seconds since 1970 (UTC). |
+| `bl_time_set` | `int time_set(int64_t sec, int32_t usec)` | 1.6 | settimeofday(). |
+| `bl_time_synced` | `int time_synced(void)` | 1.6 | 1 once NTP (or time_set) has set the clock. |
+| `bl_touch_read` | `uint32_t touch_read(int pin)` | 1.6 | touchRead() value (0 if not a touch pin). |
+| `bl_touch_attach` | `int touch_attach(int pin, uint32_t threshold)` | 1.6 | Report touches past threshold through touch_take(). |
+| `bl_touch_detach` | `int touch_detach(int pin)` | 1.6 | Stop reporting. |
+| `bl_touch_take` | `int touch_take(void)` | 1.6 | Next pin that was touched, or -1. |
+| `bl_i2s_begin` | `int i2s_begin(int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk)` | 1.6 | Start I2S (BL_I2S_*). PDM uses bclk as clock. -1 = unused pin. |
+| `bl_i2s_end` | `void i2s_end(void)` | 1.6 | Stop I2S. |
+| `bl_i2s_write` | `int i2s_write(const uint8_t *data, size_t len)` | 1.6 | Queue samples. Returns bytes written. |
+| `bl_i2s_read` | `int i2s_read(uint8_t *buf, size_t size)` | 1.6 | Read samples. Returns bytes read. |
+| `bl_led_strip_write` | `int led_strip_write(int pin, int chipset, const uint8_t *data, size_t len)` | 1.6 | Send bytes (already in the strip's color order) to a WS2812-type strip (BL_STRIP_*). |
+| `bl_ledc_attach` | `int ledc_attach(int pin, uint32_t freq, int resolution)` | 1.6 | PWM at any frequency/resolution (servos, tones). 1 or 0. |
+| `bl_ledc_write` | `int ledc_write(int pin, uint32_t duty)` | 1.6 | Set the duty. 1 or 0. |
+| `bl_ledc_detach` | `int ledc_detach(int pin)` | 1.6 | Stop PWM. 1 or 0. |
+| `bl_ledc_write_tone` | `uint32_t ledc_write_tone(int pin, uint32_t freq)` | 1.6 | Square wave at freq (0 = off). Returns the frequency set. |
+| `bl_ledc_change_frequency` | `uint32_t ledc_change_frequency(int pin, uint32_t freq, int resolution)` | 1.6 | Change frequency. Returns the frequency set. |
+| `bl_dns_start` | `int dns_start(uint16_t port, const char *domain, uint32_t ip)` | 1.6 | Answer DNS queries for domain ("*" = all) with ip. |
+| `bl_dns_stop` | `void dns_stop(void)` | 1.6 | Stop it. |
+| `bl_dns_error_reply` | `void dns_error_reply(int code)` | 1.6 | Reply code for other names. |
+| `bl_usb_begin` | `int usb_begin(uint32_t devices)` | 1.6 | Run as these USB devices (BL_USB_* bits) next to the serial console. Returns BL_OK if they are running; otherwise Baseline saves the set and reboots into it (the sketch starts again). |
+| `bl_usb_end` | `void usb_end(void)` | 1.6 | Back to the plain USB serial port (reboots if needed). |
+| `bl_usb_devices` | `uint32_t usb_devices(void)` | 1.6 | Devices that are running. |
+| `bl_usb_mounted` | `int usb_mounted(void)` | 1.6 | 1 when a computer has set up the device. |
+| `bl_usb_keyboard` | `int usb_keyboard(int op, uint32_t key)` | 1.6 | BL_USB_PRESS / RELEASE / RELEASE_ALL / WRITE with an Arduino key code. Returns 1 or 0. |
+| `bl_usb_mouse` | `int usb_mouse(int op, int x, int y, int wheel, int buttons)` | 1.6 | BL_USB_MOVE (x, y, wheel), PRESS / RELEASE / CLICK (buttons). |
+| `bl_usb_gamepad` | `int usb_gamepad(int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons)` | 1.6 | Send the full gamepad state. Returns 1 or 0. |
+| `bl_usb_consumer` | `int usb_consumer(int op, uint16_t usage)` | 1.6 | Media key: BL_USB_PRESS (usage) or BL_USB_RELEASE. |
+| `bl_usb_midi_write` | `int usb_midi_write(const uint8_t *packet)` | 1.6 | Send one 4-byte USB-MIDI event packet. |
+| `bl_usb_midi_read` | `int usb_midi_read(uint8_t *packet)` | 1.6 | Take one received 4-byte packet. Returns 1, or 0 if none. |
+| `ps_malloc` | `void * ps_malloc(size_t size)` | 1.6 | Allocate from PSRAM only. NULL if the board has no PSRAM or it is full. Free with free(). |
+| `ps_calloc` | `void * ps_calloc(size_t n, size_t size)` | 1.6 | Allocate zeroed memory from PSRAM only. |
+| `ps_realloc` | `void * ps_realloc(void *ptr, size_t size)` | 1.6 | Resize an allocation; the result is in PSRAM. |

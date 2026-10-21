@@ -16,9 +16,18 @@ int  bl_console_printf(const char *fmt, ...) __attribute__((format(printf, 1, 2)
 void bl_console_vlog(char level, const char *tag, const char *fmt, va_list ap);
 void bl_console_log(char level, const char *tag, const char *fmt, ...) __attribute__((format(printf, 3, 4)));
 int  bl_console_read(void);     /* next received byte, or -1 */
+void bl_console_flush(void);
+
+/* USB device mode (bl_impl_usb.cpp): switch the S3 to TinyUSB at boot when a
+ * sketch asked for USB devices; forget that request when a new sketch is installed. */
+void bl_usb_boot(int safe_mode);
+void bl_usb_forget(void);
 
 #ifdef __cplusplus
 }
+class Stream;
+/* Move the console to another stream (USB device mode uses a TinyUSB CDC port). */
+void bl_console_use(Stream *s);
 #endif
 
 #define BLOG_E(...) bl_console_log('E', "baseline", __VA_ARGS__)

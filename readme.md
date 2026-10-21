@@ -13,26 +13,35 @@ Measured on a SparkFun ESP32-S3 Thing Plus over USB, Arduino-ESP32 3.3.11, Windo
 
 Baseline is not an interpreted language; it's fast machine code all the way down. You just tell the chatbot what you want, it writes the code, compiles it (specifically for Baseline) and loads only the bits that need changing.
 
-Baseline is intended for folks who are just past the beginner's phase of programming a microcontroller. There are a few limitations and quirks to Baseline that users should know about. They're listed in [docs/ARDUINO_COMPAT.md](docs/ARDUINO_COMPAT.md).
+Baseline is intended for folks who are just past the beginner's phase of programming a microcontroller. There are a few limitations and quirks to Baseline that users should know about. Generally speaking, everything works transparently but there are a few exceptions listed in [docs/ARDUINO_COMPAT.md](docs/ARDUINO_COMPAT.md).
 
 The Baseline 'blob' includes the following libraries and features. If your code needs something more, ask the chatbot to update Baseline with the new bits and re-flash the target. Your future compilations and uploads will then skip any redundant compilation or uploading of bytes.
 
 * **Pins:** `pinMode`, `digitalWrite`, `digitalRead`, `analogRead` (ADC), `analogReadMilliVolts`, `analogWrite` (PWM), `rgbLedWrite` (the WS2812 RGB LED)
 * **Interrupts:** `attachInterrupt`, `attachInterruptArg`, `detachInterrupt`
-* **Time:** `millis`, `micros`, `delay`, `delayMicroseconds`
+* **Touch:** `touchRead`, `touchAttachInterrupt` (touch pins as buttons)
+* **PWM, tones and servos:** `ledcAttach`/`ledcWrite`, `tone`/`noTone`, `Servo`
+* **LED strips:** FastLED (`CRGB`, `CHSV`, `FastLED.addLeds<WS2812B, PIN, GRB>()`, `fill_rainbow`, ...) on any pin
+* **Audio:** I2S (`I2SClass`) for amplifiers and microphones
+* **Time:** `millis`, `micros`, `delay`, `delayMicroseconds`, plus the real date and time from the internet (`configTime`, `getLocalTime`, `strftime`)
+* **Timers:** `Ticker`, hardware timers (`timerBegin`, `timerAlarm`), `esp_timer`
+* **Sleep:** deep and light sleep with timer, button and touch wake-ups
 * **Serial:** `Serial` (the USB port), plus `Serial1` and `Serial2` (hardware UARTs)
 * **I2C:** `Wire` (the Qwiic connector)
 * **SPI:** `SPI`, `SPISettings`
 * **WiFi:** connect to a network, be an access point, scan, static IP, hostname
-* **Networking:** `WiFiClient`, `WiFiServer`, `WiFiUDP`, `WiFiClientSecure` (TLS with a built-in certificate bundle), `HTTPClient`, `WebServer`, `MDNS`
+* **Networking:** `WiFiClient`, `WiFiServer`, `WiFiUDP`, `WiFiClientSecure` (TLS with a built-in certificate bundle), `HTTPClient`, `WebServer`, `MDNS`, `DNSServer` (captive portals)
 * **MQTT:** `PubSubClient`
 * **ESP-NOW:** `esp_now_init`, `esp_now_send`, `esp_now_add_peer`, send and receive callbacks
 * **BLE:** the Arduino BLE library (`BLEDevice`, `BLEServer`, `BLECharacteristic`, `BLEScan`, `BLEClient`, advertising and all the callbacks), plus `BLESerial`, a ready-made BLE serial port
-* **Storage:** `Preferences` (settings that survive power cycles) and `LittleFS` (1.2 MB of files)
+* **Bluetooth Classic** (classic ESP32): `BluetoothSerial`, a serial port your phone or PC pairs with
+* **USB device** (ESP32-S3): the board becomes a USB keyboard, mouse, gamepad, media remote or MIDI instrument
+* **Storage:** `Preferences` (settings that survive power cycles), `LittleFS` (on-board files) and microSD cards (`SD`, `SD_MMC`)
+* **Battery:** the LiPo fuel gauge (`SFE_MAX1704X`): voltage, percent charged, charge rate
 * **WiFi uploads:** `ArduinoOTA`. After the first USB upload, send new sketches over WiFi.
 * **Extras:** `String`, `IPAddress`, `printf`/`snprintf`, `random`, `map`, `constrain`, `log_i`/`ESP_LOGI` logging, and `ESP` chip and memory info
 
-Not in the blob yet: deep sleep, timers, touch, I2S, SD cards, and libraries from the Arduino Library Manager.
+Not in the blob yet: USB mass storage, camera, and libraries from the Arduino Library Manager.
 
 ## What's an ABI?
 
@@ -44,9 +53,9 @@ That matters here because your sketch and Baseline are compiled separately. Your
 
 The rule that keeps it all working is simple: **the table only ever grows.** New functions get added to the end, and existing entries never move or change. That way a sketch you compiled months ago still runs on a newer Baseline.
 
-The version number tells you where things stand. In ABI **1.4**:
+The version number tells you where things stand. In ABI **1.6**:
 
 * **1** only changes if an existing entry ever has to change. Every sketch would need recompiling, so we try hard never to do that.
-* **4** goes up each time a batch of new functions is added. Version 1.4 added `Preferences`, `LittleFS`, `Serial1`, MQTT, mDNS and WiFi uploads.
+* **6** goes up each time a batch of new functions is added. Version 1.6 added microSD, sleep, timers, NTP time, touch, I2S, LED strips, servos, captive portals and USB devices.
 
 Every sketch records the ABI it was built for. If you load a sketch onto a Baseline that's too old for it, Baseline politely refuses to run it instead of crashing. Re-flash Baseline and you're back in business.

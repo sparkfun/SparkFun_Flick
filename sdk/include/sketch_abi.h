@@ -1,5 +1,5 @@
 /*
- * sketch_abi.h - The binary contract between Baseline and a Sketch (ESP32-S3).
+ * sketch_abi.h - The binary contract between Baseline and a Sketch.
  *
  * This file is shared by:
  *   - Baseline firmware (C)
@@ -7,37 +7,22 @@
  *   - the Sketch linker script (passed through the C preprocessor with
  *     BL_LINKER_SCRIPT defined, so only the #defines are visible there)
  *
- * Every address below is part of the ABI. Changing any of them requires a
- * new BL_ABI_MAJOR and re-building every sketch.
+ * The target's bl_target.h (targets/<target>/sdk/, on the include path)
+ * supplies the chip ID and the fixed addresses:
+ *   BL_SKETCH_IBUS_BASE   code (.text) is executed here
+ *   BL_SKETCH_DBUS_BASE   header, .rodata and .data initializers are read here
+ *   BL_SKETCH_MAX_SIZE    largest image the windows can hold
+ *   BL_SKETCH_RAM_BASE/SIZE   .data + .bss, reserved out of Baseline's heap
+ * Byte offset N in the sketch slot appears at IBUS_BASE+N and DBUS_BASE+N.
+ * Those addresses are part of the target's ABI: changing them requires a new
+ * BL_ABI_MAJOR and re-building every sketch for that target.
  */
 #ifndef SKETCH_ABI_H
 #define SKETCH_ABI_H
 
-/* ---- Target ------------------------------------------------------------ */
-#define BL_CHIP_ESP32S3             9       /* == esp_chip_id_t ESP_CHIP_ID_ESP32S3 */
+#include "bl_target.h"
 
-/* ---- Flash window ------------------------------------------------------
- * The active sketch slot is mapped by the flash MMU at a fixed virtual
- * address, 24 MB into the 32 MB external-memory window. On the ESP32-S3 the
- * instruction bus (0x42xxxxxx) and data bus (0x3Cxxxxxx) share one MMU table,
- * so a single mapping makes the sketch visible at both addresses:
- *   code   (.text)            -> executed through BL_SKETCH_IBUS_BASE
- *   header / .rodata / .data  -> read through BL_SKETCH_DBUS_BASE
- * Byte offset N in the sketch partition appears at IBUS_BASE+N and DBUS_BASE+N.
- */
-#define BL_SKETCH_IBUS_BASE         0x43800000
-#define BL_SKETCH_DBUS_BASE         0x3D800000
-#define BL_SKETCH_MAX_SIZE          0x80000     /* 512 KB == one sketch slot */
 #define BL_SKETCH_HEADER_SIZE       0x100       /* header occupies offset 0..0xFF */
-
-/* ---- RAM window --------------------------------------------------------
- * Sketch .data + .bss live in internal DRAM at a fixed address. Baseline
- * removes this range from the heap (SOC_RESERVE_MEMORY_REGION). It sits above
- * the largest possible Baseline static data area on most builds and below
- * the ROM startup stack (0x3FCE9710). Larger buffers: use bl_malloc().
- */
-#define BL_SKETCH_RAM_BASE          0x3FCD9000
-#define BL_SKETCH_RAM_SIZE          0x10000     /* 64 KB */
 
 /* ---- Header ------------------------------------------------------------ */
 #define BL_SKETCH_MAGIC             0x4B534C42  /* "BLSK" little-endian */
@@ -71,7 +56,7 @@ typedef void (*bl_sketch_entry_t)(const struct bl_api *api, bl_sketch_callbacks_
 typedef struct {
     uint32_t magic;             /*  0 BL_SKETCH_MAGIC */
     uint16_t header_version;    /*  4 */
-    uint16_t chip_id;           /*  6 BL_CHIP_* */
+    uint16_t chip_id;           /*  6 BL_TARGET_CHIP_ID */
     uint16_t abi_major;         /*  8 must equal Baseline's */
     uint16_t abi_minor;         /* 10 must be <= Baseline's */
     uint32_t image_size;        /* 12 total bytes incl. header (patched by bsk) */

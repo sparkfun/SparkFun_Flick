@@ -6,6 +6,7 @@
 #include <NetworkClientSecure.h>
 #include <WebServer.h>
 #include "gen/bl_impl.h"
+#include "bl_str.h"
 #include "sketch_loader.h"
 
 #define MAX_CLIENTS     12
@@ -360,7 +361,7 @@ extern "C" void bl_impl_web_send_header(int h, const char *name, const char *val
 static int copy_text(const String &s, char *buf, size_t size)
 {
     if (buf && size) {
-        strlcpy(buf, s.c_str(), size);
+        bl_copy_str(buf, size, s);
     }
     return (int)s.length();
 }

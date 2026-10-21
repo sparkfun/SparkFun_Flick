@@ -1,6 +1,7 @@
 /*
- * Sketch linker script for ESP32-S3. Passed through the C preprocessor
- * (gcc -E -P -x c -DBL_LINKER_SCRIPT) so addresses come from sketch_abi.h.
+ * Sketch linker script for Xtensa ESP32 targets (ESP32, ESP32-S3). Passed
+ * through the C preprocessor (gcc -E -P -x c -DBL_LINKER_SCRIPT) so the
+ * addresses come from sketch_abi.h and the target's bl_target.h.
  *
  * Image layout (byte offset N in the sketch partition):
  *   [0, 0x100)            header          read via DBUS_BASE + N
@@ -63,5 +64,5 @@ SECTIONS
 }
 
 ASSERT(SIZEOF(.sketch_header) == BL_SKETCH_HEADER_SIZE, "sketch header must be exactly BL_SKETCH_HEADER_SIZE bytes")
-ASSERT(_sketch_image_size <= BL_SKETCH_MAX_SIZE, "sketch image is larger than one sketch slot (512 KB)")
-ASSERT(_sketch_bss_end <= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE, "sketch .data+.bss exceed the 64 KB sketch RAM window; use bl_malloc() for big buffers")
+ASSERT(_sketch_image_size <= BL_SKETCH_MAX_SIZE, "sketch image is larger than the sketch window")
+ASSERT(_sketch_bss_end <= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE, "sketch .data+.bss exceed this target's sketch RAM window; use malloc() for big buffers")

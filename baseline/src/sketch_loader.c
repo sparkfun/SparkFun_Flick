@@ -1,9 +1,6 @@
 /*
  * sketch_loader.c - maps a sketch image at its fixed address and runs it.
- *
- * Verified against ESP-IDF 5.5.5 (Arduino-ESP32 3.3.11). The mapping uses the
- * low-level MMU HAL, following esp_mm's own s_do_mapping(); recheck this file
- * when moving to a new IDF release.
+ * The chip-specific MMU work is in the target's bl_port_mmu.c.
  */
 #include <stddef.h>
 #include <stdlib.h>
@@ -16,12 +13,9 @@
 #include "freertos/task.h"
 #include "mbedtls/sha256.h"
 #include "heap_memory_layout.h"
-#include "hal/mmu_hal.h"
-#include "hal/cache_hal.h"
-#include "hal/cache_ll.h"
-#include "esp_private/cache_utils.h"
 #include "gen/bl_impl.h"
 #include "bl_console.h"
+#include "bl_port.h"
 #include "bl_state.h"
 #include "sketch_loader.h"
 
@@ -67,8 +61,8 @@ static const char *check_header(const bl_sketch_header_t *h, uint32_t part_size)
     if (h->header_version != BL_SKETCH_HEADER_VERSION) {
         return "unsupported header version";
     }
-    if (h->chip_id != BL_CHIP_ESP32S3) {
-        return "sketch built for a different chip";
+    if (h->chip_id != BL_TARGET_CHIP_ID) {
+        return "sketch built for a different chip (rebuild it for " BL_TARGET_NAME ")";
     }
     if (h->abi_major != BL_ABI_MAJOR) {
         return "ABI major version mismatch: rebuild the sketch with this SDK";
@@ -149,24 +143,6 @@ const char *sketch_check(const esp_partition_t *p, bl_sketch_header_t *out)
     return err ? err : check_sha256(p, out);
 }
 
-/* Map `len` bytes of flash at `paddr` to the fixed sketch window. Runs with the
- * cache disabled, so it and everything it calls must be in IRAM. On the S3 the
- * I-bus and D-bus share one MMU table, so this one mapping serves both.
- * noinline: if inlined into a flash-resident caller it would run from flash. */
-static void IRAM_ATTR __attribute__((noinline)) map_window(uint32_t paddr, uint32_t len)
-{
-    spi_flash_disable_interrupts_caches_and_other_cpu();
-    uint32_t mapped = 0;
-    mmu_hal_map_region(0, MMU_TARGET_FLASH0, BL_SKETCH_IBUS_BASE, paddr, len, &mapped);
-    cache_bus_mask_t bus = cache_ll_l1_get_bus(0, BL_SKETCH_IBUS_BASE, len) |
-                           cache_ll_l1_get_bus(0, BL_SKETCH_DBUS_BASE, len);
-    cache_ll_l1_enable_bus(0, bus);
-    cache_ll_l1_enable_bus(1, bus);
-    cache_hal_invalidate_addr(BL_SKETCH_IBUS_BASE, len);
-    cache_hal_invalidate_addr(BL_SKETCH_DBUS_BASE, len);
-    spi_flash_enable_interrupts_caches_and_other_cpu();
-}
-
 static void stable_cb(void *arg)
 {
     bl_state_sketch_stable();
@@ -219,14 +195,10 @@ esp_err_t sketch_start(int slot)
         s_status = "sketch partition not 64 KB aligned";
     } else if ((uint32_t)&_heap_start > BL_SKETCH_RAM_BASE) {
         s_status = "Baseline static RAM overlaps the sketch RAM window";
+    } else if (bl_port_window_in_use()) {
+        s_status = "sketch address window already in use";
     } else {
-        uint32_t paddr;
-        mmu_target_t target;
-        if (mmu_hal_vaddr_to_paddr(0, BL_SKETCH_IBUS_BASE, &paddr, &target)) {
-            s_status = "sketch address window already in use";
-        } else {
-            s_status = NULL;
-        }
+        s_status = NULL;
     }
     if (s_status) {
         BLOG_E("cannot load sketch: %s", s_status);
@@ -234,7 +206,7 @@ esp_err_t sketch_start(int slot)
     }
 
     uint32_t len = (s_hdr.image_size + MMU_PAGE - 1) & ~(MMU_PAGE - 1);
-    map_window(p->address, len);
+    bl_port_map_window(p->address, len);
     if (memcmp((const void *)BL_SKETCH_DBUS_BASE, &s_hdr, sizeof(s_hdr)) != 0) {
         s_status = "MMU mapping check failed";
         BLOG_E("%s: window does not show the sketch header", s_status);

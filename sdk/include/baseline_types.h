@@ -222,6 +222,52 @@ typedef struct {
 #define BL_MQTT_CONNECT_BAD_CREDENTIALS 4
 #define BL_MQTT_CONNECT_UNAUTHORIZED    5
 
+/* ---- File systems (ABI 1.6: fsx_* take one of these) ---- */
+#define BL_FS_LITTLEFS  0
+#define BL_FS_SD        1
+
+#define BL_SD_SPI       0   /* microSD over SPI (cs pin) */
+#define BL_SD_MMC       1   /* microSD over SDIO (board pins) */
+
+#define BL_SD_CARD_TYPE   1 /* CARD_NONE 0, CARD_MMC 1, CARD_SD 2, CARD_SDHC 3, CARD_UNKNOWN 4 */
+#define BL_SD_CARD_SIZE   2
+#define BL_SD_TOTAL_BYTES 3
+#define BL_SD_USED_BYTES  4
+
+/* ---- Sleep: wake sources and causes (cause values == esp_sleep_wakeup_cause_t) ---- */
+#define BL_WAKE_ALL     1
+#define BL_WAKE_EXT0    2   /* one RTC pin at a level */
+#define BL_WAKE_EXT1    3   /* several RTC pins (mask), mode = ESP_EXT1_WAKEUP_* */
+#define BL_WAKE_TIMER   4
+#define BL_WAKE_TOUCH   5
+#define BL_WAKE_GPIO    7   /* light sleep: any pin at a level */
+#define BL_WAKE_UART    8   /* light sleep: console input */
+
+/* ---- I2S ---- */
+#define BL_I2S_STD      0
+#define BL_I2S_TDM      1
+#define BL_I2S_PDM_TX   2
+#define BL_I2S_PDM_RX   3
+
+/* ---- LED strips ---- */
+#define BL_STRIP_WS2812 0   /* WS2812/WS2812B/WS2813/NeoPixel, 800 kHz */
+#define BL_STRIP_SK6812 1   /* SK6812 (RGB or RGBW), 800 kHz, slightly different timing */
+#define BL_STRIP_WS2811 2   /* WS2811 at 400 kHz */
+
+/* ---- USB device (ESP32-S3) ---- */
+#define BL_USB_KEYBOARD 0x01
+#define BL_USB_MOUSE    0x02
+#define BL_USB_GAMEPAD  0x04
+#define BL_USB_CONSUMER 0x08
+#define BL_USB_MIDI     0x10
+
+#define BL_USB_PRESS       1
+#define BL_USB_RELEASE     2
+#define BL_USB_RELEASE_ALL 3
+#define BL_USB_WRITE       4   /* keyboard: press + release one key */
+#define BL_USB_MOVE        5   /* mouse */
+#define BL_USB_CLICK       6   /* mouse */
+
 /* ---- Logging ---- */
 #define BL_LOG_ERROR         1
 #define BL_LOG_WARN          2

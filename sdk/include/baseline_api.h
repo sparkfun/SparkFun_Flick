@@ -5,7 +5,7 @@
 #include "baseline_types.h"
 
 #define BL_ABI_MAJOR 1
-#define BL_ABI_MINOR 4
+#define BL_ABI_MINOR 6
 
 typedef struct bl_api {
     uint16_t abi_major;
@@ -206,6 +206,71 @@ typedef struct bl_api {
     int (*mqtt_take)(int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size);
     int (*ota_begin)(const char *hostname, const char *password, uint16_t port);
     void (*ota_end)(void);
+
+    /* ---- added in 1.5 ---- */
+    int (*bt_spp_begin)(const char *name);
+    void (*bt_spp_end)(void);
+    int (*bt_spp_connected)(void);
+    int (*bt_spp_write)(const uint8_t *data, size_t len);
+    int (*bt_spp_available)(void);
+    int (*bt_spp_read)(uint8_t *buf, size_t size);
+    int (*bt_spp_peek)(void);
+    void (*bt_spp_flush)(void);
+    int (*bt_spp_set_pin)(const char *pin);
+
+    /* ---- added in 1.6 ---- */
+    int (*sd_begin)(int bus, int cs, uint32_t freq_hz, int format_if_empty);
+    void (*sd_end)(void);
+    uint64_t (*sd_info)(int what);
+    int (*fsx_open)(int fs, const char *path, const char *mode, int create);
+    int (*fsx_path_op)(int fs, int op, const char *path, const char *path2);
+    int (*sleep_wake)(int source, uint64_t value, int pin, int level);
+    int (*sleep_disable_wake)(int source);
+    void (*sleep_deep)(void);
+    int (*sleep_light)(void);
+    int (*sleep_wake_cause)(void);
+    uint64_t (*sleep_ext1_status)(void);
+    void * (*rtc_memory)(uint32_t *size);
+    int (*timer_new)(void);
+    void (*timer_free)(int h);
+    int (*timer_start)(int h, uint64_t period_us, int periodic);
+    void (*timer_stop)(int h);
+    int (*timer_active)(int h);
+    int (*timer_take)(void);
+    void (*time_ntp_start)(const char *server1, const char *server2, const char *server3);
+    int (*time_get)(int64_t *sec, int32_t *usec);
+    int (*time_set)(int64_t sec, int32_t usec);
+    int (*time_synced)(void);
+    uint32_t (*touch_read)(int pin);
+    int (*touch_attach)(int pin, uint32_t threshold);
+    int (*touch_detach)(int pin);
+    int (*touch_take)(void);
+    int (*i2s_begin)(int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk);
+    void (*i2s_end)(void);
+    int (*i2s_write)(const uint8_t *data, size_t len);
+    int (*i2s_read)(uint8_t *buf, size_t size);
+    int (*led_strip_write)(int pin, int chipset, const uint8_t *data, size_t len);
+    int (*ledc_attach)(int pin, uint32_t freq, int resolution);
+    int (*ledc_write)(int pin, uint32_t duty);
+    int (*ledc_detach)(int pin);
+    uint32_t (*ledc_write_tone)(int pin, uint32_t freq);
+    uint32_t (*ledc_change_frequency)(int pin, uint32_t freq, int resolution);
+    int (*dns_start)(uint16_t port, const char *domain, uint32_t ip);
+    void (*dns_stop)(void);
+    void (*dns_error_reply)(int code);
+    int (*usb_begin)(uint32_t devices);
+    void (*usb_end)(void);
+    uint32_t (*usb_devices)(void);
+    int (*usb_mounted)(void);
+    int (*usb_keyboard)(int op, uint32_t key);
+    int (*usb_mouse)(int op, int x, int y, int wheel, int buttons);
+    int (*usb_gamepad)(int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons);
+    int (*usb_consumer)(int op, uint16_t usage);
+    int (*usb_midi_write)(const uint8_t *packet);
+    int (*usb_midi_read)(uint8_t *packet);
+    void * (*ps_malloc)(size_t size);
+    void * (*ps_calloc)(size_t n, size_t size);
+    void * (*ps_realloc)(void *ptr, size_t size);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -266,7 +331,7 @@ static inline int analogRead(int pin) { return BL->adc_read(pin); }
 static inline int analogReadMilliVolts(int pin) { return BL->adc_read_mv(pin); }
 /* PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*. */
 static inline int analogWrite(int pin, int value) { return BL->pwm_write(pin, value); }
-/* Set a WS2812 RGB LED (Thing Plus: pin 46). Returns 0 or BL_ERR_*. */
+/* Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. */
 static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL->rgb_write(pin, red, green, blue); }
 /* Start I2C. sda/scl -1 = board Qwiic pins (8/9). freq in Hz (0 = 100 kHz). */
 static inline int bl_i2c_begin(int sda, int scl, uint32_t freq) { return BL->i2c_begin(sda, scl, freq); }
@@ -584,6 +649,128 @@ static inline int bl_mqtt_take(int h, char *topic, size_t topic_size, uint8_t *p
 static inline int bl_ota_begin(const char *hostname, const char *password, uint16_t port) { return BL->ota_begin(hostname, password, port); }
 /* Stop accepting uploads over WiFi. */
 static inline void bl_ota_end(void) { BL->ota_end(); }
+/* Start an SPP serial port visible as `name`. BL_ERR_UNSUPPORTED on chips without Bluetooth Classic. */
+static inline int bl_bt_spp_begin(const char *name) { return BL->bt_spp_begin(name); }
+/* Stop it. */
+static inline void bl_bt_spp_end(void) { BL->bt_spp_end(); }
+/* 1 if a device is connected. */
+static inline int bl_bt_spp_connected(void) { return BL->bt_spp_connected(); }
+/* Send bytes. Returns bytes sent. */
+static inline int bl_bt_spp_write(const uint8_t *data, size_t len) { return BL->bt_spp_write(data, len); }
+/* Bytes received and not yet read. */
+static inline int bl_bt_spp_available(void) { return BL->bt_spp_available(); }
+/* Read up to size bytes (0 if none). */
+static inline int bl_bt_spp_read(uint8_t *buf, size_t size) { return BL->bt_spp_read(buf, size); }
+/* Next byte without consuming it, or -1. */
+static inline int bl_bt_spp_peek(void) { return BL->bt_spp_peek(); }
+/* Wait until everything is sent. */
+static inline void bl_bt_spp_flush(void) { BL->bt_spp_flush(); }
+/* Legacy pairing PIN (call before begin). 0 or BL_ERR_*. */
+static inline int bl_bt_spp_set_pin(const char *pin) { return BL->bt_spp_set_pin(pin); }
+/* Mount the microSD card. bus = BL_SD_SPI (cs pin, -1 = board default) or BL_SD_MMC (board pins; cs = 1 for 1-bit mode). */
+static inline int bl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if_empty) { return BL->sd_begin(bus, cs, freq_hz, format_if_empty); }
+/* Unmount the card. */
+static inline void bl_sd_end(void) { BL->sd_end(); }
+/* BL_SD_CARD_TYPE / CARD_SIZE / TOTAL_BYTES / USED_BYTES. */
+static inline uint64_t bl_sd_info(int what) { return BL->sd_info(what); }
+/* Open a file or directory on a file system. Returns a handle. */
+static inline int bl_fsx_open(int fs, const char *path, const char *mode, int create) { return BL->fsx_open(fs, path, mode, create); }
+/* BL_FS_EXISTS / REMOVE / RENAME / MKDIR / RMDIR. Returns 1 or 0. */
+static inline int bl_fsx_path_op(int fs, int op, const char *path, const char *path2) { return BL->fsx_path_op(fs, op, path, path2); }
+/* Enable a wake source (BL_WAKE_*): TIMER value = us; EXT0 pin+level; EXT1 value = pin mask, level = mode; TOUCH; GPIO/UART (light sleep). */
+static inline int bl_sleep_wake(int source, uint64_t value, int pin, int level) { return BL->sleep_wake(source, value, pin, level); }
+/* Disable a wake source (BL_WAKE_ALL = every source). */
+static inline int bl_sleep_disable_wake(int source) { return BL->sleep_disable_wake(source); }
+/* Deep sleep. The board restarts on wake: Baseline boots and starts the sketch again. */
+static inline void bl_sleep_deep(void) { BL->sleep_deep(); }
+/* Light sleep; returns after wake with 0 or BL_ERR_*. */
+static inline int bl_sleep_light(void) { return BL->sleep_light(); }
+/* Why the chip woke (esp_sleep_wakeup_cause_t values; 0 = not from sleep). */
+static inline int bl_sleep_wake_cause(void) { return BL->sleep_wake_cause(); }
+/* Pin mask that caused an EXT1 wake. */
+static inline uint64_t bl_sleep_ext1_status(void) { return BL->sleep_ext1_status(); }
+/* 1 KB of RTC memory kept through deep sleep and resets (cleared at power-on). */
+static inline void * bl_rtc_memory(uint32_t *size) { return BL->rtc_memory(size); }
+/* New timer handle. */
+static inline int bl_timer_new(void) { return BL->timer_new(); }
+/* Stop and free it. */
+static inline void bl_timer_free(int h) { BL->timer_free(h); }
+/* Fire after period_us (repeatedly if periodic). */
+static inline int bl_timer_start(int h, uint64_t period_us, int periodic) { return BL->timer_start(h, period_us, periodic); }
+/* Stop it. */
+static inline void bl_timer_stop(int h) { BL->timer_stop(h); }
+/* 1 while running. */
+static inline int bl_timer_active(int h) { return BL->timer_active(h); }
+/* Next timer that fired (one result per firing), or -1. */
+static inline int bl_timer_take(void) { return BL->timer_take(); }
+/* Start NTP time sync (WiFi must be connected). NULL server1 = pool.ntp.org. */
+static inline void bl_time_ntp_start(const char *server1, const char *server2, const char *server3) { BL->time_ntp_start(server1, server2, server3); }
+/* gettimeofday(): seconds since 1970 (UTC). */
+static inline int bl_time_get(int64_t *sec, int32_t *usec) { return BL->time_get(sec, usec); }
+/* settimeofday(). */
+static inline int bl_time_set(int64_t sec, int32_t usec) { return BL->time_set(sec, usec); }
+/* 1 once NTP (or time_set) has set the clock. */
+static inline int bl_time_synced(void) { return BL->time_synced(); }
+/* touchRead() value (0 if not a touch pin). */
+static inline uint32_t bl_touch_read(int pin) { return BL->touch_read(pin); }
+/* Report touches past threshold through touch_take(). */
+static inline int bl_touch_attach(int pin, uint32_t threshold) { return BL->touch_attach(pin, threshold); }
+/* Stop reporting. */
+static inline int bl_touch_detach(int pin) { return BL->touch_detach(pin); }
+/* Next pin that was touched, or -1. */
+static inline int bl_touch_take(void) { return BL->touch_take(); }
+/* Start I2S (BL_I2S_*). PDM uses bclk as clock. -1 = unused pin. */
+static inline int bl_i2s_begin(int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk) { return BL->i2s_begin(mode, rate, bits, stereo, bclk, ws, dout, din, mclk); }
+/* Stop I2S. */
+static inline void bl_i2s_end(void) { BL->i2s_end(); }
+/* Queue samples. Returns bytes written. */
+static inline int bl_i2s_write(const uint8_t *data, size_t len) { return BL->i2s_write(data, len); }
+/* Read samples. Returns bytes read. */
+static inline int bl_i2s_read(uint8_t *buf, size_t size) { return BL->i2s_read(buf, size); }
+/* Send bytes (already in the strip's color order) to a WS2812-type strip (BL_STRIP_*). */
+static inline int bl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len) { return BL->led_strip_write(pin, chipset, data, len); }
+/* PWM at any frequency/resolution (servos, tones). 1 or 0. */
+static inline int bl_ledc_attach(int pin, uint32_t freq, int resolution) { return BL->ledc_attach(pin, freq, resolution); }
+/* Set the duty. 1 or 0. */
+static inline int bl_ledc_write(int pin, uint32_t duty) { return BL->ledc_write(pin, duty); }
+/* Stop PWM. 1 or 0. */
+static inline int bl_ledc_detach(int pin) { return BL->ledc_detach(pin); }
+/* Square wave at freq (0 = off). Returns the frequency set. */
+static inline uint32_t bl_ledc_write_tone(int pin, uint32_t freq) { return BL->ledc_write_tone(pin, freq); }
+/* Change frequency. Returns the frequency set. */
+static inline uint32_t bl_ledc_change_frequency(int pin, uint32_t freq, int resolution) { return BL->ledc_change_frequency(pin, freq, resolution); }
+/* Answer DNS queries for domain ("*" = all) with ip. */
+static inline int bl_dns_start(uint16_t port, const char *domain, uint32_t ip) { return BL->dns_start(port, domain, ip); }
+/* Stop it. */
+static inline void bl_dns_stop(void) { BL->dns_stop(); }
+/* Reply code for other names. */
+static inline void bl_dns_error_reply(int code) { BL->dns_error_reply(code); }
+/* Run as these USB devices (BL_USB_* bits) next to the serial console. Returns BL_OK if they are running; otherwise Baseline saves the set and reboots into it (the sketch starts again). */
+static inline int bl_usb_begin(uint32_t devices) { return BL->usb_begin(devices); }
+/* Back to the plain USB serial port (reboots if needed). */
+static inline void bl_usb_end(void) { BL->usb_end(); }
+/* Devices that are running. */
+static inline uint32_t bl_usb_devices(void) { return BL->usb_devices(); }
+/* 1 when a computer has set up the device. */
+static inline int bl_usb_mounted(void) { return BL->usb_mounted(); }
+/* BL_USB_PRESS / RELEASE / RELEASE_ALL / WRITE with an Arduino key code. Returns 1 or 0. */
+static inline int bl_usb_keyboard(int op, uint32_t key) { return BL->usb_keyboard(op, key); }
+/* BL_USB_MOVE (x, y, wheel), PRESS / RELEASE / CLICK (buttons). */
+static inline int bl_usb_mouse(int op, int x, int y, int wheel, int buttons) { return BL->usb_mouse(op, x, y, wheel, buttons); }
+/* Send the full gamepad state. Returns 1 or 0. */
+static inline int bl_usb_gamepad(int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons) { return BL->usb_gamepad(x, y, z, rz, rx, ry, hat, buttons); }
+/* Media key: BL_USB_PRESS (usage) or BL_USB_RELEASE. */
+static inline int bl_usb_consumer(int op, uint16_t usage) { return BL->usb_consumer(op, usage); }
+/* Send one 4-byte USB-MIDI event packet. */
+static inline int bl_usb_midi_write(const uint8_t *packet) { return BL->usb_midi_write(packet); }
+/* Take one received 4-byte packet. Returns 1, or 0 if none. */
+static inline int bl_usb_midi_read(uint8_t *packet) { return BL->usb_midi_read(packet); }
+/* Allocate from PSRAM only. NULL if the board has no PSRAM or it is full. Free with free(). */
+static inline void * ps_malloc(size_t size) { return BL->ps_malloc(size); }
+/* Allocate zeroed memory from PSRAM only. */
+static inline void * ps_calloc(size_t n, size_t size) { return BL->ps_calloc(n, size); }
+/* Resize an allocation; the result is in PSRAM. */
+static inline void * ps_realloc(void *ptr, size_t size) { return BL->ps_realloc(ptr, size); }
 #endif /* BASELINE_FIRMWARE */
 
 #endif /* BASELINE_API_H */

@@ -2,8 +2,9 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "bl_console.h"
+#include "bl_port.h"
 
-#if !ARDUINO_USB_CDC_ON_BOOT || !ARDUINO_USB_MODE
+#if BL_PORT_CONSOLE_USB && (!ARDUINO_USB_CDC_ON_BOOT || !ARDUINO_USB_MODE)
 #error "Baseline needs 'USB CDC On Boot: Enabled' and 'USB Mode: Hardware CDC and JTAG' (bsk baseline sets these)"
 #endif
 
@@ -12,20 +13,33 @@ static int log_vprintf(const char *fmt, va_list ap)
     return bl_console_vprintf(fmt, ap);
 }
 
-/* HWCDC drops received bytes once its queue is full (default 256). An upload
- * DATA line is ~1 KB and arrives in one burst, so give it plenty of room. */
+/* The console drops received bytes once its queue is full (HWCDC default 256).
+ * An upload DATA line is ~1 KB and arrives in one burst, so give it plenty of
+ * room. */
 #define CONSOLE_RX_BUFFER 8192
+
+static Stream *s_con = &Serial;
 
 void bl_console_init(void)
 {
     Serial.setRxBufferSize(CONSOLE_RX_BUFFER);  // must be called before begin()
-    Serial.begin(115200);       // baud is ignored on USB CDC
+    Serial.begin(115200);       // UART console: 115200 baud; ignored on USB CDC
     esp_log_set_vprintf(log_vprintf);   // ESP-IDF logs go to the same port
+}
+
+void bl_console_use(Stream *s)
+{
+    s_con = s ? s : &Serial;
 }
 
 void bl_console_write(const char *s, size_t n)
 {
-    Serial.write((const uint8_t *)s, n);
+    s_con->write((const uint8_t *)s, n);
+}
+
+void bl_console_flush(void)
+{
+    s_con->flush();
 }
 
 int bl_console_vprintf(const char *fmt, va_list ap)
@@ -88,5 +102,5 @@ void bl_console_log(char level, const char *tag, const char *fmt, ...)
 
 int bl_console_read(void)
 {
-    return Serial.available() ? Serial.read() : -1;
+    return s_con->available() ? s_con->read() : -1;
 }

@@ -427,6 +427,28 @@ private:
     int h_ = -1;
 };
 
+/* ---------------- DNSServer (captive portals) ----------------
+ * Answers every DNS lookup for domainName ("*" = all) with resolvedIP, so
+ * phones joining your access point open its web page. Requests are handled
+ * inside Baseline; processNextRequest() has nothing to do. */
+enum class DNSReplyCode : uint16_t {
+    NoError = 0, FormError = 1, ServerFailure = 2, NonExistentDomain = 3, NotImplemented = 4,
+    Refused = 5, YXDomain = 6, YXRRSet = 7, NXRRSet = 8,
+};
+
+class DNSServer {
+public:
+    bool start(const uint16_t &port, const String &domainName, const IPAddress &resolvedIP)
+    {
+        return bl_dns_start(port, domainName.c_str(), (uint32_t)resolvedIP) == BL_OK;
+    }
+    bool start() { return start(53, String("*"), IPAddress(bl_wifi_ip(BL_IP_SOFTAP))); }
+    void stop() { bl_dns_stop(); }
+    void processNextRequest() {}
+    void setErrorReplyCode(const DNSReplyCode &replyCode) { bl_dns_error_reply((int)replyCode); }
+    void setTTL(const uint32_t &ttl) {}
+};
+
 /* ---------------- mDNS ---------------- */
 
 /* Service and protocol names work with or without the leading '_'. */

@@ -4,6 +4,7 @@
  * Baseline API table; the real work happens in Baseline on the board.
  *
  *   Serial / BLESerial        print, println, printf, read, available
+ *   BluetoothSerial           Bluetooth Classic SPP (classic ESP32 only)
  *   String, IPAddress         as in Arduino
  *   WiFi                      begin, status, localIP, macAddress, RSSI, mode
  *   HTTPClient                begin, addHeader, GET, POST, PUT, getString
@@ -13,6 +14,13 @@
  *   Preferences, LittleFS     see baseline_storage.h
  *   MDNS, ArduinoOTA          see baseline_net.h
  *   PubSubClient              see baseline_mqtt.h
+ *   SD, SD_MMC                see baseline_storage.h
+ *   sleep, time, timers, tone see baseline_system.h
+ *   touch, LEDC, Servo, I2S   see baseline_io.h
+ *   FastLED                   see baseline_fastled.h
+ *   DNSServer                 see baseline_net.h
+ *   USB HID / MIDI            see baseline_usb.h (ESP32-S3)
+ *   SFE_MAX1704X              see baseline_fuelgauge.h
  *   ESP                       getFreeHeap, getChipModel, restart, ...
  *   esp_now_*                 see baseline_espnow.h
  *   random, map, constrain, min, max, log_i, ESP_LOGI
@@ -35,12 +43,16 @@ typedef bool boolean;
 typedef uint8_t byte;
 typedef uint16_t word;
 
-static const int STAT_LED = 0;      // blue STAT LED (SparkFun ESP32-S3 Thing Plus)
-static const int LED_BUILTIN = 0;   // simple LED; Arduino's variant uses 46 (the RGB LED)
-static const int RGB_BUILTIN = 46;  // WS2812 RGB LED
-static const int SDA = 8;           // Qwiic
-static const int SCL = 9;
-static const int A0 = 10;
+/* Board pins: from the target's bl_target.h (targets/<target>/sdk/). */
+#include "bl_target.h"
+static const int STAT_LED = BL_BOARD_STAT_LED;
+static const int LED_BUILTIN = BL_BOARD_LED_BUILTIN;
+#ifdef BL_BOARD_RGB_LED
+#define RGB_BUILTIN BL_BOARD_RGB_LED        // WS2812 RGB LED (a macro, so sketches can #ifdef it)
+#endif
+static const int SDA = BL_BOARD_SDA;        // I2C (Qwiic on SparkFun boards)
+static const int SCL = BL_BOARD_SCL;
+static const int A0 = BL_BOARD_A0;
 
 template <typename T, typename L, typename H> static inline T constrain(T x, L lo, H hi)
 {
@@ -141,6 +153,45 @@ public:
     int read() override { return bl_ble_serial_read(); }
 };
 
+/* ---- BluetoothSerial: Bluetooth Classic serial port (SPP) ----
+ * Classic ESP32 only (the S3, C3, C6 have no Bluetooth Classic): elsewhere
+ * begin() returns false. Phones and PCs pair with it as a serial port. */
+class BluetoothSerial : public Stream {
+public:
+    bool begin(const String &localName = String(), bool isMaster = false, bool disableBLE = false)
+    {
+        return bl_bt_spp_begin(localName.length() ? localName.c_str() : "ESP32") == BL_OK;
+    }
+    void end() { bl_bt_spp_end(); }
+    bool hasClient() { return bl_bt_spp_connected() == 1; }
+    /* Wait up to timeout ms for a device to connect (0 = just check). */
+    bool connected(int timeout = 0)
+    {
+        uint32_t start = millis();
+        while (!hasClient() && (int)(millis() - start) < timeout) {
+            delay(10);
+        }
+        return hasClient();
+    }
+    bool setPin(const char *pin, uint8_t pin_code_len)
+    {
+        char buf[17] = {};
+        memcpy(buf, pin, pin_code_len < 16 ? pin_code_len : 16);
+        return bl_bt_spp_set_pin(buf) == BL_OK;
+    }
+    using Print::write;
+    size_t write(const uint8_t *buf, size_t size) override { return (size_t)bl_bt_spp_write(buf, size); }
+    int available() override { return bl_bt_spp_available(); }
+    int read() override
+    {
+        uint8_t b;
+        return bl_bt_spp_read(&b, 1) == 1 ? b : -1;
+    }
+    int peek() { return bl_bt_spp_peek(); }
+    void flush() { bl_bt_spp_flush(); }
+    operator bool() { return hasClient(); }
+};
+
 /* ---- IPAddress ---- */
 class IPAddress : public Printable {
 public:
@@ -197,11 +248,12 @@ public:
     uint32_t getFreePsram() { return bl_system_info(BL_INFO_FREE_PSRAM); }
     uint32_t getFlashChipSize() { return bl_system_info(BL_INFO_FLASH_SIZE); }
     uint32_t getCpuFreqMHz() { return bl_system_info(BL_INFO_CPU_MHZ); }
-    const char *getChipModel() { return "ESP32-S3"; }
+    const char *getChipModel() { return BL_TARGET_CHIP_NAME; }
     uint8_t getChipCores() { return 2; }
     const char *getSdkVersion() { return bl_baseline_version(); }     // the Baseline version
     uint64_t getEfuseMac();
     void restart() { bl_restart(); }
+    void deepSleep(uint64_t time_us) { bl_sleep_wake(BL_WAKE_TIMER, time_us, 0, 0); bl_sleep_deep(); }
 };
 
 extern SerialClass Serial;
@@ -213,10 +265,18 @@ extern EspClass ESP;
 #include "baseline_io.h"
 /* Arduino BLE library: BLEDevice, BLEServer, BLEScan, BLEClient, ... */
 #include "baseline_ble.h"
-/* Preferences, LittleFS / File */
+/* Preferences, LittleFS / File, SD / SD_MMC */
 #include "baseline_storage.h"
 /* PubSubClient (MQTT) */
 #include "baseline_mqtt.h"
+/* sleep, time/NTP, Ticker / hw_timer / esp_timer, tone */
+#include "baseline_system.h"
+/* FastLED-compatible LED strips */
+#include "baseline_fastled.h"
+/* USB keyboard / mouse / gamepad / media keys / MIDI (ESP32-S3) */
+#include "baseline_usb.h"
+/* MAX17048 LiPo fuel gauge */
+#include "baseline_fuelgauge.h"
 
 #endif /* __cplusplus */
 #endif /* BASELINE_ARDUINO_H */

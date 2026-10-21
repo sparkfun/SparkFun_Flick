@@ -1,0 +1,11 @@
+{
+    "description": "SparkFun ESP32-S3 Thing Plus: ESP32-S3, 4 MB flash, 2 MB PSRAM, native USB",
+    "baseline_source": "baseline",
+    "fqbn": "esp32:esp32:sparkfun_esp32s3_thing_plus:USBMode=default,CDCOnBoot=cdc,PartitionScheme=custom,PSRAM=enabled",
+    "min_core": "3.3.0",
+    "gcc": "xtensa-esp32s3-elf-gcc",
+    "cflags": [],
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": [],
+    "usb_vids": ["303A"]
+}

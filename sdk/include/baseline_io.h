@@ -156,5 +156,101 @@ private:
 extern HardwareSerial Serial1;
 extern HardwareSerial Serial2;
 
+/* ---------------- touch pins ----------------
+ * touchRead() values differ by chip: on the classic ESP32 they DROP when
+ * touched (interrupt below the threshold); on the S3 they RISE (interrupt
+ * above). The handler runs on the sketch task, like attachInterrupt. */
+typedef uint32_t touch_value_t;
+#ifdef BL_TOUCH_T0
+static const uint8_t T0 = BL_TOUCH_T0;
+#endif
+#ifdef BL_TOUCH_T1
+static const uint8_t T1 = BL_TOUCH_T1, T2 = BL_TOUCH_T2, T3 = BL_TOUCH_T3, T4 = BL_TOUCH_T4, T5 = BL_TOUCH_T5,
+                     T6 = BL_TOUCH_T6, T7 = BL_TOUCH_T7, T8 = BL_TOUCH_T8, T9 = BL_TOUCH_T9;
+#endif
+#ifdef BL_TOUCH_T10
+static const uint8_t T10 = BL_TOUCH_T10, T11 = BL_TOUCH_T11, T12 = BL_TOUCH_T12, T13 = BL_TOUCH_T13, T14 = BL_TOUCH_T14;
+#endif
+
+static inline touch_value_t touchRead(uint8_t pin) { return bl_touch_read(pin); }
+void touchAttachInterrupt(uint8_t pin, void (*handler)(void), touch_value_t threshold);
+void touchAttachInterruptArg(uint8_t pin, void (*handler)(void *), void *arg, touch_value_t threshold);
+void touchDetachInterrupt(uint8_t pin);
+/* Deep sleep wake by touch: set the pin's threshold, then enable touch wake. */
+static inline void touchSleepWakeUpEnable(uint8_t pin, touch_value_t threshold)
+{
+    bl_touch_attach(pin, threshold);
+    bl_sleep_wake(BL_WAKE_TOUCH, 0, 0, 0);
+}
+
+/* ---------------- LEDC PWM (any frequency / resolution) ---------------- */
+static inline bool ledcAttach(uint8_t pin, uint32_t freq, uint8_t resolution) { return bl_ledc_attach(pin, freq, resolution) == 1; }
+static inline bool ledcWrite(uint8_t pin, uint32_t duty) { return bl_ledc_write(pin, duty) == 1; }
+static inline bool ledcDetach(uint8_t pin) { return bl_ledc_detach(pin) == 1; }
+static inline uint32_t ledcWriteTone(uint8_t pin, uint32_t freq) { return bl_ledc_write_tone(pin, freq); }
+static inline uint32_t ledcChangeFrequency(uint8_t pin, uint32_t freq, uint8_t resolution) { return bl_ledc_change_frequency(pin, freq, resolution); }
+
+/* ---------------- Servo (ESP32Servo-compatible) ----------------
+ * 50 Hz, 14-bit LEDC. write() takes degrees (0-180), or microseconds when the
+ * value is 500 or more, as in the Arduino Servo library. */
+#define MIN_PULSE_WIDTH     544
+#define MAX_PULSE_WIDTH     2400
+#define DEFAULT_PULSE_WIDTH 1500
+
+class Servo {
+public:
+    int attach(int pin, int min_us = MIN_PULSE_WIDTH, int max_us = MAX_PULSE_WIDTH);
+    void detach();
+    void write(int value);
+    void writeMicroseconds(int us);
+    int read() { return map(us_, min_, max_, 0, 180); }
+    int readMicroseconds() { return us_; }
+    bool attached() { return pin_ >= 0; }
+    void setPeriodHertz(int hz) { hz_ = hz > 0 ? hz : 50; if (pin_ >= 0) { bl_ledc_change_frequency(pin_, hz_, 14); writeMicroseconds(us_); } }
+
+private:
+    int pin_ = -1;
+    int min_ = MIN_PULSE_WIDTH;
+    int max_ = MAX_PULSE_WIDTH;
+    int us_ = DEFAULT_PULSE_WIDTH;
+    int hz_ = 50;
+};
+
+/* ---------------- I2S (Arduino-ESP32 3.x ESP_I2S) ----------------
+ * One I2S port. Mono/stereo samples of 8/16/24/32 bits, standard I2S or PDM
+ * (PDM microphones: setPinsPdmRx(clk, data); PDM speakers/amps: setPinsPdmTx). */
+typedef enum { I2S_MODE_STD = BL_I2S_STD, I2S_MODE_TDM = BL_I2S_TDM, I2S_MODE_PDM_TX = BL_I2S_PDM_TX, I2S_MODE_PDM_RX = BL_I2S_PDM_RX } i2s_mode_t;
+typedef enum {
+    I2S_DATA_BIT_WIDTH_8BIT = 8, I2S_DATA_BIT_WIDTH_16BIT = 16, I2S_DATA_BIT_WIDTH_24BIT = 24, I2S_DATA_BIT_WIDTH_32BIT = 32,
+} i2s_data_bit_width_t;
+typedef enum { I2S_SLOT_MODE_MONO = 1, I2S_SLOT_MODE_STEREO = 2 } i2s_slot_mode_t;
+
+class I2SClass : public Stream {
+public:
+    void setPins(int8_t bclk, int8_t ws, int8_t dout, int8_t din = -1, int8_t mclk = -1)
+    {
+        bclk_ = bclk; ws_ = ws; dout_ = dout; din_ = din; mclk_ = mclk;
+    }
+    void setPinsPdmTx(int8_t clk, int8_t dout0, int8_t dout1 = -1) { bclk_ = clk; dout_ = dout0; ws_ = -1; din_ = -1; }
+    void setPinsPdmRx(int8_t clk, int8_t din0, int8_t din1 = -1, int8_t din2 = -1, int8_t din3 = -1) { bclk_ = clk; din_ = din0; ws_ = -1; dout_ = -1; }
+    bool begin(i2s_mode_t mode, uint32_t rate, i2s_data_bit_width_t bits, i2s_slot_mode_t ch, int8_t slot_mask = -1)
+    {
+        return bl_i2s_begin(mode, rate, bits, ch == I2S_SLOT_MODE_STEREO, bclk_, ws_, dout_, din_, mclk_) == BL_OK;
+    }
+    bool end() { bl_i2s_end(); return true; }
+    using Print::write;
+    size_t write(const uint8_t *buf, size_t size) override { return (size_t)bl_i2s_write(buf, size); }
+    size_t write(const void *buf, size_t size) { return write((const uint8_t *)buf, size); }
+    size_t readBytes(char *buffer, size_t size);
+    int available() override;      // blocks briefly to fetch samples
+    int read() override;
+    int lastError() { return 0; }
+
+private:
+    int8_t bclk_ = -1, ws_ = -1, dout_ = -1, din_ = -1, mclk_ = -1;
+    uint8_t rx_[128] = {};
+    uint16_t rxLen_ = 0, rxPos_ = 0;
+};
+
 #endif /* __cplusplus */
 #endif /* BASELINE_IO_H */

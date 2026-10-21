@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include "gen/bl_impl.h"
-#include "bl_pins.h"
+#include "bl_port.h"
 
 static bool s_started;
 
@@ -43,6 +43,8 @@ extern "C" void bl_impl_spi_end_transaction(void)
     SPI.endTransaction();
 }
 
+/* Arduino's SPIClass feeds the FIFO from the CPU, so sketch buffers may be in
+ * PSRAM or flash. A DMA-based version would need a MALLOC_CAP_DMA bounce buffer. */
 extern "C" void bl_impl_spi_transfer(uint8_t *data, size_t len)
 {
     if (data && len) {

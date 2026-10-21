@@ -13,6 +13,7 @@
 #include "freertos/stream_buffer.h"
 #include "freertos/queue.h"
 #include "gen/bl_impl.h"
+#include "bl_str.h"
 #include "sketch_loader.h"
 
 #define NUS_SERVICE "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -224,7 +225,7 @@ extern "C" int bl_impl_ble_address(char *buf, size_t size)
     ensure_init(NULL);
     String a = BLEDevice::getAddress().toString();
     if (buf && size) {
-        strlcpy(buf, a.c_str(), size);
+        bl_copy_str(buf, size, a);
     }
     return (int)a.length();
 }
@@ -412,10 +413,17 @@ extern "C" int bl_impl_ble_adv_config(int what, const char *text, const uint8_t 
         adv->addServiceUUID(text);
         return BL_OK;
     case BL_BLE_ADV_SCAN_RESPONSE: adv->setScanResponse(value != 0); return BL_OK;
-    case BL_BLE_ADV_NAME:
+    case BL_BLE_ADV_NAME: {
         if (!text) return BL_ERR_ARG;
+#if CONFIG_BT_NIMBLE_ENABLED
         adv->setName(text);
+#else   // Bluedroid (classic ESP32): the name goes in the advertisement data
+        BLEAdvertisementData ad;
+        ad.setName(text);
+        adv->setAdvertisementData(ad);
+#endif
         return BL_OK;
+    }
     case BL_BLE_ADV_MANUFACTURER: {
         if (!data) return BL_ERR_ARG;
         BLEAdvertisementData ad;
@@ -460,16 +468,16 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
     void onResult(BLEAdvertisedDevice dev) override
     {
         bl_ble_adv_t r = {};
-        strlcpy(r.address, dev.getAddress().toString().c_str(), sizeof(r.address));
+        bl_copy_str(r.address, sizeof(r.address), dev.getAddress().toString());
         r.address_type = dev.getAddressType();
         r.rssi = (int16_t)dev.getRSSI();
         if (dev.haveName()) {
             r.has_name = 1;
-            strlcpy(r.name, dev.getName().c_str(), sizeof(r.name));
+            bl_copy_str(r.name, sizeof(r.name), dev.getName());
         }
         if (dev.haveServiceUUID()) {
             r.has_service_uuid = 1;
-            strlcpy(r.service_uuid, dev.getServiceUUID().toString().c_str(), sizeof(r.service_uuid));
+            bl_copy_str(r.service_uuid, sizeof(r.service_uuid), dev.getServiceUUID().toString());
         }
         if (dev.haveTXPower()) {
             r.has_tx_power = 1;
@@ -485,6 +493,7 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
             memcpy(r.manufacturer_data, m.c_str(), r.manufacturer_len);
         }
         int index = -1;
+        bool is_new = false;
         portENTER_CRITICAL(&s_results_lock);
         for (int i = 0; i < s_result_count; i++) {
             if (strcmp(s_results[i].address, r.address) == 0) {
@@ -494,13 +503,14 @@ class ScanCallbacks : public BLEAdvertisedDeviceCallbacks {
         }
         if (index < 0 && s_result_count < MAX_RESULTS) {
             index = s_result_count++;
+            is_new = true;
         }
         if (index >= 0) {
             s_results[index] = r;
         }
         portEXIT_CRITICAL(&s_results_lock);
-        if (index >= 0) {
-            push_simple(BL_BLE_EV_SCAN_RESULT, -1, 0, index);
+        if (is_new) {
+            push_simple(BL_BLE_EV_SCAN_RESULT, -1, 0, index);   // once per device, as in Arduino
         }
     }
 };
@@ -516,7 +526,10 @@ extern "C" int bl_impl_ble_scan_start(uint32_t seconds, int active, uint16_t int
 {
     ensure_init(NULL);
     BLEScan *scan = BLEDevice::getScan();
-    scan->setAdvertisedDeviceCallbacks(&s_scan_cb, false);
+    // wantDuplicates = true: otherwise the BLE library keeps its own copy of
+    // every device it hears for the whole scan, which runs the classic ESP32
+    // out of heap in a busy room. Baseline de-duplicates in s_results instead.
+    scan->setAdvertisedDeviceCallbacks(&s_scan_cb, true);
     scan->setActiveScan(active != 0);
     if (interval_ms) {
         scan->setInterval(interval_ms);

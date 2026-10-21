@@ -1,6 +1,7 @@
 /*
- * baseline_storage.h - Preferences (NVS key/value) and LittleFS for sketches,
- * with the same names as Arduino-ESP32. Included by baseline_arduino.h.
+ * baseline_storage.h - Preferences (NVS key/value), LittleFS and microSD (SD,
+ * SD_MMC) for sketches, with the same names as Arduino-ESP32. Included by
+ * baseline_arduino.h.
  *
  *   Preferences prefs;                    prefs.begin("app"); prefs.putInt("count", 1);
  *   LittleFS.begin(true);                 File f = LittleFS.open("/log.txt", FILE_APPEND);
@@ -107,13 +108,14 @@ enum SeekMode { SeekSet = 0, SeekCur = 1, SeekEnd = 2 };
 class File : public Stream {
 public:
     File() {}
-    explicit File(int handle) : h_(handle) {}       // takes ownership of a handle
-    File(const File &o) : Stream(o), h_(o.h_) { retain(); }
+    explicit File(int handle, int fs = BL_FS_LITTLEFS) : h_(handle), fs_(fs) {}   // takes ownership of a handle
+    File(const File &o) : Stream(o), h_(o.h_), fs_(o.fs_) { retain(); }
     File &operator=(const File &o)
     {
         if (this != &o) {
             close();
             h_ = o.h_;
+            fs_ = o.fs_;
             retain();
         }
         return *this;
@@ -145,41 +147,49 @@ public:
     operator bool() const { return h_ >= 0; }
 
     /* directories */
-    File openNextFile(const char *mode = FILE_READ) { int n = h_ >= 0 ? bl_fs_next(h_) : -1; return n >= 0 ? File(n) : File(); }
+    File openNextFile(const char *mode = FILE_READ) { int n = h_ >= 0 ? bl_fs_next(h_) : -1; return n >= 0 ? File(n, fs_) : File(); }
     void rewindDirectory();
 
 private:
     uint32_t info(int what) const { return h_ >= 0 ? bl_fs_file_info(h_, what) : 0; }
     void retain() { if (h_ >= 0) bl_fs_retain(h_); }
     int h_ = -1;
+    int fs_ = BL_FS_LITTLEFS;
     mutable char name_[72] = {};
     mutable char path_[72] = {};
 };
 
+/* A file system: LittleFS or the microSD card. fs::FS& parameters accept either. */
 class FS {
 public:
+    constexpr explicit FS(int fs) : fs_(fs) {}
     File open(const char *path, const char *mode = FILE_READ, bool create = false)
     {
-        int h = bl_fs_open(path, mode, create);
-        return h >= 0 ? File(h) : File();
+        int h = bl_fsx_open(fs_, path, mode, create);
+        return h >= 0 ? File(h, fs_) : File();
     }
     File open(const String &path, const char *mode = FILE_READ, bool create = false) { return open(path.c_str(), mode, create); }
-    bool exists(const char *path) { return bl_fs_path_op(BL_FS_EXISTS, path, 0) == 1; }
+    bool exists(const char *path) { return op(BL_FS_EXISTS, path); }
     bool exists(const String &path) { return exists(path.c_str()); }
-    bool remove(const char *path) { return bl_fs_path_op(BL_FS_REMOVE, path, 0) == 1; }
+    bool remove(const char *path) { return op(BL_FS_REMOVE, path); }
     bool remove(const String &path) { return remove(path.c_str()); }
-    bool rename(const char *from, const char *to) { return bl_fs_path_op(BL_FS_RENAME, from, to) == 1; }
+    bool rename(const char *from, const char *to) { return op(BL_FS_RENAME, from, to); }
     bool rename(const String &from, const String &to) { return rename(from.c_str(), to.c_str()); }
-    bool mkdir(const char *path) { return bl_fs_path_op(BL_FS_MKDIR, path, 0) == 1; }
+    bool mkdir(const char *path) { return op(BL_FS_MKDIR, path); }
     bool mkdir(const String &path) { return mkdir(path.c_str()); }
-    bool rmdir(const char *path) { return bl_fs_path_op(BL_FS_RMDIR, path, 0) == 1; }
+    bool rmdir(const char *path) { return op(BL_FS_RMDIR, path); }
     bool rmdir(const String &path) { return rmdir(path.c_str()); }
+
+protected:
+    bool op(int what, const char *path, const char *path2 = 0) { return bl_fsx_path_op(fs_, what, path, path2) == 1; }
+    int fs_;
 };
 
 /* Arguments other than formatOnFail are accepted for compatibility: the file
  * system is always the "userfs" partition. */
 class LittleFSFS : public FS {
 public:
+    constexpr LittleFSFS() : FS(BL_FS_LITTLEFS) {}
     bool begin(bool formatOnFail = false, const char *basePath = "/littlefs", uint8_t maxOpenFiles = 8,
                const char *partitionLabel = "userfs")
     {
@@ -193,11 +203,56 @@ public:
 
 extern LittleFSFS LittleFS;
 
+/* ---------------- microSD ----------------
+ * SD.begin() with no arguments uses the board's own card slot (SPI with CS 5 on
+ * the Thing Plus C, 4-bit SDIO on the S3 Thing Plus). SD.begin(csPin) forces
+ * SPI with that chip-select pin. SD_MMC uses the board's SDIO pins. */
+typedef enum { CARD_NONE, CARD_MMC, CARD_SD, CARD_SDHC, CARD_UNKNOWN } sdcard_type_t;
+
+class SDCardFS : public FS {
+public:
+    constexpr SDCardFS() : FS(BL_FS_SD) {}
+    void end() { bl_sd_end(); }
+    sdcard_type_t cardType() { return (sdcard_type_t)bl_sd_info(BL_SD_CARD_TYPE); }
+    uint64_t cardSize() { return bl_sd_info(BL_SD_CARD_SIZE); }
+    uint64_t totalBytes() { return bl_sd_info(BL_SD_TOTAL_BYTES); }
+    uint64_t usedBytes() { return bl_sd_info(BL_SD_USED_BYTES); }
+};
+
+class SDFS : public SDCardFS {
+public:
+    static const uint8_t BOARD_DEFAULT = 0xFF;
+    bool begin(uint8_t ssPin = BOARD_DEFAULT, SPIClass &spi = SPI, uint32_t frequency = 4000000,
+               const char *mountpoint = "/sd", uint8_t max_files = 5, bool format_if_empty = false)
+    {
+        if (ssPin == BOARD_DEFAULT) {
+            return bl_sd_begin(-1, -1, 0, format_if_empty) == BL_OK;
+        }
+        return bl_sd_begin(BL_SD_SPI, ssPin, frequency, format_if_empty) == BL_OK;
+    }
+};
+
+class SDMMCFS : public SDCardFS {
+public:
+    bool setPins(int clk, int cmd, int d0) { return true; }     // Baseline uses the board's pins
+    bool setPins(int clk, int cmd, int d0, int d1, int d2, int d3) { return true; }
+    bool begin(const char *mountpoint = "/sdcard", bool mode1bit = false, bool format_if_mount_failed = false,
+               int sdmmc_frequency = 20000, uint8_t maxOpenFiles = 5)
+    {
+        return bl_sd_begin(BL_SD_MMC, mode1bit ? 1 : 0, (uint32_t)sdmmc_frequency * 1000, format_if_mount_failed) == BL_OK;
+    }
+};
+
+extern SDFS SD;
+extern SDMMCFS SD_MMC;
+
 /* Arduino code often writes fs::FS and fs::File */
 namespace fs {
 using ::File;
 using ::FS;
 using ::LittleFSFS;
+using ::SDFS;
+using ::SDMMCFS;
 using ::SeekMode;
 }
 

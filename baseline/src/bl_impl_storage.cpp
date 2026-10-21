@@ -1,8 +1,15 @@
-/* API table: Preferences (NVS key/value) and LittleFS (ABI 1.4). */
+/* API table: Preferences (NVS key/value), LittleFS (ABI 1.4), microSD (1.6). */
 #include <Arduino.h>
 #include <Preferences.h>
 #include <LittleFS.h>
+#include <SD.h>
+#include "soc/soc_caps.h"
+#if SOC_SDMMC_HOST_SUPPORTED
+#include <SD_MMC.h>
+#endif
 #include "gen/bl_impl.h"
+#include "bl_str.h"
+#include "bl_port.h"
 #include "sketch_loader.h"
 
 #define MAX_PREFS       4
@@ -128,7 +135,7 @@ extern "C" int bl_impl_prefs_get(int h, const char *key, int type, void *buf, si
     case BL_PREF_STRING: {
         String s = p->getString(key);
         if (buf && size) {
-            strlcpy((char *)buf, s.c_str(), size);
+            bl_copy_str((char *)buf, size, s);
         }
         return (int)s.length();
     }
@@ -346,6 +353,125 @@ extern "C" int bl_impl_fs_path_op(int op, const char *path, const char *path2)
     case BL_FS_RENAME: return path2 ? LittleFS.rename(path, path2) : 0;
     case BL_FS_MKDIR:  return LittleFS.mkdir(path);
     case BL_FS_RMDIR:  return LittleFS.rmdir(path);
+    default:           return 0;
+    }
+}
+
+/* ---------------- microSD + any file system (ABI 1.6) ---------------- */
+
+static int s_sd_bus = -1;       // BL_SD_SPI / BL_SD_MMC while mounted
+
+static fs::FS *fs_by_id(int fs)
+{
+    if (fs == BL_FS_LITTLEFS) {
+        return s_mounted ? &LittleFS : NULL;
+    }
+    if (fs == BL_FS_SD) {
+#if SOC_SDMMC_HOST_SUPPORTED
+        if (s_sd_bus == BL_SD_MMC) {
+            return &SD_MMC;
+        }
+#endif
+        return s_sd_bus == BL_SD_SPI ? &SD : NULL;
+    }
+    return NULL;
+}
+
+extern "C" void bl_impl_sd_end(void)
+{
+#if SOC_SDMMC_HOST_SUPPORTED
+    if (s_sd_bus == BL_SD_MMC) {
+        SD_MMC.end();
+    }
+#endif
+    if (s_sd_bus == BL_SD_SPI) {
+        SD.end();
+    }
+    s_sd_bus = -1;
+}
+
+extern "C" int bl_impl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if_empty)
+{
+    bl_impl_sd_end();
+    if (bus < 0) {
+        bus = BL_SD_DEFAULT_BUS;
+    }
+    WdtPause wdt;   // card init and formatting can take seconds
+    bool ok = false;
+    if (bus == BL_SD_MMC) {
+#if SOC_SDMMC_HOST_SUPPORTED
+#ifdef BL_SDMMC_CLK
+        SD_MMC.setPins(BL_SDMMC_CLK, BL_SDMMC_CMD, BL_SDMMC_D0, BL_SDMMC_D1, BL_SDMMC_D2, BL_SDMMC_D3);
+#endif
+        ok = SD_MMC.begin("/sdcard", cs == 1, format_if_empty != 0,
+                          freq_hz ? (int)(freq_hz / 1000) : SDMMC_FREQ_DEFAULT, MAX_FILES);
+#else
+        return BL_ERR_UNSUPPORTED;
+#endif
+    } else if (bus == BL_SD_SPI) {
+        if (cs < 0) {
+            cs = BL_SD_CS;
+        }
+        if (cs < 0 || !bl_pin_usable(cs)) {
+            return BL_ERR_ARG;
+        }
+        ok = SD.begin((uint8_t)cs, SPI, freq_hz ? freq_hz : 4000000, "/sd", MAX_FILES, format_if_empty != 0);
+    } else {
+        return BL_ERR_ARG;
+    }
+    s_sd_bus = ok ? bus : -1;
+    return ok ? BL_OK : BL_ERR_FAIL;
+}
+
+extern "C" uint64_t bl_impl_sd_info(int what)
+{
+#if SOC_SDMMC_HOST_SUPPORTED
+    if (s_sd_bus == BL_SD_MMC) {
+        switch (what) {
+        case BL_SD_CARD_TYPE:   return SD_MMC.cardType();
+        case BL_SD_CARD_SIZE:   return SD_MMC.cardSize();
+        case BL_SD_TOTAL_BYTES: return SD_MMC.totalBytes();
+        case BL_SD_USED_BYTES:  return SD_MMC.usedBytes();
+        default:                return 0;
+        }
+    }
+#endif
+    if (s_sd_bus == BL_SD_SPI) {
+        switch (what) {
+        case BL_SD_CARD_TYPE:   return SD.cardType();
+        case BL_SD_CARD_SIZE:   return SD.cardSize();
+        case BL_SD_TOTAL_BYTES: return SD.totalBytes();
+        case BL_SD_USED_BYTES:  return SD.usedBytes();
+        default:                return 0;
+        }
+    }
+    return 0;   // CARD_NONE
+}
+
+extern "C" int bl_impl_fsx_open(int fs, const char *path, const char *mode, int create)
+{
+    fs::FS *f = fs_by_id(fs);
+    if (!f) {
+        return BL_ERR_STATE;
+    }
+    if (!path) {
+        return BL_ERR_ARG;
+    }
+    return file_slot(f->open(path, mode ? mode : FILE_READ, create != 0));
+}
+
+extern "C" int bl_impl_fsx_path_op(int fs, int op, const char *path, const char *path2)
+{
+    fs::FS *f = fs_by_id(fs);
+    if (!f || !path) {
+        return 0;
+    }
+    switch (op) {
+    case BL_FS_EXISTS: return f->exists(path);
+    case BL_FS_REMOVE: return f->remove(path);
+    case BL_FS_RENAME: return path2 ? f->rename(path, path2) : 0;
+    case BL_FS_MKDIR:  return f->mkdir(path);
+    case BL_FS_RMDIR:  return f->rmdir(path);
     default:           return 0;
     }
 }

@@ -44,6 +44,10 @@ void delay(uint32_t ms);
 void yield(void);
 void bl_sketch_add_pump(void (*pump)(void));   /* SDK-internal: register a callback source */
 
+/* Time zone used by localtime()/mktime()/strftime() (sdk/src/sketch_time.c). */
+int  bl_sdk_tz_set(const char *posix_tz);      /* e.g. "MST7MDT,M3.2.0,M11.1.0" */
+void bl_sdk_tz_set_offsets(long gmt_offset_sec, int dst_offset_sec);
+
 /* Arduino-style names. Define BL_NO_ARDUINO_NAMES to leave them out. */
 #ifndef BL_NO_ARDUINO_NAMES
 #define LOW               BL_LOW
@@ -78,6 +82,10 @@ void bl_sketch_add_pump(void (*pump)(void));   /* SDK-internal: register a callb
 static inline uint32_t getCpuFrequencyMhz(void) { return bl_system_info(BL_INFO_CPU_MHZ); }
 static inline uint32_t esp_random(void) { return bl_random(); }
 static inline void esp_restart(void) { bl_restart(); }
+
+/* PSRAM: ps_malloc/ps_calloc/ps_realloc come from baseline_api.h. Plain malloc()
+ * already puts blocks over 4 KB in PSRAM when the board has it. */
+static inline bool psramFound(void) { return bl_system_info(BL_INFO_PSRAM_SIZE) != 0; }
 
 #ifdef __cplusplus
 }

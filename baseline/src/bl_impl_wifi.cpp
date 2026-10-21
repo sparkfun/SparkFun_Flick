@@ -5,6 +5,7 @@
 #include "esp_http_client.h"
 #include "esp_mac.h"
 #include "gen/bl_impl.h"
+#include "bl_str.h"
 #include "sketch_loader.h"
 
 static_assert(BL_WIFI_CONNECTED == WL_CONNECTED && BL_WIFI_DISCONNECTED == WL_DISCONNECTED &&
@@ -42,7 +43,7 @@ extern "C" int bl_impl_wifi_local_ip(char *buf, size_t size)
         buf[0] = '\0';
         return BL_ERR_STATE;
     }
-    strlcpy(buf, WiFi.localIP().toString().c_str(), size);
+    bl_copy_str(buf, size, WiFi.localIP().toString());
     return BL_OK;
 }
 
@@ -327,7 +328,7 @@ extern "C" int bl_impl_wifi_scan_result(int index, bl_wifi_ap_t *ap)
         return BL_ERR_ARG;
     }
     memset(ap, 0, sizeof(*ap));
-    strlcpy(ap->ssid, WiFi.SSID(index).c_str(), sizeof(ap->ssid));
+    bl_copy_str(ap->ssid, sizeof(ap->ssid), WiFi.SSID(index));
     ap->rssi = (int8_t)WiFi.RSSI(index);
     ap->channel = (uint8_t)WiFi.channel(index);
     ap->auth = (uint8_t)WiFi.encryptionType(index);
@@ -347,7 +348,7 @@ extern "C" int bl_impl_wifi_ssid(char *buf, size_t size)
 {
     String s = WiFi.SSID();
     if (buf && size) {
-        strlcpy(buf, s.c_str(), size);
+        bl_copy_str(buf, size, s);
     }
     return (int)s.length();
 }

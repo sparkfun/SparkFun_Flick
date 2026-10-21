@@ -15,7 +15,7 @@
 #define BL_SKETCH_STACK BL_SKETCH_DEFAULT_STACK
 #endif
 
-#define MAX_PUMPS   4
+#define MAX_PUMPS   12
 #define PUMP_SLICE  5       /* ms: how often delay() checks for callbacks */
 
 const bl_api_t *BL;
@@ -33,7 +33,7 @@ __attribute__((section(".sketch_header"), used))
 const bl_sketch_header_t bl_sketch_header = {
     .magic = BL_SKETCH_MAGIC,
     .header_version = BL_SKETCH_HEADER_VERSION,
-    .chip_id = BL_CHIP_ESP32S3,
+    .chip_id = BL_TARGET_CHIP_ID,
     .abi_major = BL_ABI_MAJOR,
     .abi_minor = BL_ABI_MINOR,
     .entry = (uint32_t)&sketch_entry,

@@ -184,3 +184,12 @@ abi_major=1
 4|int|mqtt_take|int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size
 4|int|ota_begin|const char *hostname, const char *password, uint16_t port
 4|void|ota_end|void
+5|int|bt_spp_begin|const char *name
+5|void|bt_spp_end|void
+5|int|bt_spp_connected|void
+5|int|bt_spp_write|const uint8_t *data, size_t len
+5|int|bt_spp_available|void
+5|int|bt_spp_read|uint8_t *buf, size_t size
+5|int|bt_spp_peek|void
+5|void|bt_spp_flush|void
+5|int|bt_spp_set_pin|const char *pin

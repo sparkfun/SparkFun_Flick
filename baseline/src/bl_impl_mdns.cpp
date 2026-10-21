@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <ESPmDNS.h>
 #include "gen/bl_impl.h"
+#include "bl_str.h"
 #include "sketch_loader.h"
 #include "bl_mdns.h"
 
@@ -82,7 +83,7 @@ extern "C" int bl_impl_mdns_result(int index, int what, char *buf, size_t size)
     case BL_MDNS_HOSTNAME: {
         String h = MDNS.hostname(index);
         if (buf && size) {
-            strlcpy(buf, h.c_str(), size);
+            bl_copy_str(buf, size, h);
         }
         return (int)h.length();
     }

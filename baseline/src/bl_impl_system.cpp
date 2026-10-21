@@ -1,5 +1,7 @@
-/* API table: system information and random numbers (backs the sketch's ESP object). */
+/* API table: system information, random numbers (backs the sketch's ESP object)
+ * and PSRAM allocation. */
 #include <Arduino.h>
+#include "esp_heap_caps.h"
 #include "esp_random.h"
 #include "gen/bl_impl.h"
 
@@ -20,4 +22,20 @@ extern "C" uint32_t bl_impl_system_info(int what)
 extern "C" uint32_t bl_impl_random(void)
 {
     return esp_random();
+}
+
+/* PSRAM only, never internal RAM: heap_caps returns NULL if there is none. */
+extern "C" void *bl_impl_ps_malloc(size_t size)
+{
+    return heap_caps_malloc(size, MALLOC_CAP_SPIRAM);
+}
+
+extern "C" void *bl_impl_ps_calloc(size_t n, size_t size)
+{
+    return heap_caps_calloc(n, size, MALLOC_CAP_SPIRAM);
+}
+
+extern "C" void *bl_impl_ps_realloc(void *ptr, size_t size)
+{
+    return heap_caps_realloc(ptr, size, MALLOC_CAP_SPIRAM);
 }
