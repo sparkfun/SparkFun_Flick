@@ -1,0 +1,11 @@
+# Replaces the Arduino-ESP32 core's own idf_component.yml when bsk stages the
+# core as components/arduino. The core's manifest pulls in Zigbee, Matter,
+# RainMaker, Insights, a modem stack and more; Baseline compiles only the
+# libraries in idf/sdkconfig.defaults, which need just these.
+dependencies:
+  idf: ">=5.5,<5.6"
+  espressif/mdns:
+    version: "^1.11.2"
+    require: public
+  joltwallet/littlefs:
+    version: "^1.22.1"

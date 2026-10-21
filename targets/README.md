@@ -9,14 +9,17 @@ sdk/                     sketch SDK shared by every target (headers, C/C++ runti
 examples/                sketches; the same source builds for any target
 targets/
   esp32s3/               SparkFun ESP32-S3 Thing Plus
-  esp32/                 SparkFun Thing Plus C (classic ESP32)
-    target.json          board options (FQBN), compiler and flags, USB IDs
+  esp32/                 SparkFun Thing Plus C and other classic ESP32s, rev 3.0+ (built with ESP-IDF)
+    target.json          builder ("idf", or an arduino-cli FQBN), sketch compiler and flags, USB IDs
+    idf/sdkconfig.defaults   (idf builder) this target's sdkconfig changes
     sdk/bl_target.h      chip ID, fixed sketch addresses, board pins (LED_BUILTIN, SDA, ...)
     sdk/rom.ld           ROM functions sketches may call directly
     baseline/            files added to (or replacing) baseline/ for this target:
       partitions.csv       flash layout
       src/bl_port.h        console type, pin rules, default UART pins
       src/bl_port_mmu.c    maps the sketch slot at its fixed address
+idf/                     (idf builder) the ESP-IDF project template, shared sdkconfig changes,
+                         and the trimmed manifest for Arduino-ESP32 as a component
 dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 ```
 

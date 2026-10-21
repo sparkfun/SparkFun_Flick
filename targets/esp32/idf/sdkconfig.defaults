@@ -1,0 +1,22 @@
+# Classic ESP32 settings, on top of idf/sdkconfig.defaults.
+
+# ESP32 rev 3.0 or later only (ESP32-D0WD-V3, WROOM-32E, WROVER-E, PICO-V3...).
+# Earlier chips need the PSRAM cache workaround, which keeps most of newlib in
+# IRAM instead of ROM; dropping them frees that IRAM.
+CONFIG_ESP32_REV_MIN_3=y
+
+# Move FreeRTOS and heap functions that are not needed with the cache disabled
+# or in ISRs from IRAM to flash.
+CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
+CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH=y
+
+# The partition table is laid out for 16 MB (Thing Plus C). bsk rewrites its
+# last two partitions for boards with less flash when it flashes them.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# Internal RAM: Bluedroid init takes ~82 KB and left too little for WiFi, so
+# BLE + WiFi together ran out of memory. With PSRAM on the board, let WiFi/lwIP
+# buffers and Bluedroid allocate there first; without PSRAM these fall back to
+# internal RAM as before.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y

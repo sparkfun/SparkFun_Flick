@@ -1,18 +1,13 @@
 {
-    "description": "SparkFun Thing Plus C: classic ESP32 (ESP32-WROOM-32E), 16 MB flash, CH340 USB-serial",
+    "description": "SparkFun Thing Plus C and other classic ESP32 boards (chip rev 3.0 or later), CH340 USB-serial",
     "baseline_source": "baseline",
-    "fqbn": "esp32:esp32:esp32:PartitionScheme=custom,FlashSize=16M,PSRAM=enabled",
-    "fqbn_note": "The generic ESP32 Dev Module board, not esp32thing_plus_c: only it has the PSRAM menu (BOARD_HAS_PSRAM). Board pins come from sdk/bl_target.h.",
-    "build_properties": [
-        "upload.maximum_size=3145728",
-        "compiler.c.elf.extra_flags=-Wl,--wrap=localtime_r -Wl,--wrap=gmtime_r -Wl,--wrap=mktime -Wl,--wrap=strtol -Wl,--wrap=strtoul -Wl,--wrap=strtok_r -Wl,--wrap=_strtol_r -Wl,--wrap=_strtoul_r -Wl,--wrap=__strtok_r -Wl,--wrap=utoa -Wl,--wrap=itoa -Wl,--wrap=__utoa -Wl,--wrap=__itoa -Wl,--wrap=srand -Wl,--wrap=rand -Wl,--wrap=_getenv_r -Wl,--wrap=getenv -Wl,--wrap=strcasestr -Wl,--wrap=strlcat -Wl,--wrap=strcasecmp -Wl,--wrap=strncasecmp -Wl,--wrap=strdup -Wl,--wrap=_strdup_r -Wl,--wrap=strndup -Wl,--wrap=_strndup_r -Wl,--wrap=strstr -Wl,--wrap=strrchr -Wl,--wrap=memccpy -Wl,--wrap=atoi -Wl,--wrap=atol -Wl,--wrap=__sccl"
-    ],
-    "build_properties_note": "The --wrap flags keep those newlib functions out of the full IRAM; see baseline/src/bl_port_libc.c.",
+    "builder": "idf",
+    "idf_version": "5.5",
+    "idf_target": "esp32",
+    "builder_note": "Baseline is built with ESP-IDF and Arduino-ESP32 as a component (idf/, targets/esp32/idf/sdkconfig.defaults), not arduino-cli.",
     "min_core": "3.3.0",
     "gcc": "xtensa-esp32-elf-gcc",
     "cflags": [
-        "-mfix-esp32-psram-cache-issue",
-        "-mfix-esp32-psram-cache-strategy=memw",
         "-mdisable-hardware-atomics"
     ],
     "linker_script": "sdk/ld/sketch_esp.ld.in",

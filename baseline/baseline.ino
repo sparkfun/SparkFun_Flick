@@ -6,6 +6,7 @@
  * (bsk assembles the target's copy of this folder and sets the board options
  * and include paths; the Arduino IDE alone will not build this sketch.)
  */
+#include <Arduino.h>     // explicit: the ESP-IDF build compiles this as plain C++
 #include "src/bl_main.h"
 
 void setup()

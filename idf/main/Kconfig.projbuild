@@ -1,0 +1,16 @@
+# Arduino-ESP32 libraries that have no ARDUINO_SELECTIVE_* option of their own
+# in the core's Kconfig. Its CMakeLists.txt still checks for one, so with
+# selective compilation on they would be left out without these.
+menu "Baseline"
+
+config ARDUINO_SELECTIVE_ESP_I2S
+    bool "Arduino ESP_I2S library"
+    depends on ARDUINO_SELECTIVE_COMPILATION
+    default y
+
+config ARDUINO_SELECTIVE_USB
+    bool "Arduino USB device library (TinyUSB)"
+    depends on ARDUINO_SELECTIVE_COMPILATION && SOC_USB_OTG_SUPPORTED
+    default y
+
+endmenu

@@ -615,6 +615,200 @@ def newest_esp32_core():
     return best
 
 
+# ---------------------------------------------------------------- Baseline via ESP-IDF
+# Targets with "builder": "idf" build Baseline as an ESP-IDF project (idf/) with
+# Arduino-ESP32 as a component, so Baseline can change the sdkconfig.
+
+def find_idf(version):
+    """(IDF_PATH, IDF_TOOLS_PATH) of an ESP-IDF checkout matching version (e.g. "5.5")."""
+    tools = Path(os.environ.get("IDF_TOOLS_PATH") or
+                 ("C:/Espressif" if os.name == "nt" else Path.home() / ".espressif"))
+    candidates = []
+    if os.environ.get("BSK_IDF_PATH"):
+        candidates.append(Path(os.environ["BSK_IDF_PATH"]))
+    if os.environ.get("IDF_PATH"):
+        candidates.append(Path(os.environ["IDF_PATH"]))
+    for root in (tools / "frameworks", Path.home() / "esp"):
+        candidates += sorted(root.glob(f"esp-idf-v{version}*"), reverse=True)
+    for c in candidates:
+        ver = c / "tools" / "cmake" / "version.cmake"
+        if ver.exists():
+            v = dict(re.findall(r"set\(IDF_VERSION_(MAJOR|MINOR|PATCH) (\d+)\)", ver.read_text()))
+            if f"{v.get('MAJOR')}.{v.get('MINOR')}" == version:
+                return c, tools
+    sys.exit(f"error: ESP-IDF v{version} not found. Install it (for example in "
+             f"{tools / 'frameworks'}) or set BSK_IDF_PATH.")
+
+
+def idf_env(idf_path, tools_path):
+    """The environment `export.ps1/.sh` would set up, from idf_tools.py export."""
+    env = dict(os.environ, IDF_PATH=str(idf_path), IDF_TOOLS_PATH=str(tools_path))
+    env.pop("MSYSTEM", None)   # IDF refuses to run under MSYS/Git Bash, but works fine from it with this unset
+    version = ".".join(re.findall(r"set\(IDF_VERSION_(?:MAJOR|MINOR) (\d+)\)",
+                                  (idf_path / "tools" / "cmake" / "version.cmake").read_text()))
+    venvs = sorted(Path(tools_path, "python_env").glob(f"idf{version}_py*_env"))
+    if not venvs:
+        sys.exit(f"error: no Python environment for ESP-IDF {version} in {tools_path}\\python_env. "
+                 f"Run {idf_path / 'install.bat'}.")
+    env["IDF_PYTHON_ENV_PATH"] = str(venvs[-1])
+    py = venvs[-1] / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    out = subprocess.run([str(py), str(idf_path / "tools" / "idf_tools.py"), "export", "--format", "key-value"],
+                         env=env, capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit("error: idf_tools.py export failed:\n" + out.stderr)
+    for line in out.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            env[k] = v.replace("%PATH%", env.get("PATH", "")).replace("$PATH", env.get("PATH", ""))
+    return env, py
+
+
+def sync_tree(src, dst, skip=()):
+    """Copy src to dst, only files whose size or time changed; remove extras."""
+    wanted = {}
+    for f in src.rglob("*"):
+        rel = f.relative_to(src)
+        if f.is_file() and not any(part in skip for part in rel.parts):
+            wanted[rel] = f
+    if dst.exists():
+        for f in list(dst.rglob("*")):
+            if f.is_file() and f.relative_to(dst) not in wanted:
+                f.unlink()
+    for rel, f in wanted.items():
+        out = dst / rel
+        st = f.stat()
+        if not out.exists() or out.stat().st_mtime != st.st_mtime or out.stat().st_size != st.st_size:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f, out)
+
+
+def stage_idf(target, core_dir, libs_dir):
+    """Assemble the IDF project for a target (layout: idf/CMakeLists.txt)."""
+    proj = BUILD_ROOT / target["name"] / "idf"
+    idf_src = ROOT / "idf"
+    proj.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(idf_src / "CMakeLists.txt", proj / "CMakeLists.txt")
+
+    # main/: the same files the Arduino build stages, plus idf/main/.
+    main = proj / "main"
+    before = sorted(main.rglob("*")) if main.exists() else []
+    sync_tree(stage_baseline(target), main)
+    (main / "baseline.ino").replace(main / "baseline_main.cpp")
+    for f in (idf_src / "main").iterdir():
+        shutil.copy2(f, main / f.name)
+    if sorted(main.rglob("*")) != before:
+        (main / "CMakeLists.txt").touch()     # new or removed sources: make CMake glob again
+
+    # components/arduino: the installed core (no examples), with a trimmed manifest.
+    arduino = proj / "components" / "arduino"
+    for part in ("cores", "libraries", "variants"):
+        sync_tree(core_dir / part, arduino / part, skip={"examples"})
+    for f in ("CMakeLists.txt", "Kconfig.projbuild"):
+        shutil.copy2(core_dir / f, arduino / f)
+    shutil.copy2(idf_src / "arduino_component.yml", arduino / "idf_component.yml")
+
+    # sdkconfig: Arduino's, then ours. A stale sdkconfig would win over changed
+    # defaults, so start over whenever they change.
+    base = (libs_dir / "sdkconfig").read_text()
+    ours = (idf_src / "sdkconfig.defaults").read_text()
+    tdef = target["dir"] / "idf" / "sdkconfig.defaults"
+    if tdef.exists():
+        ours += "\n" + tdef.read_text()
+    for name, text in (("sdkconfig.defaults.arduino", base), ("sdkconfig.defaults", ours)):
+        f = proj / name
+        if not f.exists() or f.read_text() != text:
+            f.write_text(text)
+            for stale in (proj / "sdkconfig", proj / "build" / "CMakeCache.txt"):
+                if stale.exists():
+                    stale.unlink()
+    return proj
+
+
+def build_baseline_idf(target, core):
+    core_dir = core[1] / "packages" / "esp32" / "hardware" / "esp32" / ".".join(map(str, core[0]))
+    libs_dir = core[1] / "packages" / "esp32" / "tools" / f"{target['idf_target']}-libs" / ".".join(map(str, core[0]))
+    idf_path, tools_path = find_idf(target["idf_version"])
+    env, py = idf_env(idf_path, tools_path)
+    print(f"using ESP-IDF {idf_path.name} ({idf_path}) with Arduino-ESP32 {'.'.join(map(str, core[0]))} as a component")
+    proj = stage_idf(target, core_dir, libs_dir)
+    inc = ";".join(str(p).replace("\\", "/") for p in (SDK / "include", target["dir"] / "sdk"))
+    idf_py = [str(py), str(idf_path / "tools" / "idf.py"), "-C", str(proj), "-B", str(proj / "build")]
+    if not (proj / "sdkconfig").exists():
+        shutil.rmtree(proj / "build", ignore_errors=True)   # starting over: set-target won't clean a half-made build
+        run(idf_py + [f"-DIDF_TARGET={target['idf_target']}", f"-DBSK_INCLUDE_DIRS={inc}", "set-target",
+                      target["idf_target"]], env=env)
+    run(idf_py + [f"-DBSK_INCLUDE_DIRS={inc}", "build"], env=env)
+
+    # One blob at 0x0: bootloader + partition table + Baseline.
+    b = proj / "build"
+    args = json.loads((b / "flasher_args.json").read_text())
+    out = DIST / target["name"] / f"baseline-{target['name']}.bin"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    parts = []
+    for off, f in sorted(args["flash_files"].items(), key=lambda kv: int(kv[0], 16)):
+        parts += [off, str(b / f)]
+    run([str(py), "-m", "esptool", "--chip", target["idf_target"], "merge_bin", "-o", str(out)] + parts, env=env)
+    print(f"Baseline blob: {out.relative_to(ROOT)} ({out.stat().st_size:,} bytes; flash at 0x0)")
+    return proj, env, py, args
+
+
+def partitions_for_flash(csv_text, flash_size):
+    """The partition table with its last two partitions (userfs, coredump) moved
+    so they end at flash_size: boards with less flash than the table was laid
+    out for get a smaller LittleFS partition. Everything before them is unchanged."""
+    rows = []
+    for line in csv_text.splitlines():
+        cells = [c.strip() for c in line.split(",")]
+        rows.append(cells if line.strip() and not line.lstrip().startswith("#") else line)
+    entries = [r for r in rows if isinstance(r, list)]
+    fs, core = entries[-2], entries[-1]
+    if (fs[0], core[0]) != ("userfs", "coredump"):
+        sys.exit("error: partitions.csv must end with userfs, coredump")
+    core_size = int(core[4], 0)
+    core_off = flash_size - core_size
+    fs_off = int(fs[3], 0)
+    if core_off - fs_off < 0x10000:
+        sys.exit(f"error: {flash_size // 0x100000} MB of flash is too small for this target's partition table")
+    fs[4], core[3] = hex(core_off - fs_off), hex(core_off)
+    return "\n".join(", ".join(r) if isinstance(r, list) else r for r in rows) + "\n"
+
+
+# esptool commands are spelled the v4 way (merge_bin, write_flash): IDF 5.5
+# ships esptool v4, and v5 still accepts those names.
+def flash_baseline_idf(target, proj, env, py, args, port):
+    """Flash bootloader, partition table and Baseline; the partition table is
+    fitted to the flash the board actually has."""
+    esptool = [str(py), "-m", "esptool", "--chip", target["idf_target"], "-p", port, "-b", "921600"]
+    r = subprocess.run(esptool + ["flash_id"], env=env, capture_output=True, text=True)
+    m = re.search(r"Detected flash size:\s*(\d+)MB", r.stdout)
+    if not m:
+        sys.exit("error: could not read the flash size:\n" + r.stdout + r.stderr)
+    flash_mb = int(m.group(1))
+    b = proj / "build"
+    files = dict(args["flash_files"])
+    pt_off = args["partition-table"]["offset"]
+    built_mb = int(args["flash_settings"]["flash_size"].rstrip("MB"))
+    csv = (proj / "main" / "partitions.csv").read_text()
+    if flash_mb != built_mb:
+        csv = partitions_for_flash(csv, flash_mb * 0x100000)
+        fitted = b / f"partitions-{flash_mb}MB.csv"
+        fitted.write_text(csv)
+        run([str(py), str(Path(env["IDF_PATH"]) / "components" / "partition_table" / "gen_esp32part.py"),
+             "--flash-size", f"{flash_mb}MB", str(fitted), str(b / f"partitions-{flash_mb}MB.bin")], env=env)
+        files[pt_off] = f"partitions-{flash_mb}MB.bin"
+        print(f"board has {flash_mb} MB of flash: userfs and coredump moved to fit")
+    # Erase the coredump partition: a dump left by the previous Baseline (or
+    # whatever the flash held there before) cannot be decoded against this one.
+    for line in csv.splitlines():
+        cells = [c.strip() for c in line.split(",")]
+        if cells[0] == "coredump":
+            run(esptool + ["erase_region", cells[3], cells[4]], env=env)
+    cmd = esptool + ["write_flash", "--flash_size", f"{flash_mb}MB"]
+    for off, f in sorted(files.items(), key=lambda kv: int(kv[0], 16)):
+        cmd += [off, str(b / f)]
+    run(cmd, env=env)
+
+
 def leave_usb_device_mode(port, fixed_port):
     """In USB device mode (S3) the USB port is a TinyUSB serial port that esptool
     cannot reset into the bootloader. Ask Baseline to switch it off first.
@@ -646,6 +840,11 @@ def cmd_baseline(args):
         sys.exit(f"error: Baseline needs Arduino-ESP32 core >= {target['min_core']} (found {found}). "
                  "Install it with the Arduino IDE Boards Manager.")
     print(f"target {target['name']}: {target['description']}")
+    if target.get("builder") == "idf":
+        proj, env, py, fargs = build_baseline_idf(target, core)
+        if args.action == "flash":
+            flash_baseline_idf(target, proj, env, py, fargs, leave_usb_device_mode(find_port(args.port), args.port))
+        return
     print(f"using Arduino-ESP32 {'.'.join(map(str, core[0]))} from {core[1]}")
     os.environ["ARDUINO_DIRECTORIES_DATA"] = str(core[1])
     sketch = stage_baseline(target)
