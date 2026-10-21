@@ -1,6 +1,6 @@
 {
     "chip": "esp32c6",
-    "description": "SparkFun Thing Plus - ESP32-C6: ESP32-C6, native USB (flash size to confirm) (not yet run on hardware)",
-    "flash_size": "4MB",
-    "status": "untested"
+    "description": "SparkFun Thing Plus - ESP32-C6: ESP32-C6, 16 MB flash, native USB",
+    "flash_size": "16MB",
+    "status": "bring-up"
 }

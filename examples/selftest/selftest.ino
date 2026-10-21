@@ -1,7 +1,7 @@
 // selftest.ino - bring-up checks for a new board or Baseline build.
 // Upload it, then read the console: one PASS/FAIL line per check and a
 // RESULT line. Needs WiFi networks and BLE devices nearby for the last two.
-// Boards without PSRAM fail the four PSRAM checks; that is expected.
+// Boards without PSRAM skip the PSRAM checks (they check ps_malloc returns NULL).
 #include <Preferences.h>
 #include <FS.h>
 #include <LittleFS.h>
@@ -33,32 +33,37 @@ void setup()
     delay(300);
     Serial.println("\n--- selftest ---");
 
-    // PSRAM
+    // PSRAM (skipped on boards without it)
     uint32_t ps = ESP.getPsramSize();
     Serial.printf("psram size %u, free %u\n", (unsigned)ps, (unsigned)ESP.getFreePsram());
-    CHECK("psramFound()", psramFound());
-    CHECK("PSRAM is 2 MB or more", ps >= 2 * 1024 * 1024 - 65536);
-    uint8_t *big = (uint8_t *)ps_malloc(200000);
-    CHECK("ps_malloc(200000) lands in PSRAM", big && in_psram(big));
-    if (big) {
-        for (uint32_t i = 0; i < 200000; i++) big[i] = (uint8_t)(i * 7 + 3);
-        bool same = true;
-        for (uint32_t i = 0; i < 200000; i++) same &= big[i] == (uint8_t)(i * 7 + 3);
-        CHECK("200 KB PSRAM write/read pattern", same);
-        free(big);
-    }
     void *m10k = malloc(10000), *m100 = malloc(100);
     Serial.printf("malloc(10000)=%p malloc(100)=%p\n", m10k, m100);
-    CHECK("malloc(10000) goes to PSRAM", in_psram(m10k));
+    CHECK("malloc(10000) and malloc(100)", m10k && m100);
     CHECK("malloc(100) stays internal", m100 && !in_psram(m100));
+    if (!psramFound()) {
+        CHECK("no PSRAM: ps_malloc returns NULL", ps_malloc(1000) == nullptr);
+        Serial.println("SKIP  PSRAM checks (this board has no PSRAM)");
+    } else {
+        CHECK("PSRAM is 2 MB or more", ps >= 2 * 1024 * 1024 - 65536);
+        CHECK("malloc(10000) goes to PSRAM", in_psram(m10k));
+        uint8_t *big = (uint8_t *)ps_malloc(200000);
+        CHECK("ps_malloc(200000) lands in PSRAM", big && in_psram(big));
+        if (big) {
+            for (uint32_t i = 0; i < 200000; i++) big[i] = (uint8_t)(i * 7 + 3);
+            bool same = true;
+            for (uint32_t i = 0; i < 200000; i++) same &= big[i] == (uint8_t)(i * 7 + 3);
+            CHECK("200 KB PSRAM write/read pattern", same);
+            free(big);
+        }
+        void *pc = ps_calloc(1000, 4);
+        bool zero = pc != nullptr;
+        for (int i = 0; pc && i < 4000; i++) zero &= ((uint8_t *)pc)[i] == 0;
+        CHECK("ps_calloc zeroed in PSRAM", zero && in_psram(pc));
+        pc = ps_realloc(pc, 50000);
+        CHECK("ps_realloc", pc && in_psram(pc));
+        free(pc);
+    }
     free(m10k); free(m100);
-    void *pc = ps_calloc(1000, 4);
-    bool zero = pc != nullptr;
-    for (int i = 0; pc && i < 4000; i++) zero &= ((uint8_t *)pc)[i] == 0;
-    CHECK("ps_calloc zeroed in PSRAM", zero && in_psram(pc));
-    pc = ps_realloc(pc, 50000);
-    CHECK("ps_realloc", pc && in_psram(pc));
-    free(pc);
 
     // Strings / numbers
     CHECK("String(12345)", String(12345) == "12345");
