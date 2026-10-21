@@ -67,13 +67,33 @@ static USBHIDGamepad *s_pad;
 static USBHIDConsumerControl *s_media;
 static USBMIDI *s_midi;
 
+#if SOC_USB_SERIAL_JTAG_SUPPORTED
+#include "soc/rtc_cntl_reg.h"
+/* Give the USB pins back to USB-Serial-JTAG. TinyUSB routes them to the OTG
+ * controller through an RTC register, which esp_restart() (and a crash) does
+ * not reset; without this, a board that leaves USB device mode by rebooting
+ * shows up on USB as nothing at all until it is power-cycled. */
+static void usb_pins_to_serial_jtag(void)
+{
+    const uint32_t otg_bits = RTC_CNTL_SW_HW_USB_PHY_SEL | RTC_CNTL_SW_USB_PHY_SEL | RTC_CNTL_USB_PAD_ENABLE;
+    if (REG_READ(RTC_CNTL_USB_CONF_REG) & otg_bits) {
+        CLEAR_PERI_REG_MASK(RTC_CNTL_USB_CONF_REG, otg_bits);
+        BLOG_I("USB pins handed back to the USB serial port");
+    }
+}
+#else
+static void usb_pins_to_serial_jtag(void) {}
+#endif
+
 extern "C" void bl_usb_boot(int safe_mode)
 {
     uint32_t mask = load_mask();
     if (!mask) {
+        usb_pins_to_serial_jtag();
         return;
     }
     if (safe_mode) {
+        usb_pins_to_serial_jtag();
         BLOG_W("safe mode: USB devices off (plain USB serial port)");
         return;
     }

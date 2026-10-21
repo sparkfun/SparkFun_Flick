@@ -11,4 +11,9 @@
 cmake_minimum_required(VERSION 3.16)
 set(SDKCONFIG_DEFAULTS "sdkconfig.defaults.arduino;sdkconfig.defaults")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+# Compile definitions every component sees, like the board options of an
+# Arduino-IDE build (target.json "idf_defines"; bsk passes -DBSK_DEFINES=...).
+if(BSK_DEFINES)
+    idf_build_set_property(COMPILE_DEFINITIONS "${BSK_DEFINES}" APPEND)
+endif()
 project(baseline)

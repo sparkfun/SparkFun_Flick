@@ -1,0 +1,10 @@
+# ESP32-S3 Thing Plus settings, on top of idf/sdkconfig.defaults. Together
+# they match the Arduino IDE board options this target used before
+# (sparkfun_esp32s3_thing_plus: USBMode=default, CDCOnBoot=cdc, PSRAM=enabled);
+# the USB options are compile definitions (idf_defines in target.json).
+
+# Board pins (variants/sparkfun_esp32s3_thing_plus/pins_arduino.h).
+CONFIG_ARDUINO_VARIANT="sparkfun_esp32s3_thing_plus"
+
+# ESP32-S3-MINI-1: 4 MB flash (Arduino's base sdkconfig says 16 MB).
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
