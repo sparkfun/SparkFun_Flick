@@ -1,0 +1,34 @@
+{
+    "description": "ESP32-C6 (RISC-V, single core)",
+    "baseline_source": "baseline",
+    "builder": "idf",
+    "idf_version": "5.5",
+    "idf_target": "esp32c6",
+    "idf_defines": [
+        "ARDUINO_USB_MODE=1",
+        "ARDUINO_USB_CDC_ON_BOOT=1"
+    ],
+    "idf_defines_note": "Baseline's console is the chip's native USB-Serial-JTAG port (Arduino HWCDC Serial).",
+    "min_core": "3.3.0",
+    "gcc": "riscv32-esp-elf-gcc",
+    "cflags": [
+        "-march=rv32imac_zicsr_zifencei",
+        "-mabi=ilp32",
+        "-mno-relax",
+        "-msmall-data-limit=0"
+    ],
+    "cflags_note": "-mno-relax and no small data: the gp register belongs to Baseline, so sketch code must never address memory relative to it.",
+    "ldflags": [
+        "-march=rv32imac_zicsr_zifencei",
+        "-mabi=ilp32",
+        "-Wl,--no-relax",
+        "-Wl,--no-warn-rwx-segments"
+    ],
+    "ldflags_note": "Code and rodata share one address window on this chip, so the sketch's one flash segment is RWX by design.",
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": [],
+    "usb_vids": [
+        "303A"
+    ],
+    "status": "untested"
+}

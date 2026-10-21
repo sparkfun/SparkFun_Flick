@@ -1,0 +1,5 @@
+# thing_plus_esp32c6, on top of the chip's sdkconfig.defaults.
+# Arduino's pin variant for this board (pins_arduino.h). Baseline itself takes its
+# default pins from sdk/bl_board.h; this keeps the Arduino core's own constants
+# (LED_BUILTIN, RGB_BUILTIN, ...) consistent with them.
+CONFIG_ARDUINO_VARIANT="sparkfun_esp32c6_thing_plus"

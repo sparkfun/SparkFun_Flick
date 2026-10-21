@@ -102,8 +102,8 @@ static void restart_soon(void)
 static void cmd_info(void)
 {
     const char *safe = bl_state_safe_mode_reason();
-    OK("baseline=%s abi=%d.%d chip=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u",
-       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
+    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u",
+       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
        (unsigned)bl_impl_usb_devices());
 }

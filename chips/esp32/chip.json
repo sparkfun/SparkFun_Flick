@@ -1,0 +1,25 @@
+{
+    "description": "Classic ESP32, chip revision 3.0 or later",
+    "baseline_source": "baseline",
+    "builder": "idf",
+    "idf_version": "5.5",
+    "idf_target": "esp32",
+    "min_core": "3.3.0",
+    "gcc": "xtensa-esp32-elf-gcc",
+    "cflags": [
+        "-mlongcalls",
+        "-mdisable-hardware-atomics"
+    ],
+    "ldflags": [
+        "-mlongcalls"
+    ],
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": [
+        "sketch_ctype.c"
+    ],
+    "usb_vids": [
+        "1A86",
+        "10C4",
+        "0403"
+    ]
+}

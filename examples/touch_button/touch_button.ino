@@ -1,10 +1,12 @@
 // touch_button.ino - use a bare wire or pad as a touch button.
 // Connect a jumper wire to the touch pin below and touch its end.
 // Classic ESP32: readings DROP when touched. ESP32-S3: readings RISE.
-#ifdef BL_TOUCH_T0
+#if defined(BL_TOUCH_T0)
 const int TOUCH_PIN = T6;       // Thing Plus C: GPIO14
-#else
+#elif defined(BL_TOUCH_T1)
 const int TOUCH_PIN = T5;       // S3 Thing Plus: GPIO5
+#else
+#error "This chip has no capacitive touch sensor (ESP32-C3, C5 and C6 do not)."
 #endif
 
 uint32_t untouched;

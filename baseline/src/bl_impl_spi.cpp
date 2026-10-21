@@ -1,4 +1,4 @@
-/* API table: SPI, on Arduino's SPI library (default pins from the board variant). */
+/* API table: SPI, on Arduino's SPI library (default pins from the target's bl_board.h). */
 #include <Arduino.h>
 #include <SPI.h>
 #include "gen/bl_impl.h"
@@ -16,7 +16,8 @@ extern "C" int bl_impl_spi_begin(int sck, int miso, int mosi, int ss)
     if (!pin_ok(sck) || !pin_ok(miso) || !pin_ok(mosi) || !pin_ok(ss)) {
         return BL_ERR_ARG;
     }
-    SPI.begin(sck < 0 ? SCK : sck, miso < 0 ? MISO : miso, mosi < 0 ? MOSI : mosi, ss < 0 ? SS : ss);
+    SPI.begin(sck < 0 ? BL_BOARD_SCK : sck, miso < 0 ? BL_BOARD_MISO : miso,
+              mosi < 0 ? BL_BOARD_MOSI : mosi, ss < 0 ? BL_BOARD_SS : ss);
     s_started = true;
     return BL_OK;
 }

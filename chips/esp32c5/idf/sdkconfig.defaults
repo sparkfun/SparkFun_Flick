@@ -1,0 +1,4 @@
+# ESP32-C5 settings, on top of idf/sdkconfig.defaults (each product target
+# can add its own in targets/<target>/idf/sdkconfig.defaults). Arduino's base
+# sdkconfig is used as is; the console's USB options are compile definitions
+# (idf_defines in chip.json), and the flash size comes from the target.

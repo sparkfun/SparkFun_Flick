@@ -1,12 +1,13 @@
 {
     "configurations": [
         {
-            "name": "Baseline sketch (ESP32-S3)",
+            "name": "Baseline sketch (Thing Plus ESP32-S3)",
             "compilerPath": "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32s3-elf-gcc.exe",
             "includePath": [
                 "${workspaceFolder}/sdk/include",
                 "${workspaceFolder}/sdk/include/compat",
-                "${workspaceFolder}/targets/esp32s3/sdk"
+                "${workspaceFolder}/targets/thing_plus_esp32s3/sdk",
+                "${workspaceFolder}/chips/esp32s3/sdk"
             ],
             "forcedInclude": [
                 "${workspaceFolder}/sdk/include/baseline.h"
@@ -16,12 +17,29 @@
             "intelliSenseMode": "gcc-x86"
         },
         {
-            "name": "Baseline sketch (ESP32)",
+            "name": "Baseline sketch (Thing Plus ESP32)",
             "compilerPath": "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-gcc.exe",
             "includePath": [
                 "${workspaceFolder}/sdk/include",
                 "${workspaceFolder}/sdk/include/compat",
-                "${workspaceFolder}/targets/esp32/sdk"
+                "${workspaceFolder}/targets/thing_plus_esp32/sdk",
+                "${workspaceFolder}/chips/esp32/sdk"
+            ],
+            "forcedInclude": [
+                "${workspaceFolder}/sdk/include/baseline.h"
+            ],
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "gcc-x86"
+        },
+        {
+            "name": "Baseline sketch (RTK Postcard)",
+            "compilerPath": "${env:LOCALAPPDATA}/Arduino15/packages/esp32/tools/esp-x32/2601/bin/xtensa-esp32-elf-gcc.exe",
+            "includePath": [
+                "${workspaceFolder}/sdk/include",
+                "${workspaceFolder}/sdk/include/compat",
+                "${workspaceFolder}/targets/rtk_postcard/sdk",
+                "${workspaceFolder}/chips/esp32/sdk"
             ],
             "forcedInclude": [
                 "${workspaceFolder}/sdk/include/baseline.h"

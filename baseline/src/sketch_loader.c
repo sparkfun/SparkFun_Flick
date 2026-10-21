@@ -22,7 +22,11 @@
 #define SKETCH_SUBTYPE      ((esp_partition_subtype_t)0x40)
 #define MMU_PAGE            0x10000
 #define SKETCH_PRIORITY     1
-#define SKETCH_CORE         1
+#if CONFIG_FREERTOS_UNICORE
+#define SKETCH_CORE         0       /* single-core chips (ESP32-C3, C5, C6) */
+#else
+#define SKETCH_CORE         1       /* WiFi/BT and the loader run on core 0 */
+#endif
 #define SKETCH_MAX_STACK    65536
 
 _Static_assert(sizeof(bl_sketch_header_t) == BL_SKETCH_HEADER_SIZE, "header size");

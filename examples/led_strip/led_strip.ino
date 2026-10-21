@@ -3,6 +3,9 @@
 // a strip, set DATA_PIN to the strip's data pin and NUM_LEDS to its length.
 #include <FastLED.h>
 
+#ifndef RGB_BUILTIN
+#error "This board has no built-in RGB LED. Set DATA_PIN below to your strip's data pin."
+#endif
 #define DATA_PIN RGB_BUILTIN
 #define NUM_LEDS 1
 

@@ -1,0 +1,4 @@
+# SparkFun Thing Plus - ESP32-S3, on top of chips/esp32s3/idf/sdkconfig.defaults.
+# Arduino's pin variant for this board (pins_arduino.h), as the Arduino IDE
+# board option sparkfun_esp32s3_thing_plus selected.
+CONFIG_ARDUINO_VARIANT="sparkfun_esp32s3_thing_plus"

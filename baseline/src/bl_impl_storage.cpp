@@ -415,6 +415,9 @@ extern "C" int bl_impl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if
         if (cs < 0 || !bl_pin_usable(cs)) {
             return BL_ERR_ARG;
         }
+        // SD.begin() starts SPI on the Arduino variant's pins unless it is
+        // already running; start it on the board's (a no-op if the sketch did).
+        SPI.begin(BL_BOARD_SCK, BL_BOARD_MISO, BL_BOARD_MOSI, -1);
         ok = SD.begin((uint8_t)cs, SPI, freq_hz ? freq_hz : 4000000, "/sd", MAX_FILES, format_if_empty != 0);
     } else {
         return BL_ERR_ARG;

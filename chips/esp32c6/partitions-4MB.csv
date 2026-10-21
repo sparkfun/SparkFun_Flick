@@ -1,0 +1,12 @@
+# Baseline Sketcher partition table - ESP32-C6, 4 MB flash.
+# bsk stages the table matching the target's flash_size as main/partitions.csv.
+# The bootloader is at 0x0 and the app at 0x10000. Sketch slots must be 64 KB
+# aligned (flash MMU page).
+# Name,       Type, SubType,  Offset,    Size
+nvs,          data, nvs,      0x9000,    0x5000
+otadata,      data, ota,      0xE000,    0x2000
+baseline,     app,  factory,  0x10000,   0x230000
+sketch_a,     data, 0x40,     0x240000,  0x40000
+sketch_b,     data, 0x40,     0x280000,  0x40000
+userfs,       data, spiffs,   0x2C0000,  0x130000
+coredump,     data, coredump, 0x3F0000,  0x10000

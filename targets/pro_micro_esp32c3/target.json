@@ -1,0 +1,6 @@
+{
+    "chip": "esp32c3",
+    "description": "SparkFun Pro Micro - ESP32-C3: ESP32-C3, 4 MB flash, native USB (not yet run on hardware)",
+    "flash_size": "4MB",
+    "status": "untested"
+}

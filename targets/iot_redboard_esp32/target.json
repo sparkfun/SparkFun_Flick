@@ -1,0 +1,6 @@
+{
+    "chip": "esp32",
+    "description": "SparkFun IoT RedBoard - ESP32: Arduino R3 form factor, 4 MB flash, CH340 (not yet run on hardware)",
+    "flash_size": "4MB",
+    "status": "untested"
+}

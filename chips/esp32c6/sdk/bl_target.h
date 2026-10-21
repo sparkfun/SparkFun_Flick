@@ -1,0 +1,35 @@
+/*
+ * bl_target.h - ESP32-C6 chip, shared by every ESP32-C6 product target.
+ *
+ * Included by sdk/include/sketch_abi.h, so it is seen by Baseline, the sketch
+ * SDK, and the sketch linker script (via the C preprocessor). #defines only.
+ * The addresses are part of the ABI for this chip. Board facts (name, pins)
+ * are in the product target's bl_board.h, included at the end.
+ * NOT YET RUN ON HARDWARE.
+ */
+#ifndef BL_TARGET_H
+#define BL_TARGET_H
+
+#define BL_TARGET_CHIP_NAME     "ESP32-C6"
+#define BL_TARGET_CHIP_ID       13          /* == esp_chip_id_t ESP_CHIP_ID_ESP32C6 */
+
+/* ---- Flash window ------------------------------------------------------
+ * The C6 maps flash for instructions and data at the same addresses
+ * (SOC_MMU_DI_VADDR_SHARED): 16 MB from 0x42000000, 256 entries of 64 KB. The
+ * sketch window is the top 512 KB, so IBUS_BASE == DBUS_BASE. */
+#define BL_SKETCH_IBUS_BASE     0x42F80000
+#define BL_SKETCH_DBUS_BASE     0x42F80000
+#define BL_SKETCH_MAX_SIZE      0x80000     /* 512 KB */
+
+/* ---- RAM window --------------------------------------------------------
+ * Sketch .data + .bss, reserved out of the heap by Baseline. Just below the
+ * end of the static-data region (SRAM_SEG_END 0x4086E610 in IDF memory.ld).
+ * CHECK _heap_start after each Baseline build. */
+#define BL_SKETCH_RAM_BASE      0x40866000
+#define BL_SKETCH_RAM_SIZE      0x8000      /* 32 KB */
+
+#define BL_TARGET_CHIP          "esp32c6"     /* chips/<chip> */
+
+#include "bl_board.h"                 /* targets/<target>/sdk/bl_board.h */
+
+#endif /* BL_TARGET_H */

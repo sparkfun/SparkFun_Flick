@@ -43,8 +43,8 @@ extern "C" int bl_impl_rgb_write(int pin, uint8_t red, uint8_t green, uint8_t bl
 extern "C" int bl_impl_i2c_begin(int sda, int scl, uint32_t freq)
 {
     if (sda < 0 || scl < 0) {
-        sda = SDA;      // Qwiic connector
-        scl = SCL;
+        sda = BL_BOARD_SDA;     // the target's bl_board.h: Qwiic on SparkFun boards
+        scl = BL_BOARD_SCL;
     } else if (!bl_pin_usable(sda) || !bl_pin_usable(scl)) {
         return BL_ERR_ARG;
     }

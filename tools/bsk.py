@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """bsk - Baseline Sketcher command-line tool.
 
-  bsk targets                       list the targets (chips/boards) in targets/
+  bsk targets                       list the targets (one per product) in targets/
   bsk new <dir>                     create a sketch project
   bsk build [dir] [-t TARGET]       compile + link + package -> <dir>/build/<target>/<name>.bsk
   bsk upload [dir] [-m]             ask the board which target it is, build for it, upload, run
   bsk upload [dir] --host NAME      same, over WiFi (the running sketch called ArduinoOTA.begin())
   bsk monitor                       serial console (Ctrl+C to quit)
-  bsk info                          ask Baseline for its version / ABI / chip / active slot
+  bsk info                          ask Baseline for its version / ABI / chip / target / active slot
   bsk safe                          reboot Baseline into safe mode (sketch not started)
   bsk baseline build -t TARGET      compile a Baseline blob -> dist/<target>/baseline-<target>.bin
   bsk baseline flash -t TARGET      compile and flash Baseline (rarely needed)
 
 The build target is taken from -t, else `target = ...` in the sketch's
-sketch.cfg, else esp32s3. `upload` always builds for the chip on the board.
+sketch.cfg, else thing_plus_esp32s3. `upload` always builds for the chip on the board.
 
 Commands that talk to the board find it by its USB ID (any target's
 usb_vids in target.json); pass -p PORT to choose one yourself.
@@ -41,8 +41,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SDK = ROOT / "sdk"
 TARGETS = ROOT / "targets"
+CHIPS = ROOT / "chips"
 DIST = ROOT / "dist"
-DEFAULT_TARGET = "esp32s3"
+DEFAULT_TARGET = "thing_plus_esp32s3"
+# Target names Baselines built before the per-product targets report as chip=.
+LEGACY_TARGETS = {"esp32": "thing_plus_esp32", "esp32s3": "thing_plus_esp32s3"}
 
 # Must match sdk/include/sketch_abi.h (the target addresses come from bl_target.h)
 HEADER_SIZE = 0x100
@@ -52,7 +55,7 @@ HDR_OFF_BUILD_ID = 96
 HDR_OFF_SHA256 = HEADER_SIZE - 32
 
 COMMON_FLAGS = [
-    "-mlongcalls", "-Os", "-g3",
+    "-Os", "-g3",
     "-ffunction-sections", "-fdata-sections", "-fno-common",
     "-fno-asynchronous-unwind-tables", "-fno-exceptions",
     "-fstrict-volatile-bitfields",
@@ -82,14 +85,26 @@ def header_defines(path):
 
 
 def load_target(name):
-    """targets/<name>/target.json plus the addresses from its bl_target.h."""
+    """A product target: chips/<chip>/chip.json overlaid with targets/<name>/target.json,
+    plus the sketch addresses from the chip's bl_target.h.
+
+    dirs lists the folders whose files make up the target, chip first: later
+    ones win when both have a file (Baseline sources), and sdk_dirs puts the
+    board's first on the include path."""
+    name = LEGACY_TARGETS.get(name, name)
     d = TARGETS / name
     if not (d / "target.json").exists():
         sys.exit(f"error: unknown target '{name}'. Targets: {', '.join(target_names())}")
-    t = json.loads((d / "target.json").read_text())
+    board = json.loads((d / "target.json").read_text())
+    chip_dir = CHIPS / board["chip"]
+    t = json.loads((chip_dir / "chip.json").read_text())
+    t.update(board)
     t["name"] = name
     t["dir"] = d
-    defs = header_defines(d / "sdk" / "bl_target.h")
+    t["chip_dir"] = chip_dir
+    t["dirs"] = [chip_dir, d]
+    t["sdk_dirs"] = [d / "sdk", chip_dir / "sdk"]
+    defs = header_defines(chip_dir / "sdk" / "bl_target.h")
     t["ibus"], t["dbus"] = defs["BL_SKETCH_IBUS_BASE"], defs["BL_SKETCH_DBUS_BASE"]
     t["max_size"] = defs["BL_SKETCH_MAX_SIZE"]
     return t
@@ -98,7 +113,7 @@ def load_target(name):
 def cmd_targets(args):
     for name in target_names():
         t = load_target(name)
-        print(f"{name:10} {t['description']}")
+        print(f"{name:20} {t['chip']:8} {t['description']}")
 
 
 # ---------------------------------------------------------------- toolchain
@@ -118,7 +133,7 @@ def find_gcc(target):
     roots.append(Path.home() / ".arduino15")
     roots.append(Path.home() / "Library" / "Arduino15")
     for r in roots:
-        hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-x32" / "*" / "bin" / exe)))
+        hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-*32" / "*" / "bin" / exe)))  # esp-x32, esp-rv32
         if hits:
             return hits[-1]
     sys.exit(f"error: {gcc_name} not found. Set BSK_GCC or install ESP-IDF / Arduino-ESP32.")
@@ -203,8 +218,10 @@ def build(proj, target_name=None):
     gcc = find_gcc(target)
     t0 = time.time()
 
-    tsdk = target["dir"] / "sdk"
-    inc = ["-I", str(SDK / "include"), "-I", str(SDK / "include" / "compat"), "-I", str(tsdk), "-I", str(proj)]
+    inc = ["-I", str(SDK / "include"), "-I", str(SDK / "include" / "compat")]
+    for sdk_dir in target["sdk_dirs"]:
+        inc += ["-I", str(sdk_dir)]
+    inc += ["-I", str(proj)]
     defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}"]
 
     def compile_one(src, obj, extra_defs=()):
@@ -226,8 +243,10 @@ def build(proj, target_name=None):
     # every sketch: compile them once per target into sdk/build/<target> and reuse them.
     cache = SDK / "build" / target["name"]
     cache.mkdir(parents=True, exist_ok=True)
-    newest_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"), *tsdk.glob("*"),
-                                                 target["dir"] / "target.json", Path(__file__)])
+    newest_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"),
+                                                 *(f for d in target["sdk_dirs"] for f in d.glob("*")),
+                                                 target["dir"] / "target.json",
+                                                 target["chip_dir"] / "chip.json", Path(__file__)])
     shared = ["sketch_libc.c", "sketch_time.c", *target["sdk_sources"]] + (
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
@@ -244,8 +263,8 @@ def build(proj, target_name=None):
          str(ROOT / target["linker_script"]), "-o", str(ld)])
 
     elf = out / (cfg["name"] + ".elf")
-    run([gcc, "-mlongcalls", "-nostdlib", "-nostartfiles",
-         "-T", str(ld), "-T", str(tsdk / "rom.ld"),
+    run([gcc, *target.get("ldflags", []), "-nostdlib", "-nostartfiles",
+         "-T", str(ld), "-T", str(target["chip_dir"] / "sdk" / "rom.ld"),
          "-Wl,--gc-sections", "-Wl,--no-undefined", "-Wl,-Map," + str(out / (cfg["name"] + ".map")),
          *objs, "-lgcc", "-o", str(elf)])
 
@@ -481,10 +500,14 @@ def cmd_upload(args):
         link = Link(s)
         info = link.request("INFO")
         print(f"Baseline on {port}:", info)
-        chip = info_fields(info).get("chip", DEFAULT_TARGET)   # the board decides the target
-        if args.target and args.target != chip:
-            sys.exit(f"error: the board runs the {chip} Baseline, not {args.target}")
-        image = build(args.dir, chip).read_bytes()
+        # The board decides the target. Baselines from before the per-product
+        # targets report only chip=, which LEGACY_TARGETS maps.
+        fields = info_fields(info)
+        board = fields.get("target") or fields.get("chip") or DEFAULT_TARGET
+        board = LEGACY_TARGETS.get(board, board)
+        if args.target and args.target != board:
+            sys.exit(f"error: the board runs the {board} Baseline, not {args.target}")
+        image = build(args.dir, board).read_bytes()
         digest = hashlib.sha256(image).hexdigest()
         t0 = time.time()
         link.request(f"BEGIN {len(image)} {digest}", timeout=15)   # erases the slot
@@ -560,13 +583,19 @@ def baseline_build_path(target_name):
 
 
 def stage_baseline(target):
-    """Arduino compiles one sketch folder, so assemble one per target: the
-    shared Baseline source plus the target's own files (partitions.csv,
-    bl_port.h, bl_port_mmu.c), target files winning. Copies keep their
-    timestamps, so arduino-cli recompiles only what changed."""
+    """Assemble one Baseline source folder per target: the shared Baseline
+    source, then chips/<chip>/baseline (bl_port.h, bl_port_mmu.c, ...), then
+    targets/<target>/baseline if it exists, later files winning; plus the
+    chip's partition table for the target's flash size as partitions.csv.
+    Copies keep their timestamps, so the build recompiles only what changed."""
     dst = BUILD_ROOT / target["name"] / "baseline"
-    wanted = {}
-    for root in (ROOT / target["baseline_source"], target["dir"] / "baseline"):
+    table = target["chip_dir"] / f"partitions-{target['flash_size']}.csv"
+    if not table.exists():
+        sys.exit(f"error: no partition table for {target['flash_size']} of flash: {table.relative_to(ROOT)}")
+    wanted = {Path("partitions.csv"): table}
+    for root in (ROOT / target["baseline_source"], *(d / "baseline" for d in target["dirs"])):
+        if not root.exists():
+            continue
         for f in root.rglob("*"):
             if f.is_file():
                 wanted[f.relative_to(root)] = f
@@ -739,9 +768,11 @@ def stage_idf(target, core_dir, libs_dir):
     # defaults, so start over whenever they change.
     base = (libs_dir / "sdkconfig").read_text()
     ours = (idf_src / "sdkconfig.defaults").read_text()
-    tdef = target["dir"] / "idf" / "sdkconfig.defaults"
-    if tdef.exists():
-        ours += "\n" + tdef.read_text()
+    for d in target["dirs"]:                    # chip, then product target
+        f = d / "idf" / "sdkconfig.defaults"
+        if f.exists():
+            ours += f"\n# ---- {f.relative_to(ROOT).as_posix()}\n" + f.read_text()
+    ours += f"\n# ---- target.json flash_size\nCONFIG_ESPTOOLPY_FLASHSIZE_{target['flash_size']}=y\n"
     for name, text in (("sdkconfig.defaults.arduino", base), ("sdkconfig.defaults", ours)):
         f = proj / name
         if not f.exists() or f.read_text() != text:
@@ -791,7 +822,7 @@ def build_baseline_idf(target, core):
     env, py = idf_env(idf_path, tools_path)
     print(f"using ESP-IDF {idf_path.name} ({idf_path}) with Arduino-ESP32 {'.'.join(map(str, core[0]))} as a component")
     proj = stage_idf(target, core_dir, libs_dir)
-    inc = ";".join(str(p).replace("\\", "/") for p in (SDK / "include", target["dir"] / "sdk"))
+    inc = ";".join(str(p).replace("\\", "/") for p in (SDK / "include", *target["sdk_dirs"]))
     idf_py = [str(py), str(idf_path / "tools" / "idf.py"), "-C", str(proj), "-B", str(proj / "build"),
               f"-DBSK_DEFINES={';'.join(target.get('idf_defines', []))}"]
     if not (proj / "sdkconfig").exists():
@@ -911,7 +942,7 @@ def cmd_baseline(args):
     sketch = stage_baseline(target)
     build_path = baseline_build_path(target["name"])
     # Quoted: arduino-cli splits the expanded recipe on spaces (e.g. "C:\Users\Jane Doe").
-    inc = f'"-I{SDK / "include"}" "-I{target["dir"] / "sdk"}"'
+    inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"]))
     cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"],
            "--build-path", str(build_path),
            "--build-property", f"compiler.c.extra_flags={inc}",

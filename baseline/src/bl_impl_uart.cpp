@@ -6,12 +6,23 @@
 
 static HardwareSerial *uart_of(int port)
 {
-    return port == 1 ? &Serial1 : port == 2 ? &Serial2 : NULL;
+    if (port == 1) {
+        return &Serial1;
+    }
+#if SOC_UART_NUM > 2    // no Serial2 on the ESP32-C3 (on the C6/C5 it is the low-power UART)
+    if (port == 2) {
+        return &Serial2;
+    }
+#endif
+    return NULL;
 }
 
 extern "C" int bl_impl_uart_begin(int port, uint32_t baud, uint32_t config, int rx, int tx)
 {
     HardwareSerial *u = uart_of(port);
+    if (port == 2 && !u) {
+        return BL_ERR_UNSUPPORTED;
+    }
     if (!u || !baud) {
         return BL_ERR_ARG;
     }

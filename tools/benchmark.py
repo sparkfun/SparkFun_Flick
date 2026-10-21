@@ -27,7 +27,7 @@ OUT = ROOT / "docs" / "BUILD_RESULTS.md"
 # Plain Arduino build for the same board. huge_app so WiFi/BLE sketches fit.
 ARDUINO_FQBN = "esp32:esp32:sparkfun_esp32s3_thing_plus:CDCOnBoot=cdc,PartitionScheme=huge_app"
 RUNS = 3
-TARGET = "esp32s3"      # the board the Arduino comparison is built for
+TARGET = "thing_plus_esp32s3"   # the board the Arduino comparison is built for
 
 
 def timed(cmd, env=None):
