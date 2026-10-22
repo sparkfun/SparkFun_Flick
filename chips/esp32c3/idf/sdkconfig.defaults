@@ -2,3 +2,11 @@
 # can add its own in targets/<target>/idf/sdkconfig.defaults). Arduino's base
 # sdkconfig is used as is; the console's USB options are compile definitions
 # (idf_defines in chip.json), and the flash size comes from the target.
+
+# Internal RAM: the C3 has no PSRAM and its code in IRAM comes out of the same
+# 400 KB SRAM as the heap. With WiFi connected, a BLE scan in a busy room ran
+# the heap out (Arduino's BLE library then aborts). Move code that need not run
+# with the cache disabled from IRAM to flash, as on the classic ESP32.
+CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
+CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH=y
+CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y

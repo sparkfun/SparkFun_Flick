@@ -557,10 +557,20 @@ extern "C" int bl_impl_ble_scan_start(uint32_t seconds, int active, uint16_t int
         return BL_ERR_NO_MEM;
     }
     BLEScan *scan = BLEDevice::getScan();
-    // wantDuplicates = true: otherwise the BLE library keeps its own copy of
-    // every device it hears for the whole scan, which runs the classic ESP32
-    // out of heap in a busy room. Baseline de-duplicates in s_results instead.
-    scan->setAdvertisedDeviceCallbacks(&s_scan_cb, true);
+    // Duplicate reports, by stack (Baseline de-duplicates in s_results either way):
+    //  - Bluedroid (classic ESP32): want them. Otherwise the library keeps its
+    //    own copy of every device it hears for the whole scan, which ran the
+    //    classic ESP32 out of heap in a busy room.
+    //  - NimBLE (S3, C3, C5, C6): do not. With duplicates on, the library
+    //    appends every new report to the device's payload, so each device's
+    //    copy grows by kilobytes during a scan; the C3 ran out of heap and the
+    //    library aborted.
+#if CONFIG_BT_NIMBLE_ENABLED
+    const bool want_duplicates = false;
+#else
+    const bool want_duplicates = true;
+#endif
+    scan->setAdvertisedDeviceCallbacks(&s_scan_cb, want_duplicates);
     scan->setActiveScan(active != 0);
     if (interval_ms) {
         scan->setInterval(interval_ms);
