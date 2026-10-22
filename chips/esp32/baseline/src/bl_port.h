@@ -10,12 +10,16 @@
 #include "driver/gpio.h"
 #include "bl_target.h"     // + the target's bl_board.h
 
-/* Console + sketch upload run on UART0 (the board's USB-serial chip) at 921600
- * baud, 8x faster uploads than 115200. The chip's ROM boot messages stay at
- * 115200; the bootloader is set to match (chips/esp32/idf/sdkconfig.defaults).
- * bsk tries 921600 first and falls back to 115200 for older Baselines. */
+/* Console + sketch upload run on UART0 (the board's USB-serial chip) at 2 Mbaud
+ * (80 MHz APB / 40: exact). The CH340 and CH342 on SparkFun boards handle it; a
+ * board whose USB-serial chip cannot (an old CP2102 tops out at 921600) sets
+ * BL_PORT_CONSOLE_BAUD in its bl_board.h. The chip's ROM boot messages stay at
+ * 115200; the bootloader matches the console (chips/esp32/idf/sdkconfig.defaults).
+ * bsk tries 2000000, 921600, then 115200 (older Baselines). */
 #define BL_PORT_CONSOLE_USB 0
-#define BL_PORT_CONSOLE_BAUD 921600
+#ifndef BL_PORT_CONSOLE_BAUD
+#define BL_PORT_CONSOLE_BAUD 2000000
+#endif
 
 /* Flash and PSRAM pins, from eFuse and the chip package, read once
  * (bl_port_pins.c): bit n set = GPIOn is taken. */

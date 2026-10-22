@@ -608,9 +608,9 @@ def open_port(port, baud):
 
 
 # Baud rates Baseline's console may use on a USB-serial chip, fastest first:
-# 921600 (classic ESP32 Baselines from ABI 1.6) and 115200 (older ones). Native
-# USB ports ignore the baud rate.
-CONSOLE_BAUDS = (921600, 115200)
+# 2000000 (classic ESP32 Baselines now), 921600 (early ABI 1.6 ones) and
+# 115200 (older ones). Native USB ports ignore the baud rate.
+CONSOLE_BAUDS = (2000000, 921600, 115200)
 _baud_cache = {}
 
 
