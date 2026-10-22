@@ -37,11 +37,40 @@
 #define OCT 8
 #define BIN 2
 
-#define F(s) (s)
+/* F("text"): a string kept in flash, as on AVR. On the ESP32 family every
+ * string constant is already in flash; the type exists so that Print, String
+ * and libraries can overload on it. */
+class __FlashStringHelper;
+#define FPSTR(p) (reinterpret_cast<const __FlashStringHelper *>(p))
+#define F(s) FPSTR(PSTR(s))
 
 typedef bool boolean;
 typedef uint8_t byte;
 typedef uint16_t word;
+
+/* Arduino's bit, byte and math helpers. */
+#ifndef PI
+#define PI          3.1415926535897932384626433832795
+#endif
+#define HALF_PI     1.5707963267948966192313216916398
+#define TWO_PI      6.283185307179586476925286766559
+#define DEG_TO_RAD  0.017453292519943295769236907684886
+#define RAD_TO_DEG  57.295779513082320876798154814105
+#define EULER       2.718281828459045235360287471352
+#define radians(deg)            ((deg) * DEG_TO_RAD)
+#define degrees(rad)            ((rad) * RAD_TO_DEG)
+#define sq(x)                   ((x) * (x))
+#define lowByte(w)              ((uint8_t)((w) & 0xff))
+#define highByte(w)             ((uint8_t)((w) >> 8))
+#define bitRead(value, bit)     (((value) >> (bit)) & 0x01)
+#define bitSet(value, bit)      ((value) |= (1UL << (bit)))
+#define bitClear(value, bit)    ((value) &= ~(1UL << (bit)))
+#define bitToggle(value, bit)   ((value) ^= (1UL << (bit)))
+#define bitWrite(value, bit, b) ((b) ? bitSet(value, bit) : bitClear(value, bit))
+#ifndef bit
+#define bit(b)                  (1UL << (b))
+#endif
+static inline uint16_t makeWord(uint8_t h, uint8_t l) { return (uint16_t)((h << 8) | l); }
 
 /* Board pins: from the target's bl_target.h (targets/<target>/sdk/). */
 #include "bl_target.h"
@@ -84,12 +113,24 @@ public:
 /* ---- Print: Arduino's print/println/printf on top of write() ---- */
 class Print {
 public:
-    virtual size_t write(const uint8_t *buf, size_t size) = 0;
-    size_t write(uint8_t c) { return write(&c, 1); }
+    /* Override either one, as in Arduino: libraries usually implement
+     * write(uint8_t), the SDK's own classes the buffer version. */
+    virtual size_t write(uint8_t c) { return write(&c, 1); }
+    virtual size_t write(const uint8_t *buf, size_t size)
+    {
+        size_t n = 0;
+        while (size-- && write(*buf++)) {
+            n++;
+        }
+        return n;
+    }
+    virtual int availableForWrite() { return 0; }
+    virtual void flush() {}
     size_t write(const char *s) { return s ? write((const uint8_t *)s, strlen(s)) : 0; }
     size_t write(const char *buf, size_t size) { return write((const uint8_t *)buf, size); }
 
     size_t print(const char *s) { return write(s); }
+    size_t print(const __FlashStringHelper *s) { return write(reinterpret_cast<const char *>(s)); }
     size_t print(const String &s) { return write(s.c_str(), s.length()); }
     size_t print(const Printable &x) { return x.printTo(*this); }
     size_t print(char c) { return write((uint8_t)c); }
@@ -118,7 +159,17 @@ class Stream : public Print {
 public:
     virtual int available() = 0;
     virtual int read() = 0;
+    virtual int peek() { return -1; }
     void setTimeout(unsigned long ms) { timeout_ = ms; }
+    unsigned long getTimeout() const { return timeout_; }
+    /* Read up to `length` bytes, waiting up to the timeout for each. */
+    size_t readBytes(char *buffer, size_t length);
+    size_t readBytes(uint8_t *buffer, size_t length) { return readBytes((char *)buffer, length); }
+    bool find(const char *target);
+    bool find(char target) { char t[2] = {target, 0}; return find(t); }
+    bool findUntil(const char *target, const char *terminator);
+    long parseInt();
+    float parseFloat();
     /* Read until `terminator` or `length` bytes; returns bytes stored (no NUL). */
     size_t readBytesUntil(char terminator, char *buffer, size_t length);
     String readStringUntil(char terminator);
@@ -140,6 +191,10 @@ public:
     size_t write(const uint8_t *buf, size_t size) override { return (size_t)bl_console_write(buf, size); }
     int available() override { return bl_console_available(); }
     int read() override { return bl_console_read(); }
+    int availableForWrite() { return 128; }     // console writes queue in Baseline and never fail
+    size_t setRxBufferSize(size_t size) { return size; }   // the console's buffer is Baseline's (8 KB)
+    size_t setTxBufferSize(size_t size) { return size; }
+    void setDebugOutput(bool) {}
 };
 
 /* ---- BLESerial: BLE serial port (Nordic UART Service) ---- */
@@ -216,19 +271,45 @@ private:
 #include "baseline_net.h"
 
 /* ---- Wire: I2C master on the Qwiic connector ---- */
+/* Wire (bus 0) and Wire1 (bus 1, on chips with a second I2C controller).
+ * Bus 0 uses the original i2c_* calls, so Wire sketches also run on Baselines
+ * before ABI 1.6; Wire1 needs ABI 1.6. */
+#define I2C_BUFFER_LENGTH 128
+
 class TwoWire : public Stream {
 public:
-    bool begin(int sda = -1, int scl = -1, uint32_t frequency = 0) { return bl_i2c_begin(sda, scl, frequency) == BL_OK; }
+    constexpr explicit TwoWire(uint8_t bus) : bus_(bus) {}
+    bool begin(int sda = -1, int scl = -1, uint32_t frequency = 0);
+    bool begin(uint8_t address) { return false; }      // I2C target (slave) mode is not supported
+    bool end();
+    bool setClock(uint32_t frequency);                  // also works before begin()
+    uint32_t getClock() { return freq_ ? freq_ : 100000; }
+    void setTimeOut(uint16_t) {}
+    void setTimeout(uint16_t) {}
+    size_t setBufferSize(size_t) { return BUFFER; }
     void beginTransmission(int address);
     uint8_t endTransmission(bool sendStop = true);  // 0 ok, 2 address NACK, 4 error, 5 timeout
     uint8_t requestFrom(int address, int quantity);
+    uint8_t requestFrom(int address, int quantity, int sendStop) { return requestFrom(address, quantity); }
+    uint8_t requestFrom(uint8_t address, size_t quantity, bool sendStop) { return requestFrom((int)address, (int)quantity); }
+    uint8_t requestFrom(uint16_t address, size_t quantity, bool sendStop) { return requestFrom((int)address, (int)quantity); }
+    uint8_t requestFrom(uint8_t address, uint8_t quantity) { return requestFrom((int)address, (int)quantity); }
+    uint8_t requestFrom(uint8_t address, uint8_t quantity, uint8_t sendStop) { return requestFrom((int)address, (int)quantity); }
+    uint8_t requestFrom(uint16_t address, uint8_t quantity) { return requestFrom((int)address, (int)quantity); }
     using Print::write;
     size_t write(const uint8_t *buf, size_t size) override;
     int available() override { return (int)(rxLen_ - rxPos_); }
     int read() override { return rxPos_ < rxLen_ ? rxBuf_[rxPos_++] : -1; }
+    int peek() { return rxPos_ < rxLen_ ? rxBuf_[rxPos_] : -1; }
+    void flush() {}
 
 private:
-    static const size_t BUFFER = 128;
+    static const size_t BUFFER = I2C_BUFFER_LENGTH;
+    uint8_t bus_ = 0;
+    bool begun_ = false;
+    int sda_ = -1;
+    int scl_ = -1;
+    uint32_t freq_ = 0;
     uint8_t txAddr_ = 0;
     uint8_t txBuf_[BUFFER] = {};
     size_t txLen_ = 0;
@@ -259,6 +340,7 @@ public:
 extern SerialClass Serial;
 extern BLESerialClass BLESerial;
 extern TwoWire Wire;
+extern TwoWire Wire1;
 extern EspClass ESP;
 
 /* attachInterrupt, SPI, Serial1/Serial2 */
@@ -277,6 +359,7 @@ extern EspClass ESP;
 #include "baseline_usb.h"
 /* MAX17048 LiPo fuel gauge */
 #include "baseline_fuelgauge.h"
+#include "baseline_extras.h"
 
 #endif /* __cplusplus */
 #endif /* BASELINE_ARDUINO_H */

@@ -256,6 +256,19 @@ int bl_impl_usb_midi_read(uint8_t *packet);
 void * bl_impl_ps_malloc(size_t size);
 void * bl_impl_ps_calloc(size_t n, size_t size);
 void * bl_impl_ps_realloc(void *ptr, size_t size);
+int bl_impl_i2cx_begin(int bus, int sda, int scl, uint32_t freq);
+void bl_impl_i2cx_end(int bus);
+int bl_impl_i2cx_write(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop);
+int bl_impl_i2cx_read(int bus, uint8_t addr, uint8_t *data, size_t len);
+int bl_impl_uart_set_rx_buffer(int port, size_t size);
+int bl_impl_uart_available_for_write(int port);
+int bl_impl_adc_set_resolution(int bits);
+int bl_impl_adc_set_attenuation(int pin, int atten);
+int bl_impl_dac_write(int pin, uint8_t value);
+float bl_impl_temperature_read(void);
+int bl_impl_reset_reason(void);
+int bl_impl_last_crash(char *buf, size_t size);
+int bl_impl_wifi_event_take(void);
 
 #ifdef __cplusplus
 }

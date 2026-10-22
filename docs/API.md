@@ -252,3 +252,16 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `ps_malloc` | `void * ps_malloc(size_t size)` | 1.6 | Allocate from PSRAM only. NULL if the board has no PSRAM or it is full. Free with free(). |
 | `ps_calloc` | `void * ps_calloc(size_t n, size_t size)` | 1.6 | Allocate zeroed memory from PSRAM only. |
 | `ps_realloc` | `void * ps_realloc(void *ptr, size_t size)` | 1.6 | Resize an allocation; the result is in PSRAM. |
+| `bl_i2cx_begin` | `int i2cx_begin(int bus, int sda, int scl, uint32_t freq)` | 1.6 | Start I2C bus 0 (Wire) or 1 (Wire1). -1 pins = board defaults (bus 0 only). BL_ERR_UNSUPPORTED if the chip has no such bus. |
+| `bl_i2cx_end` | `void i2cx_end(int bus)` | 1.6 | Stop an I2C bus. |
+| `bl_i2cx_write` | `int i2cx_write(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop)` | 1.6 | i2c_write on a given bus. |
+| `bl_i2cx_read` | `int i2cx_read(int bus, uint8_t addr, uint8_t *data, size_t len)` | 1.6 | i2c_read on a given bus. |
+| `bl_uart_set_rx_buffer` | `int uart_set_rx_buffer(int port, size_t size)` | 1.6 | Receive buffer size in bytes (default 256). Call before uart_begin. |
+| `bl_uart_available_for_write` | `int uart_available_for_write(int port)` | 1.6 | Bytes that can be written without waiting. |
+| `analogReadResolution` | `int adc_set_resolution(int bits)` | 1.6 | analogRead() result width, 9-12 bits (default 12). |
+| `bl_adc_set_attenuation` | `int adc_set_attenuation(int pin, int atten)` | 1.6 | Input range: atten = BL_ADC_ATTEN_* (0, 2.5, 6, 11 dB). pin -1 = every pin. |
+| `dacWrite` | `int dac_write(int pin, uint8_t value)` | 1.6 | 8-bit DAC output (classic ESP32: GPIO 25, 26). BL_ERR_UNSUPPORTED on chips without a DAC. |
+| `temperatureRead` | `float temperature_read(void)` | 1.6 | Chip temperature in degrees C; NaN if the chip has no sensor. |
+| `bl_reset_reason` | `int reset_reason(void)` | 1.6 | Why the chip last reset (esp_reset_reason_t values: 1 power-on, 3 software, 4 panic, 5-7 watchdogs, 8 deep sleep, ...). |
+| `bl_last_crash` | `int last_crash(char *buf, size_t size)` | 1.6 | One-line summary of the last crash from the coredump (task, cause, PC). Returns its length, or 0 if there is none. |
+| `bl_wifi_event_take` | `int wifi_event_take(void)` | 1.6 | Next WiFi/network event (Arduino-ESP32 3.3 arduino_event_id_t values) for WiFi.onEvent, or -1. |

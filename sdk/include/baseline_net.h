@@ -35,6 +35,33 @@ typedef enum {
 #define WIFI_SCAN_RUNNING (-1)
 #define WIFI_SCAN_FAILED  (-2)
 
+/* ---- WiFi / network events (WiFi.onEvent) ----
+ * Callbacks run on the sketch task (inside delay()/yield() or between loop()
+ * calls), like interrupt handlers. The numbers are Arduino-ESP32 3.3's. */
+typedef enum {
+    ARDUINO_EVENT_NONE = 0,
+    ARDUINO_EVENT_ETH_START, ARDUINO_EVENT_ETH_STOP, ARDUINO_EVENT_ETH_CONNECTED, ARDUINO_EVENT_ETH_DISCONNECTED,
+    ARDUINO_EVENT_ETH_GOT_IP, ARDUINO_EVENT_ETH_LOST_IP, ARDUINO_EVENT_ETH_GOT_IP6,
+    ARDUINO_EVENT_WIFI_OFF = 100, ARDUINO_EVENT_WIFI_READY, ARDUINO_EVENT_WIFI_SCAN_DONE, ARDUINO_EVENT_WIFI_FTM_REPORT,
+    ARDUINO_EVENT_WIFI_STA_START = 110, ARDUINO_EVENT_WIFI_STA_STOP, ARDUINO_EVENT_WIFI_STA_CONNECTED,
+    ARDUINO_EVENT_WIFI_STA_DISCONNECTED, ARDUINO_EVENT_WIFI_STA_AUTHMODE_CHANGE, ARDUINO_EVENT_WIFI_STA_GOT_IP,
+    ARDUINO_EVENT_WIFI_STA_GOT_IP6, ARDUINO_EVENT_WIFI_STA_LOST_IP,
+    ARDUINO_EVENT_WIFI_AP_START = 130, ARDUINO_EVENT_WIFI_AP_STOP, ARDUINO_EVENT_WIFI_AP_STACONNECTED,
+    ARDUINO_EVENT_WIFI_AP_STADISCONNECTED, ARDUINO_EVENT_WIFI_AP_STAIPASSIGNED, ARDUINO_EVENT_WIFI_AP_PROBEREQRECVED,
+    ARDUINO_EVENT_WIFI_AP_GOT_IP6,
+    ARDUINO_EVENT_MAX = 207,
+} arduino_event_id_t;
+typedef arduino_event_id_t WiFiEvent_t;
+typedef arduino_event_id_t arduino_event_t;
+typedef struct { int unused; } WiFiEventInfo_t;      // event details are not passed through
+typedef void (*WiFiEventCb)(arduino_event_id_t event);
+typedef void (*WiFiEventSysCb)(arduino_event_id_t event, WiFiEventInfo_t info);
+typedef int wifi_event_id_t;
+
+/* Register a callback for one event, or every event (ARDUINO_EVENT_MAX). Returns an id. */
+wifi_event_id_t bl_wifi_on_event(WiFiEventCb cb, WiFiEventSysCb cb2, arduino_event_id_t event);
+void bl_wifi_remove_event(wifi_event_id_t id);
+
 class WiFiClass {
 public:
     /* station */
@@ -46,6 +73,10 @@ public:
     wl_status_t begin(const String &ssid, const String &password) { return begin(ssid.c_str(), password.c_str()); }
     wl_status_t status() { return bl_wifi_status(); }
     bool isConnected() { return bl_wifi_status() == WL_CONNECTED; }
+    /* WiFi.onEvent(cb[, event]): cb(event) or cb(event, info), on the sketch task. */
+    wifi_event_id_t onEvent(WiFiEventCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(cb, nullptr, event); }
+    wifi_event_id_t onEvent(WiFiEventSysCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, cb, event); }
+    void removeEvent(wifi_event_id_t id) { bl_wifi_remove_event(id); }
     bool disconnect(bool wifioff = false, bool eraseap = false)
     {
         bl_wifi_disconnect();

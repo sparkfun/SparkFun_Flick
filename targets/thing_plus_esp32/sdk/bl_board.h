@@ -24,6 +24,8 @@
 #define BL_BOARD_SS             5
 #define BL_BOARD_SD_CS          5           /* microSD on SPI */
 
+#define BL_BOARD_FUEL_GAUGE_ADDR 0x36        /* MAX17048 LiPo fuel gauge on the Qwiic bus */
+
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           16          /* the pins labeled RX/TX */
 #define BL_SERIAL1_TX           17

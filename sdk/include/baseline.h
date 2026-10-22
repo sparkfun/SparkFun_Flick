@@ -21,8 +21,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>       /* NAN, sqrt, pow, ... (libm is linked) */
 #undef putchar      /* newlib macros that need its stdio internals */
 #undef getchar
+#include "baseline_pgmspace.h"   /* PROGMEM, pgm_read_byte, ... (no-ops on ESP32) */
 
 #include "baseline_types.h"
 #include "baseline_api.h"

@@ -18,10 +18,17 @@
 #define BL_BOARD_SDA            8           /* Qwiic */
 #define BL_BOARD_SCL            9
 #define BL_BOARD_A0             10
+#define BL_BOARD_A1             14
+#define BL_BOARD_A2             15
+#define BL_BOARD_A3             16
+#define BL_BOARD_A4             17
+#define BL_BOARD_A5             18
 #define BL_BOARD_SCK            12
 #define BL_BOARD_MISO           13
 #define BL_BOARD_MOSI           11
 #define BL_BOARD_SS             10
+
+#define BL_BOARD_FUEL_GAUGE_ADDR 0x36        /* MAX17048 LiPo fuel gauge on the Qwiic bus */
 
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           44          /* the pins labeled RX/TX */

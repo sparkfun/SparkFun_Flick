@@ -271,6 +271,19 @@ typedef struct bl_api {
     void * (*ps_malloc)(size_t size);
     void * (*ps_calloc)(size_t n, size_t size);
     void * (*ps_realloc)(void *ptr, size_t size);
+    int (*i2cx_begin)(int bus, int sda, int scl, uint32_t freq);
+    void (*i2cx_end)(int bus);
+    int (*i2cx_write)(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop);
+    int (*i2cx_read)(int bus, uint8_t addr, uint8_t *data, size_t len);
+    int (*uart_set_rx_buffer)(int port, size_t size);
+    int (*uart_available_for_write)(int port);
+    int (*adc_set_resolution)(int bits);
+    int (*adc_set_attenuation)(int pin, int atten);
+    int (*dac_write)(int pin, uint8_t value);
+    float (*temperature_read)(void);
+    int (*reset_reason)(void);
+    int (*last_crash)(char *buf, size_t size);
+    int (*wifi_event_take)(void);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -771,6 +784,32 @@ static inline void * ps_malloc(size_t size) { return BL->ps_malloc(size); }
 static inline void * ps_calloc(size_t n, size_t size) { return BL->ps_calloc(n, size); }
 /* Resize an allocation; the result is in PSRAM. */
 static inline void * ps_realloc(void *ptr, size_t size) { return BL->ps_realloc(ptr, size); }
+/* Start I2C bus 0 (Wire) or 1 (Wire1). -1 pins = board defaults (bus 0 only). BL_ERR_UNSUPPORTED if the chip has no such bus. */
+static inline int bl_i2cx_begin(int bus, int sda, int scl, uint32_t freq) { return BL->i2cx_begin(bus, sda, scl, freq); }
+/* Stop an I2C bus. */
+static inline void bl_i2cx_end(int bus) { BL->i2cx_end(bus); }
+/* i2c_write on a given bus. */
+static inline int bl_i2cx_write(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop) { return BL->i2cx_write(bus, addr, data, len, stop); }
+/* i2c_read on a given bus. */
+static inline int bl_i2cx_read(int bus, uint8_t addr, uint8_t *data, size_t len) { return BL->i2cx_read(bus, addr, data, len); }
+/* Receive buffer size in bytes (default 256). Call before uart_begin. */
+static inline int bl_uart_set_rx_buffer(int port, size_t size) { return BL->uart_set_rx_buffer(port, size); }
+/* Bytes that can be written without waiting. */
+static inline int bl_uart_available_for_write(int port) { return BL->uart_available_for_write(port); }
+/* analogRead() result width, 9-12 bits (default 12). */
+static inline int analogReadResolution(int bits) { return BL->adc_set_resolution(bits); }
+/* Input range: atten = BL_ADC_ATTEN_* (0, 2.5, 6, 11 dB). pin -1 = every pin. */
+static inline int bl_adc_set_attenuation(int pin, int atten) { return BL->adc_set_attenuation(pin, atten); }
+/* 8-bit DAC output (classic ESP32: GPIO 25, 26). BL_ERR_UNSUPPORTED on chips without a DAC. */
+static inline int dacWrite(int pin, uint8_t value) { return BL->dac_write(pin, value); }
+/* Chip temperature in degrees C; NaN if the chip has no sensor. */
+static inline float temperatureRead(void) { return BL->temperature_read(); }
+/* Why the chip last reset (esp_reset_reason_t values: 1 power-on, 3 software, 4 panic, 5-7 watchdogs, 8 deep sleep, ...). */
+static inline int bl_reset_reason(void) { return BL->reset_reason(); }
+/* One-line summary of the last crash from the coredump (task, cause, PC). Returns its length, or 0 if there is none. */
+static inline int bl_last_crash(char *buf, size_t size) { return BL->last_crash(buf, size); }
+/* Next WiFi/network event (Arduino-ESP32 3.3 arduino_event_id_t values) for WiFi.onEvent, or -1. */
+static inline int bl_wifi_event_take(void) { return BL->wifi_event_take(); }
 #endif /* BASELINE_FIRMWARE */
 
 #endif /* BASELINE_API_H */

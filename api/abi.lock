@@ -193,3 +193,68 @@ abi_major=1
 5|int|bt_spp_peek|void
 5|void|bt_spp_flush|void
 5|int|bt_spp_set_pin|const char *pin
+6|int|sd_begin|int bus, int cs, uint32_t freq_hz, int format_if_empty
+6|void|sd_end|void
+6|uint64_t|sd_info|int what
+6|int|fsx_open|int fs, const char *path, const char *mode, int create
+6|int|fsx_path_op|int fs, int op, const char *path, const char *path2
+6|int|sleep_wake|int source, uint64_t value, int pin, int level
+6|int|sleep_disable_wake|int source
+6|void|sleep_deep|void
+6|int|sleep_light|void
+6|int|sleep_wake_cause|void
+6|uint64_t|sleep_ext1_status|void
+6|void *|rtc_memory|uint32_t *size
+6|int|timer_new|void
+6|void|timer_free|int h
+6|int|timer_start|int h, uint64_t period_us, int periodic
+6|void|timer_stop|int h
+6|int|timer_active|int h
+6|int|timer_take|void
+6|void|time_ntp_start|const char *server1, const char *server2, const char *server3
+6|int|time_get|int64_t *sec, int32_t *usec
+6|int|time_set|int64_t sec, int32_t usec
+6|int|time_synced|void
+6|uint32_t|touch_read|int pin
+6|int|touch_attach|int pin, uint32_t threshold
+6|int|touch_detach|int pin
+6|int|touch_take|void
+6|int|i2s_begin|int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk
+6|void|i2s_end|void
+6|int|i2s_write|const uint8_t *data, size_t len
+6|int|i2s_read|uint8_t *buf, size_t size
+6|int|led_strip_write|int pin, int chipset, const uint8_t *data, size_t len
+6|int|ledc_attach|int pin, uint32_t freq, int resolution
+6|int|ledc_write|int pin, uint32_t duty
+6|int|ledc_detach|int pin
+6|uint32_t|ledc_write_tone|int pin, uint32_t freq
+6|uint32_t|ledc_change_frequency|int pin, uint32_t freq, int resolution
+6|int|dns_start|uint16_t port, const char *domain, uint32_t ip
+6|void|dns_stop|void
+6|void|dns_error_reply|int code
+6|int|usb_begin|uint32_t devices
+6|void|usb_end|void
+6|uint32_t|usb_devices|void
+6|int|usb_mounted|void
+6|int|usb_keyboard|int op, uint32_t key
+6|int|usb_mouse|int op, int x, int y, int wheel, int buttons
+6|int|usb_gamepad|int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons
+6|int|usb_consumer|int op, uint16_t usage
+6|int|usb_midi_write|const uint8_t *packet
+6|int|usb_midi_read|uint8_t *packet
+6|void *|ps_malloc|size_t size
+6|void *|ps_calloc|size_t n, size_t size
+6|void *|ps_realloc|void *ptr, size_t size
+6|int|i2cx_begin|int bus, int sda, int scl, uint32_t freq
+6|void|i2cx_end|int bus
+6|int|i2cx_write|int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop
+6|int|i2cx_read|int bus, uint8_t addr, uint8_t *data, size_t len
+6|int|uart_set_rx_buffer|int port, size_t size
+6|int|uart_available_for_write|int port
+6|int|adc_set_resolution|int bits
+6|int|adc_set_attenuation|int pin, int atten
+6|int|dac_write|int pin, uint8_t value
+6|float|temperature_read|void
+6|int|reset_reason|void
+6|int|last_crash|char *buf, size_t size
+6|int|wifi_event_take|void

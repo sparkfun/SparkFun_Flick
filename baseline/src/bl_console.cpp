@@ -18,12 +18,17 @@ static int log_vprintf(const char *fmt, va_list ap)
  * room. */
 #define CONSOLE_RX_BUFFER 8192
 
+/* UART consoles (USB-serial chip boards) run at the chip's BL_PORT_CONSOLE_BAUD. */
+#ifndef BL_PORT_CONSOLE_BAUD
+#define BL_PORT_CONSOLE_BAUD 115200
+#endif
+
 static Stream *s_con = &Serial;
 
 void bl_console_init(void)
 {
     Serial.setRxBufferSize(CONSOLE_RX_BUFFER);  // must be called before begin()
-    Serial.begin(115200);       // UART console: 115200 baud; ignored on USB CDC
+    Serial.begin(BL_PORT_CONSOLE_BAUD);     // UART console; the baud rate is ignored on USB CDC
     esp_log_set_vprintf(log_vprintf);   // ESP-IDF logs go to the same port
 }
 

@@ -122,3 +122,118 @@ double strtod(const char *s, char **end)
 double atof(const char *s) { return strtod(s, NULL); }
 float strtof(const char *s, char **end) { return (float)strtod(s, end); }
 
+
+/* errno for the sketch (libm and other newlib pieces set it). One per sketch:
+ * the sketch is a single task. */
+int *__errno(void)
+{
+    static int e;
+    return &e;
+}
+
+size_t strlcpy(char *dst, const char *src, size_t size)
+{
+    size_t len = strlen(src);
+    if (size) {
+        size_t n = len < size - 1 ? len : size - 1;
+        memcpy(dst, src, n);
+        dst[n] = '\0';
+    }
+    return len;
+}
+
+size_t strlcat(char *dst, const char *src, size_t size)
+{
+    size_t d = strnlen(dst, size);
+    return d == size ? size + strlen(src) : d + strlcpy(dst + d, src, size - d);
+}
+
+/* ---- FILE output: stdout and stderr are the console ----
+ * Library code sometimes writes diagnostics with fputs(s, stderr) or
+ * fprintf(stderr, ...). Every stream goes to the console. */
+#include <stdarg.h>
+#include <sys/reent.h>
+
+static struct _reent s_reent;       /* stdin/stdout/stderr are NULL: only ever passed back to us */
+
+struct _reent *__getreent(void)
+{
+    return &s_reent;
+}
+
+int fputs(const char *s, FILE *f)
+{
+    (void)f;
+    return bl_console_write((const uint8_t *)s, strlen(s));
+}
+
+int fputc(int c, FILE *f)
+{
+    (void)f;
+    return putchar(c);
+}
+
+size_t fwrite(const void *data, size_t size, size_t count, FILE *f)
+{
+    (void)f;
+    bl_console_write((const uint8_t *)data, size * count);
+    return count;
+}
+
+int vfprintf(FILE *f, const char *fmt, va_list ap)
+{
+    (void)f;
+    return vprintf(fmt, ap);
+}
+
+int fprintf(FILE *f, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = vfprintf(f, fmt, ap);
+    va_end(ap);
+    return n;
+}
+
+int fflush(FILE *f)
+{
+    (void)f;
+    return 0;
+}
+
+/* ---- pthread locks: the sketch is a single task ----
+ * Parts of libgcc/libstdc++ guard shared state with these; with one task
+ * there is nothing to lock. */
+#include <pthread.h>
+
+int pthread_mutex_init(pthread_mutex_t *m, const pthread_mutexattr_t *attr) { (void)m; (void)attr; return 0; }
+int pthread_mutex_lock(pthread_mutex_t *m) { (void)m; return 0; }
+int pthread_mutex_unlock(pthread_mutex_t *m) { (void)m; return 0; }
+
+#define SKETCH_PTHREAD_KEYS 8
+static const void *s_key_values[SKETCH_PTHREAD_KEYS];
+static int s_keys_used;
+
+int pthread_key_create(pthread_key_t *key, void (*destructor)(void *))
+{
+    (void)destructor;
+    if (s_keys_used >= SKETCH_PTHREAD_KEYS) {
+        return 11;  /* EAGAIN */
+    }
+    *key = (pthread_key_t)s_keys_used++;
+    return 0;
+}
+
+void *pthread_getspecific(pthread_key_t key)
+{
+    return (unsigned)key < SKETCH_PTHREAD_KEYS ? (void *)s_key_values[key] : NULL;
+}
+
+int pthread_setspecific(pthread_key_t key, const void *value)
+{
+    if ((unsigned)key >= SKETCH_PTHREAD_KEYS) {
+        return 22;  /* EINVAL */
+    }
+    s_key_values[key] = value;
+    return 0;
+}

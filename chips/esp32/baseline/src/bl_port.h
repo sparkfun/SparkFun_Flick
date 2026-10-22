@@ -10,8 +10,12 @@
 #include "driver/gpio.h"
 #include "bl_target.h"     // + the target's bl_board.h
 
-/* Console + sketch upload run on UART0 (the CH340 USB-serial chip), at 115200 baud. */
+/* Console + sketch upload run on UART0 (the board's USB-serial chip) at 921600
+ * baud, 8x faster uploads than 115200. The chip's ROM boot messages stay at
+ * 115200; the bootloader is set to match (chips/esp32/idf/sdkconfig.defaults).
+ * bsk tries 921600 first and falls back to 115200 for older Baselines. */
 #define BL_PORT_CONSOLE_USB 0
+#define BL_PORT_CONSOLE_BAUD 921600
 
 /* Flash and PSRAM pins, from eFuse and the chip package, read once
  * (bl_port_pins.c): bit n set = GPIOn is taken. */

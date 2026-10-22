@@ -11,6 +11,7 @@
 class String {
 public:
     String(const char *s = "");
+    String(const __FlashStringHelper *s) : String(reinterpret_cast<const char *>(s)) {}
     String(const char *s, size_t len);
     String(const String &other);
     String(String &&other) noexcept;
@@ -29,6 +30,7 @@ public:
     String &operator=(const String &rhs);
     String &operator=(String &&rhs) noexcept;
     String &operator=(const char *s);
+    String &operator=(const __FlashStringHelper *s) { return *this = reinterpret_cast<const char *>(s); }
 
     bool reserve(size_t size);
     size_t length() const { return len_; }
@@ -39,6 +41,7 @@ public:
     bool concat(const String &s) { return concat(s.c_str(), s.len_); }
     bool concat(const char *s) { return s ? concat(s, strlen(s)) : false; }
     bool concat(const char *s, size_t len);
+    bool concat(const __FlashStringHelper *s) { return concat(reinterpret_cast<const char *>(s)); }
     bool concat(char c) { return concat(&c, 1); }
     template <typename T> bool concat(T value) { return concat(String(value)); }
     template <typename T> String &operator+=(const T &rhs) { concat(rhs); return *this; }

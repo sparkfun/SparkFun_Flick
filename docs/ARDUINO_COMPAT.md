@@ -21,7 +21,7 @@ and all lead to Baseline.
 
 | Area | Classic names |
 |---|---|
-| Pins | `pinMode`, `digitalWrite`, `digitalRead`, `analogRead`, `analogReadMilliVolts`, `analogWrite`, `rgbLedWrite`, `HIGH/LOW/INPUT/OUTPUT/INPUT_PULLUP/...`, `LED_BUILTIN`, `STAT_LED`, `RGB_BUILTIN`, `A0`, `SDA`, `SCL` |
+| Pins | `pinMode`, `digitalWrite`, `digitalRead`, `analogRead`, `analogReadMilliVolts`, `analogWrite`, `rgbLedWrite`, `HIGH/LOW/INPUT/OUTPUT/INPUT_PULLUP/...`, `LED_BUILTIN`, `STAT_LED`, `RGB_BUILTIN`, `A0`, `SDA`, `SCL`, `analogReadResolution`, `analogSetAttenuation`, `analogSetPinAttenuation` (`ADC_0db`...`ADC_11db`), `dacWrite` (classic ESP32), `pulseIn`, `pulseInLong` |
 | Interrupts | `attachInterrupt`, `attachInterruptArg`, `detachInterrupt`, `digitalPinToInterrupt`, `RISING/FALLING/CHANGE/ONLOW/ONHIGH`, `IRAM_ATTR` (accepted), `noInterrupts/interrupts` (no-ops, see below) |
 | Time | `millis`, `micros`, `delay`, `delayMicroseconds`, `yield` |
 | Clock and NTP | `configTime`, `configTzTime`, `getLocalTime`, `time`, `gettimeofday`, `settimeofday`, `localtime(_r)`, `gmtime(_r)`, `mktime`, `strftime`, `difftime`, `struct tm` |
@@ -33,13 +33,13 @@ and all lead to Baseline.
 | I2S audio | `I2SClass` (ESP_I2S): `setPins/setPinsPdmTx/setPinsPdmRx/begin/end/write/readBytes/available/read`, `I2S_MODE_STD/PDM_TX/PDM_RX`, `I2S_DATA_BIT_WIDTH_*`, `I2S_SLOT_MODE_MONO/STEREO` |
 | USB device (S3) | `USB.begin`, `USBHIDKeyboard` (`press/release/releaseAll/write/print`, `KEY_*`), `USBHIDMouse` (`move/click/press/release/isPressed`, `MOUSE_*`), `USBHIDGamepad` (`leftStick/rightStick/triggers/hat/pressButton/send`, `BUTTON_*`, `HAT_*`), `USBHIDConsumerControl` (`press/release`, `CONSUMER_CONTROL_*`), `USBMIDI` (`noteOn/noteOff/controlChange/programChange/pitchBend/channelPressure/readPacket/writePacket`) |
 | Battery | `SFE_MAX1704X` (SparkFun MAX1704x library): `begin/isConnected/getVoltage/getSOC/getChangeRate/quickStart/setThreshold/getAlert/clearAlert/sleep/wake/...` |
-| Serial | `Serial.begin/print/println/printf/write/read/available/readString/readStringUntil/setTimeout` |
-| Hardware UARTs | `Serial1` (default pins RX 44 / TX 43) and `Serial2` (pass pins): `begin(baud, SERIAL_8N1, rx, tx)/end/print/write/read/available/peek/flush`, `SERIAL_5N1..SERIAL_8O2` |
+| Serial | `Serial.begin/print/println/printf/write/read/available/readString/readStringUntil/setTimeout`, `readBytes`, `find`, `findUntil`, `parseInt`, `parseFloat`, `availableForWrite` |
+| Hardware UARTs | `Serial1` (default pins RX 44 / TX 43) and `Serial2` (pass pins): `begin(baud, SERIAL_8N1, rx, tx)/end/print/write/read/available/peek/flush`, `SERIAL_5N1..SERIAL_8O2`; `setRxBufferSize` (before `begin`), `availableForWrite` |
 | Text | `String` (concat, `+`, compare, `indexOf`, `substring`, `replace`, `trim`, `toInt`, `toFloat`, ...), `printf`, `snprintf`, `sprintf`, `atoi`, `atof`, `strtol`, `strtod`, `F()` |
-| Math | `map`, `constrain`, `min`, `max`, `random`, `randomSeed`, `esp_random` |
+| Math | `map`, `constrain`, `min`, `max`, `random`, `randomSeed`, `esp_random`, `<math.h>` (`sqrt`, `pow`, `log`, `sin`, ... ; libm is linked), `PI`, `radians`, `degrees`, `sq`, `lowByte`, `highByte`, `bitRead/bitSet/bitClear/bitWrite`, `bit`, `makeWord` |
 | SPI | `SPI.begin/end/beginTransaction/endTransaction/transfer/transfer16/transfer32/transferBytes/writeBytes/setFrequency/setDataMode/setBitOrder`, `SPISettings`, `MSBFIRST`, `SPI_MODE0..3` |
-| I2C | `Wire.begin/beginTransmission/write/endTransmission/requestFrom/available/read` |
-| WiFi station | `WiFi.begin/status/isConnected/disconnect/config/setHostname/localIP/gatewayIP/subnetMask/dnsIP/macAddress/SSID/RSSI/channel/hostByName`, `WL_*`, `IPAddress` |
+| I2C | `Wire.begin/end/setClock/getClock/beginTransmission/write/endTransmission/requestFrom` (all the Arduino overloads)`/available/read/peek`, `I2C_BUFFER_LENGTH`; `Wire1` on chips with a second I2C controller (classic ESP32, S3; the low-power I2C on the C6/C5): pass its pins to `begin` |
+| WiFi station | `WiFi.begin/status/isConnected/disconnect/config/setHostname/localIP/gatewayIP/subnetMask/dnsIP/macAddress/SSID/RSSI/channel/hostByName`, `WL_*`, `IPAddress`; `WiFi.onEvent(cb[, event])` / `removeEvent` (`ARDUINO_EVENT_*`, callbacks on the sketch task); `WiFiMulti` (`addAP`, `run`) |
 | WiFi AP and scan | `WiFi.mode(WIFI_STA/WIFI_AP/WIFI_AP_STA/WIFI_OFF)`, `WiFi.softAP/softAPIP/softAPdisconnect/softAPgetStationNum`, `WiFi.scanNetworks/SSID(i)/RSSI(i)/channel(i)/encryptionType(i)/BSSIDstr(i)/scanDelete`, `WIFI_AUTH_*` |
 | TCP | `WiFiClient` (`connect/print/write/available/read/peek/connected/stop/remoteIP`), `WiFiServer` (`begin/accept/available/hasClient`), `NetworkClient/NetworkServer` |
 | TLS | `WiFiClientSecure` / `NetworkClientSecure`: `setInsecure`, `setCACert`, or by default Baseline's built-in CA bundle |
@@ -57,9 +57,26 @@ and all lead to Baseline.
 | BLE | `BLEDevice`, `BLEServer`, `BLEService`, `BLECharacteristic` (read/write/notify/indicate, `setValue/getValue/getData`), `BLEDescriptor`, `BLE2902`, `BLE2901`, `BLEAdvertising`, `BLEAdvertisementData`, `BLEScan` (blocking and background), `BLEAdvertisedDevice`, `BLEScanResults`, `BLEClient`, `BLERemoteService`, `BLERemoteCharacteristic` (read/write/`registerForNotify`), `BLEUUID`, `BLEAddress`, and all the callback classes |
 | BLE serial | `BLESerial`: a ready-made BLE serial port (Nordic UART) |
 | Bluetooth Classic | `BluetoothSerial` (SPP): `begin(name)/end/hasClient/connected(timeout)/setPin/print/write/read/available/peek/flush`. Classic ESP32 only; on other chips `begin()` returns false |
-| System | `ESP.getFreeHeap/getHeapSize/getMinFreeHeap/getMaxAllocHeap/getPsramSize/getFreePsram/getFlashChipSize/getCpuFreqMHz/getChipModel/getChipCores/getEfuseMac/restart`, `getCpuFrequencyMhz`, `esp_restart` |
+| System | `ESP.getFreeHeap/getHeapSize/getMinFreeHeap/getMaxAllocHeap/getPsramSize/getFreePsram/getFlashChipSize/getCpuFreqMHz/getChipModel/getChipCores/getEfuseMac/restart`, `getCpuFrequencyMhz`, `esp_restart`, `temperatureRead` (NaN without a sensor), `esp_reset_reason` (`ESP_RST_*`) |
 | PSRAM | `psramFound`, `ps_malloc`, `ps_calloc`, `ps_realloc` (free with `free`). Plain `malloc`/`new` over 4 KB also go to PSRAM when the board has it. Boards without PSRAM report 0 and `ps_*` return NULL. |
 | Logging | `log_e/w/i/d/v`, `ESP_LOGE/W/I/D/V` |
+| Text in flash | `F("...")`, `__FlashStringHelper`, `PROGMEM`, `PSTR`, `pgm_read_byte/word/dword/float/ptr` (+ `_near`/`_far`), `memcpy_P`, `strcpy_P`, `sprintf_P`, ... , `<pgmspace.h>`, `<avr/pgmspace.h>` (all plain memory reads on ESP32) |
+| C++ library | `std::string`, `std::map`, `std::vector`, `<algorithm>`, ... (libstdc++ is linked). No exceptions: an error a container would throw logs a message and crashes the sketch, so Baseline rolls back. |
+
+## Arduino libraries
+
+Sketches can use ordinary Arduino libraries. `bsk build` follows the sketch's `#include` lines, as the Arduino IDE does: a header that is not in the sketch or the SDK selects the library that provides it, the library's sources are compiled into the sketch, and its own includes are followed in turn. Libraries are looked up in:
+1. the sketch's own `libraries/` folder,
+2. the folders in `$BSK_LIBRARIES` (separated by `;` on Windows, `:` elsewhere),
+3. the Arduino IDE's libraries folder (from its `arduino-cli.yaml`, else `Documents/Arduino/libraries`).
+
+Install libraries with the Arduino IDE's Library Manager or `arduino-cli lib install`, as usual. The SDK's own headers win, so `Wire.h`, `SPI.h`, `WiFi.h` and the other classic headers keep pointing at Baseline. Library warnings are not shown; errors are.
+
+**Checked** (October 2026): the first example of each of these compiles unchanged for the S3, the C6 and the classic ESP32: ArduinoJson; SparkFun BME280, BMP581, BMI270, ICM-20948, ISM330DHCX, MMC5983MA, TMP102, TMP117, SHTC3, AHT20, SCD30, SCD4x, VEML7700, VCNL4040, VL53L1X, NAU7802, Qwiic Button, Qwiic Relay, Qwiic Joystick, Qwiic Twist, Qwiic Ultrasonic, Qwiic Alphanumeric, Qwiic OLED, I2C Mux, External EEPROM, u-blox GNSS v3 and LG290P GNSS. (TMP102's example uses `A3`, which not every board has.)
+
+Like the Arduino IDE, `bsk` declares the functions a `.ino` defines, so a sketch may call a function before its definition.
+
+**Secrets.** Put `KEY = value` lines in `secrets.cfg` at the repository root (git-ignored; see `secrets.cfg.example`) and every sketch is built with `-DKEY="value"`: `#ifdef WIFI_SSID` ... `WiFi.begin(WIFI_SSID, WIFI_PASSWORD)` keeps passwords out of the sketch.
 
 ## How callbacks work
 

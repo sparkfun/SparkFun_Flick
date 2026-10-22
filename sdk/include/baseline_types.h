@@ -49,6 +49,12 @@
 #define BL_INFO_FREE_PSRAM      6
 #define BL_INFO_FLASH_SIZE      7
 
+/* ---- ADC attenuation (adc_set_attenuation): the input range ---- */
+#define BL_ADC_ATTEN_0DB        0   /* up to ~0.95 V */
+#define BL_ADC_ATTEN_2_5DB      1   /* up to ~1.25 V */
+#define BL_ADC_ATTEN_6DB        2   /* up to ~1.75 V */
+#define BL_ADC_ATTEN_11DB       3   /* up to ~3.1 V (default) */
+
 /* ---- Callbacks run synchronously on the sketch task ---- */
 typedef void (*bl_callback_t)(void *arg);
 

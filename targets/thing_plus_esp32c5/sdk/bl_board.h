@@ -21,6 +21,11 @@
 #define BL_BOARD_SDA            23  /* Qwiic */
 #define BL_BOARD_SCL            24
 #define BL_BOARD_A0             1
+#define BL_BOARD_A1             2
+#define BL_BOARD_A2             3
+#define BL_BOARD_A3             4
+#define BL_BOARD_A4             5
+#define BL_BOARD_A5             6
 #define BL_BOARD_SCK            10
 #define BL_BOARD_MISO           9   /* POCI */
 #define BL_BOARD_MOSI           8   /* PICO */

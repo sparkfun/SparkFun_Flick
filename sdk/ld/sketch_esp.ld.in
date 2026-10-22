@@ -60,7 +60,8 @@ SECTIONS
 
     _sketch_image_size = _sketch_data_load + SIZEOF(.data) - BL_SKETCH_DBUS_BASE;
 
-    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .fini_array* .dtors* .comment .note.*) }
+    /* No exceptions in sketches: unwind and exception tables are dropped. */
+    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .gcc_except_table .gcc_except_table.* .fini_array* .dtors* .comment .note.*) }
 }
 
 ASSERT(SIZEOF(.sketch_header) == BL_SKETCH_HEADER_SIZE, "sketch header must be exactly BL_SKETCH_HEADER_SIZE bytes")

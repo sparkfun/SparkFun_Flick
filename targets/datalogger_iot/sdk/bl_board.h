@@ -26,6 +26,8 @@
 #define BL_BOARD_SS             5
 #define BL_BOARD_IMU_CS         5           /* ISM330DHCX (9DoF version) */
 
+#define BL_BOARD_FUEL_GAUGE_ADDR 0x36        /* MAX17048 LiPo fuel gauge on the Qwiic bus */
+
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           17          /* the RX/TX header */
 #define BL_SERIAL1_TX           16

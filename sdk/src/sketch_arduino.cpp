@@ -3,7 +3,8 @@
 
 SerialClass Serial;
 BLESerialClass BLESerial;
-TwoWire Wire;
+TwoWire Wire(0);
+TwoWire Wire1(1);
 EspClass ESP;
 
 /* ---- Print ---- */
@@ -76,6 +77,112 @@ int Stream::timedRead()
         delay(1);
     } while (millis() - start < timeout_);
     return -1;
+}
+
+size_t Stream::readBytes(char *buffer, size_t length)
+{
+    size_t n = 0;
+    while (n < length) {
+        int c = timedRead();
+        if (c < 0) {
+            break;
+        }
+        buffer[n++] = (char)c;
+    }
+    return n;
+}
+
+bool Stream::findUntil(const char *target, const char *terminator)
+{
+    size_t tlen = strlen(target), tpos = 0, ulen = terminator ? strlen(terminator) : 0, upos = 0;
+    if (!tlen) {
+        return true;
+    }
+    for (int c; (c = timedRead()) >= 0;) {
+        tpos = c == target[tpos] ? tpos + 1 : (c == target[0] ? 1 : 0);
+        if (tpos == tlen) {
+            return true;
+        }
+        if (ulen) {
+            upos = c == terminator[upos] ? upos + 1 : (c == terminator[0] ? 1 : 0);
+            if (upos == ulen) {
+                return false;
+            }
+        }
+    }
+    return false;
+}
+
+bool Stream::find(const char *target)
+{
+    return findUntil(target, nullptr);
+}
+
+/* Skip to the first digit or '-' (or '.', for floats); waits up to the timeout. */
+static int peek_number_start(Stream &s, bool allow_dot)
+{
+    unsigned long start = millis();
+    for (;;) {
+        int c = s.peek();
+        if (c < 0) {
+            if (millis() - start >= s.getTimeout()) {
+                return -1;
+            }
+            delay(1);
+            continue;
+        }
+        if (c == '-' || (c >= '0' && c <= '9') || (allow_dot && c == '.')) {
+            return c;
+        }
+        s.read();
+    }
+}
+
+long Stream::parseInt()
+{
+    if (peek_number_start(*this, false) < 0) {
+        return 0;
+    }
+    bool neg = false;
+    long v = 0;
+    for (int c; (c = peek()) >= 0;) {
+        if (c == '-' && !neg && v == 0) {
+            neg = true;
+        } else if (c >= '0' && c <= '9') {
+            v = v * 10 + (c - '0');
+        } else {
+            break;
+        }
+        read();
+    }
+    return neg ? -v : v;
+}
+
+float Stream::parseFloat()
+{
+    if (peek_number_start(*this, true) < 0) {
+        return 0;
+    }
+    bool neg = false, frac = false;
+    float v = 0, scale = 1;
+    for (int c; (c = peek()) >= 0;) {
+        if (c == '-' && !neg && v == 0 && !frac) {
+            neg = true;
+        } else if (c == '.' && !frac) {
+            frac = true;
+        } else if (c >= '0' && c <= '9') {
+            if (frac) {
+                scale /= 10;
+                v += (c - '0') * scale;
+            } else {
+                v = v * 10 + (c - '0');
+            }
+        } else {
+            break;
+        }
+        read();
+    }
+    return neg ? -v : v;
 }
 
 size_t Stream::readBytesUntil(char terminator, char *buffer, size_t length)
@@ -157,6 +264,35 @@ uint64_t EspClass::getEfuseMac()
 
 /* ---- Wire ---- */
 
+bool TwoWire::begin(int sda, int scl, uint32_t frequency)
+{
+    if (frequency) {
+        freq_ = frequency;
+    }
+    int r = bus_ == 0 ? bl_i2c_begin(sda, scl, freq_) : bl_i2cx_begin(bus_, sda, scl, freq_);
+    begun_ = r == BL_OK;
+    if (begun_) {
+        sda_ = sda;
+        scl_ = scl;
+    }
+    return begun_;
+}
+
+bool TwoWire::end()
+{
+    if (bus_ != 0 || BL_HAS(i2cx_end)) {
+        bl_i2cx_end(bus_);
+    }
+    begun_ = false;
+    return true;
+}
+
+bool TwoWire::setClock(uint32_t frequency)
+{
+    freq_ = frequency;
+    return begun_ ? begin(sda_, scl_, frequency) : true;   // restart the bus at the new speed
+}
+
 void TwoWire::beginTransmission(int address)
 {
     txAddr_ = (uint8_t)address;
@@ -173,7 +309,8 @@ size_t TwoWire::write(const uint8_t *buf, size_t size)
 
 uint8_t TwoWire::endTransmission(bool sendStop)
 {
-    int r = bl_i2c_write(txAddr_, txBuf_, txLen_, sendStop);
+    int r = bus_ == 0 ? bl_i2c_write(txAddr_, txBuf_, txLen_, sendStop)
+                      : bl_i2cx_write(bus_, txAddr_, txBuf_, txLen_, sendStop);
     txLen_ = 0;
     switch (r) {
     case BL_OK:          return 0;
@@ -191,7 +328,8 @@ uint8_t TwoWire::requestFrom(int address, int quantity)
     if ((size_t)quantity > BUFFER) {
         quantity = BUFFER;
     }
-    int n = bl_i2c_read((uint8_t)address, rxBuf_, (size_t)quantity);
+    int n = bus_ == 0 ? bl_i2c_read((uint8_t)address, rxBuf_, (size_t)quantity)
+                      : bl_i2cx_read(bus_, (uint8_t)address, rxBuf_, (size_t)quantity);
     rxLen_ = n > 0 ? (size_t)n : 0;
     rxPos_ = 0;
     return (uint8_t)rxLen_;

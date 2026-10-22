@@ -146,6 +146,10 @@ public:
     size_t readBytes(uint8_t *buf, size_t size) { return read(buf, size); }
     int peek() { return started_ ? bl_uart_peek(port_) : -1; }
     void flush() { if (started_) bl_uart_flush(port_); }
+    int availableForWrite() { return started_ ? bl_uart_available_for_write(port_) : 0; }
+    /* Call before begin(), as in Arduino-ESP32. Returns the size set, or 0. */
+    size_t setRxBufferSize(size_t size) { return bl_uart_set_rx_buffer(port_, size) == BL_OK ? size : 0; }
+    size_t setTxBufferSize(size_t size) { return size; }    // accepted; Baseline's TX buffer is fixed
     operator bool() const { return started_; }
 
 private:

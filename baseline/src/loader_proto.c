@@ -50,7 +50,7 @@ static void console_sink(const char *text, void *ctx)
 
 static void reply(const char *status, const char *fmt, ...)
 {
-    char buf[200], line[220];
+    char buf[400], line[420];       // INFO with a crash summary runs to ~300 characters
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -95,17 +95,24 @@ static bool parse_sha(const char *hex, uint8_t out[32])
 
 static void restart_soon(void)
 {
-    vTaskDelay(pdMS_TO_TICKS(200));     // let the reply reach the host
+    // Let the reply reach the host, even when a chatty sketch has filled the
+    // console's queue ahead of it.
+    bl_console_flush();
+    vTaskDelay(pdMS_TO_TICKS(200));
     esp_restart();
 }
 
 static void cmd_info(void)
 {
     const char *safe = bl_state_safe_mode_reason();
-    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u",
+    char crash[160];
+    if (bl_impl_last_crash(crash, sizeof(crash)) <= 0) {
+        strcpy(crash, "-");
+    }
+    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d crash=\"%s\"",
        BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
-       (unsigned)bl_impl_usb_devices());
+       (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), crash);
 }
 
 static void cmd_begin(char *args)
@@ -238,6 +245,9 @@ static void handle_line(char *line)
     } else if (!strcmp(cmd, "RESET")) {
         OK("rebooting");
         restart_soon();
+    } else if (!strcmp(cmd, "CRASHCLEAR")) {
+        bl_last_crash_clear();      // forget the recorded crash (INFO crash= becomes "-")
+        OK("crash cleared");
     } else if (!strcmp(cmd, "USBOFF")) {
         bl_usb_forget();    // back to the plain USB serial port (needed before flashing Baseline)
         OK("rebooting without USB devices");

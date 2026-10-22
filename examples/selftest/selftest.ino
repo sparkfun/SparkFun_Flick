@@ -1,18 +1,42 @@
 // selftest.ino - bring-up checks for a new board or Baseline build.
-// Upload it, then read the console: one PASS/FAIL line per check and a
-// RESULT line. Needs WiFi networks and BLE devices nearby for the last two.
-// Boards without PSRAM skip the PSRAM checks (they check ps_malloc returns NULL).
+// Upload it (or run `bsk test`), then read the console: one PASS/FAIL/SKIP line
+// per check and a RESULT line at the end.
+//
+//   - memory and PSRAM (PSRAM checks are skipped on boards without it)
+//   - Strings, numbers, time functions
+//   - Preferences (NVS) and LittleFS
+//   - Ticker timing
+//   - the board's own I2C devices (bl_board.h), and a Qwiic bus scan
+//   - microSD, if the board has a slot and a card is in it
+//   - the status and RGB LEDs (look at the board when it says LOOK)
+//   - WiFi scan and BLE scan (needs networks / devices nearby)
+//   - WiFi connection, NTP and HTTP, if WIFI_SSID is set (secrets.cfg, see bsk)
+//   - deep sleep: the board sleeps for 2 s; after the timer wakes it, the
+//     second phase checks that RTC memory and Preferences survived.
 #include <Preferences.h>
 #include <FS.h>
 #include <LittleFS.h>
+#include <SD.h>
+#include <SD_MMC.h>
 #include <Ticker.h>
 #include <WiFi.h>
+#include <HTTPClient.h>
 #include <BLEDevice.h>
 #include <BLEScan.h>
+#include <Wire.h>
 #include <time.h>
 
-static int passed, failed;
-#define CHECK(name, cond) do { bool ok_ = (cond); Serial.printf("%s  %s\n", ok_ ? "PASS" : "FAIL", name); ok_ ? passed++ : failed++; } while (0)
+/* Kept in RTC memory across the deep sleep. */
+struct Saved {
+    uint32_t magic;
+    int passed, failed, skipped;
+    uint32_t nvs_value;
+};
+static const uint32_t MAGIC = 0x5E1F7E57;
+static Saved *saved;
+
+#define CHECK(name, cond) do { bool ok_ = (cond); Serial.printf("%s  %s\n", ok_ ? "PASS" : "FAIL", name); ok_ ? saved->passed++ : saved->failed++; } while (0)
+#define SKIP(name, why) do { Serial.printf("SKIP  %s (%s)\n", name, why); saved->skipped++; } while (0)
 
 // External RAM on the data bus: classic ESP32 0x3F800000-0x3FC00000, ESP32-S3 0x3C000000-0x3E000000,
 // ESP32-C5 0x42000000-0x44000000 (heap pointers on the other chips never fall in these ranges).
@@ -27,22 +51,16 @@ Ticker ticker;
 volatile uint32_t tick_count;
 void on_tick() { tick_count++; }
 
-void setup()
+static void check_memory()
 {
-    Serial.begin(115200);
-    delay(300);
-    Serial.println("\n--- selftest ---");
-
-    // PSRAM (skipped on boards without it)
     uint32_t ps = ESP.getPsramSize();
     Serial.printf("psram size %u, free %u\n", (unsigned)ps, (unsigned)ESP.getFreePsram());
     void *m10k = malloc(10000), *m100 = malloc(100);
-    Serial.printf("malloc(10000)=%p malloc(100)=%p\n", m10k, m100);
     CHECK("malloc(10000) and malloc(100)", m10k && m100);
     CHECK("malloc(100) stays internal", m100 && !in_psram(m100));
     if (!psramFound()) {
         CHECK("no PSRAM: ps_malloc returns NULL", ps_malloc(1000) == nullptr);
-        Serial.println("SKIP  PSRAM checks (this board has no PSRAM)");
+        SKIP("PSRAM checks", "this board has no PSRAM");
     } else {
         CHECK("PSRAM is 2 MB or more", ps >= 2 * 1024 * 1024 - 65536);
         CHECK("malloc(10000) goes to PSRAM", in_psram(m10k));
@@ -63,59 +81,129 @@ void setup()
         CHECK("ps_realloc", pc && in_psram(pc));
         free(pc);
     }
-    free(m10k); free(m100);
+    free(m10k);
+    free(m100);
+}
 
-    // Strings / numbers
+static void check_basics()
+{
     CHECK("String(12345)", String(12345) == "12345");
     CHECK("String(-7)", String(-7) == "-7");
     CHECK("String(3.5, 2)", String(3.5, 2) == "3.50");
-    randomSeed(1);
+    CHECK("String from F()", String(F("flash")) == "flash");
+    CHECK("sqrt/pow (libm)", fabs(sqrt(2.0) * sqrt(2.0) - 2.0) < 1e-9 && pow(2.0, 10) == 1024.0);
     long r = random(1000);
     CHECK("random(1000) in range", r >= 0 && r < 1000);
-
-    // Time (SDK)
     struct tm tm = {};
     tm.tm_year = 2026 - 1900; tm.tm_mon = 9; tm.tm_mday = 21; tm.tm_hour = 12;
     time_t t = mktime(&tm);
     struct tm back;
     gmtime_r(&t, &back);
     CHECK("mktime/gmtime round trip", back.tm_year == 126 && back.tm_mon == 9 && back.tm_mday == 21 && back.tm_hour == 12);
+    float temp = temperatureRead();
+    if (isnan(temp)) {
+        SKIP("chip temperature", "no sensor on this chip");
+    } else {
+        Serial.printf("chip temperature %.1f C\n", temp);
+        CHECK("chip temperature plausible", temp > -20 && temp < 100);
+    }
+    Serial.printf("reset reason %d\n", (int)esp_reset_reason());
+}
 
-    // Preferences (NVS)
+static void check_storage()
+{
     Preferences prefs;
     prefs.begin("selftest");
-    uint32_t n = prefs.getUInt("boots", 0) + 1;
-    prefs.putUInt("boots", n);
-    CHECK("Preferences write/read", prefs.getUInt("boots", 0) == n);
+    saved->nvs_value = prefs.getUInt("boots", 0) + 1;
+    prefs.putUInt("boots", saved->nvs_value);
+    CHECK("Preferences write/read", prefs.getUInt("boots", 0) == saved->nvs_value);
     prefs.putString("s", "hello");
     CHECK("Preferences string", prefs.getString("s") == "hello");
     prefs.end();
-    Serial.printf("boots counted in NVS: %u\n", (unsigned)n);
 
-    // LittleFS on the resized partition
     bool mounted = LittleFS.begin(true);
     CHECK("LittleFS mount (format if needed)", mounted);
     if (mounted) {
         Serial.printf("LittleFS total %u used %u\n", (unsigned)LittleFS.totalBytes(), (unsigned)LittleFS.usedBytes());
         CHECK("LittleFS has over 1 MB", LittleFS.totalBytes() > 1000000);
         File f = LittleFS.open("/t.txt", FILE_WRITE);
-        f.print("baseline idf");
+        f.print("baseline selftest");
         f.close();
         f = LittleFS.open("/t.txt");
         String s = f.readString();
         f.close();
-        CHECK("LittleFS write/read", s == "baseline idf");
+        CHECK("LittleFS write/read", s == "baseline selftest");
     }
 
-    // Timers
+#if (defined(BL_BOARD_SD_CS) && BL_BOARD_SD_CS >= 0) || BL_SD_DEFAULT_BUS == 1
+    bool sd = BL_SD_DEFAULT_BUS == 1 ? SD_MMC.begin() : SD.begin();
+    if (!sd) {
+        SKIP("microSD", "no card in the slot, or it could not be mounted");
+    } else {
+        uint64_t total = BL_SD_DEFAULT_BUS == 1 ? SD_MMC.totalBytes() : SD.totalBytes();
+        Serial.printf("microSD %llu MB\n", (unsigned long long)(total >> 20));
+        CHECK("microSD mounted", total > 0);
+    }
+#else
+    SKIP("microSD", "this board has no slot");
+#endif
+}
+
+static void check_timers()
+{
     tick_count = 0;
     ticker.attach_ms(50, on_tick);
     delay(1000);
     ticker.detach();
     Serial.printf("ticker fired %u times in 1 s (expect ~20)\n", (unsigned)tick_count);
     CHECK("Ticker 50 ms", tick_count >= 17 && tick_count <= 22);
+}
 
-    // WiFi
+static void check_i2c()
+{
+    Wire.begin();
+    Serial.print("Qwiic/I2C bus:");
+    int found = 0;
+    for (uint8_t a = 1; a < 127; a++) {
+        Wire.beginTransmission(a);
+        if (Wire.endTransmission() == 0) {
+            Serial.printf(" 0x%02X", a);
+            found++;
+        }
+    }
+    Serial.printf(" (%d device%s)\n", found, found == 1 ? "" : "s");
+#ifdef BL_BOARD_FUEL_GAUGE_ADDR
+    Wire.beginTransmission(BL_BOARD_FUEL_GAUGE_ADDR);
+    CHECK("on-board fuel gauge answers on I2C", Wire.endTransmission() == 0);
+#else
+    SKIP("on-board I2C device", "this board has none listed in bl_board.h");
+#endif
+}
+
+static void check_leds()
+{
+    Serial.println("LOOK  status LED blinks 3 times");
+    pinMode(LED_BUILTIN, OUTPUT);
+    for (int i = 0; i < 3; i++) {
+        digitalWrite(LED_BUILTIN, HIGH);
+        delay(150);
+        digitalWrite(LED_BUILTIN, LOW);
+        delay(150);
+    }
+#ifdef RGB_BUILTIN
+    Serial.println("LOOK  RGB LED shows red, green, blue");
+    rgbLedWrite(RGB_BUILTIN, 32, 0, 0);
+    delay(300);
+    rgbLedWrite(RGB_BUILTIN, 0, 32, 0);
+    delay(300);
+    rgbLedWrite(RGB_BUILTIN, 0, 0, 32);
+    delay(300);
+    rgbLedWrite(RGB_BUILTIN, 0, 0, 0);
+#endif
+}
+
+static void check_radios()
+{
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     int nets = WiFi.scanNetworks();
@@ -123,7 +211,30 @@ void setup()
     CHECK("WiFi scan", nets > 0);
     WiFi.scanDelete();
 
-    // BLE
+#ifdef WIFI_SSID
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    uint32_t start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+        delay(100);
+    }
+    bool up = WiFi.status() == WL_CONNECTED;
+    CHECK("WiFi connects to " WIFI_SSID, up);
+    if (up) {
+        configTime(0, 0, "pool.ntp.org");
+        struct tm now;
+        CHECK("NTP time", getLocalTime(&now, 10000) && now.tm_year > 124);
+        HTTPClient http;
+        http.begin("http://example.com/");
+        int code = http.GET();
+        Serial.printf("HTTP GET example.com: %d\n", code);
+        CHECK("HTTP GET", code == 200);
+        http.end();
+    }
+    WiFi.disconnect();
+#else
+    SKIP("WiFi connect, NTP, HTTP", "no WIFI_SSID (put it in secrets.cfg)");
+#endif
+
     BLEDevice::init("selftest");
     BLEScan *scan = BLEDevice::getScan();
     scan->setActiveScan(true);
@@ -132,9 +243,47 @@ void setup()
     Serial.printf("BLE scan: %d devices\n", ble);
     CHECK("BLE scan", ble >= 0);
     scan->clearResults();
-
-    Serial.printf("heap free %u, psram free %u\n", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
-    Serial.printf("RESULT: %d passed, %d failed\n", passed, failed);
 }
 
-void loop() { delay(1000); }
+void setup()
+{
+    Serial.begin(115200);
+    delay(300);
+    uint32_t size = 0;
+    saved = (Saved *)bl_rtc_memory(&size);
+
+    if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER && saved->magic == MAGIC) {
+        delay(3000);    // native-USB boards reappear on the computer after waking: give it time
+        Serial.println("\n--- selftest, after deep sleep ---");
+        CHECK("woke from deep sleep on the timer", true);
+        CHECK("RTC memory kept through deep sleep", saved->magic == MAGIC);
+        Preferences prefs;
+        prefs.begin("selftest", true);
+        CHECK("Preferences kept through deep sleep", prefs.getUInt("boots", 0) == saved->nvs_value);
+        prefs.end();
+    } else {
+        Serial.println("\n--- selftest ---");
+        memset(saved, 0, sizeof(*saved));
+        check_memory();
+        check_basics();
+        check_storage();
+        check_timers();
+        check_i2c();
+        check_leds();
+        check_radios();
+        saved->magic = MAGIC;
+        Serial.println("deep sleep for 2 s...");
+        delay(100);
+        esp_sleep_enable_timer_wakeup(2000000);
+        esp_deep_sleep_start();
+    }
+    saved->magic = 0;
+    Serial.printf("heap free %u, psram free %u\n", (unsigned)ESP.getFreeHeap(), (unsigned)ESP.getFreePsram());
+}
+
+void loop()
+{
+    // Repeated, so a console that reconnects late (after the deep sleep) still sees it.
+    Serial.printf("RESULT: %d passed, %d failed, %d skipped\n", saved->passed, saved->failed, saved->skipped);
+    delay(2000);
+}

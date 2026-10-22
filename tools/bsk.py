@@ -9,6 +9,7 @@
   bsk monitor                       serial console (Ctrl+C to quit)
   bsk info                          ask Baseline for its version / ABI / chip / target / active slot
   bsk safe                          reboot Baseline into safe mode (sketch not started)
+  bsk test                          bring-up test of the plugged-in board (selftest, rollback, watchdog)
   bsk baseline build -t TARGET      compile a Baseline blob -> dist/<target>/baseline-<target>.bin
   bsk baseline flash -t TARGET      compile and flash Baseline (rarely needed)
 
@@ -167,6 +168,22 @@ void loop()
 """
 
 
+def secret_defines():
+    """-DKEY="value" for each KEY = value in secrets.cfg (repo root, or $BSK_SECRETS).
+    Keeps WiFi passwords and API keys out of sketches: #ifdef WIFI_SSID ... in code."""
+    f = Path(os.environ.get("BSK_SECRETS") or ROOT / "secrets.cfg")
+    out = []
+    if f.exists():
+        for line in f.read_text().splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                k, v = (x.strip() for x in line.split("=", 1))
+                if re.fullmatch(r"[A-Z_][A-Z0-9_]*", k):
+                    v = v.replace("\\", "\\\\").replace('"', '\\"')
+                    out.append(f'-D{k}="{v}"')
+    return out
+
+
 def load_config(proj):
     """Name defaults to the folder name. An optional sketch.cfg may set
     `name = ...`, `stack = <bytes>` and `target = <target>`."""
@@ -197,6 +214,191 @@ def cmd_new(args):
 
 ARDUINO_BENCH = ROOT / "benchmarks" / "arduino"
 
+# Seen by sketches and libraries, like an Arduino-ESP32 build. Libraries test
+# these to pick their ESP32 code paths.
+PLATFORM_DEFINES = ["-DARDUINO=10812", "-DARDUINO_ARCH_ESP32", "-DESP32"]
+
+# ---------------------------------------------------------------- .ino prototypes
+# Like the Arduino IDE, declare the functions a .ino defines, so they can be
+# called before their definition. The declarations go just before the first
+# function definition (after the sketch's own types), and #line keeps compiler
+# messages pointing at the original file.
+
+PROTO_KEYWORDS = {"if", "for", "while", "switch", "return", "else", "do", "sizeof", "catch"}
+PROTO_DECLARED = {"setup", "loop", "teardown"}      # baseline.h declares these
+FUNC_DEF_RE = re.compile(r"(?:^|[;}\n])\s*((?:[A-Za-z_][\w:<>,\*&\s]*?[\s\*&])?([A-Za-z_]\w*)\s*\(([^;{}()]*)\)\s*(?:const\s*)?)\{")
+
+
+def _blank_comments_and_strings(text):
+    """Comments, string and char literals, and preprocessor lines replaced by
+    spaces (newlines kept), so offsets still match the original text."""
+    out = list(text)
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+        if text.startswith("//", i) or (c == "#" and (i == 0 or text[i - 1] == "\n" or text[:i].rstrip(" \t").endswith("\n"))):
+            j = i
+            while j < n and text[j] != "\n":
+                if text[j] == "\\" and j + 1 < n and text[j + 1] == "\n":
+                    j += 1          # continued line
+                j += 1
+            for k in range(i, j):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j
+        elif text.startswith("/*", i):
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            for k in range(i, j):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j
+        elif c in "\"'":
+            j = i + 1
+            while j < n and text[j] != c and text[j] != "\n":
+                j += 2 if text[j] == "\\" else 1
+            for k in range(i, min(j + 1, n)):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j + 1
+        else:
+            i += 1
+    return "".join(out)
+
+
+def ino_with_prototypes(src):
+    """The .ino's text with prototypes added, or None if it needs none."""
+    text = src.read_text(errors="ignore")
+    clean = _blank_comments_and_strings(text)
+    # Top level only: blank out everything inside braces (keeping the braces).
+    flat, depth = [], 0
+    for ch in clean:
+        if ch == "{":
+            flat.append(ch if depth == 0 else " ")
+            depth += 1
+        elif ch == "}":
+            depth = max(0, depth - 1)
+            flat.append(ch if depth == 0 else " ")
+        else:
+            flat.append(ch if depth == 0 or ch == "\n" else " ")
+    flat = "".join(flat)
+    protos, first = [], None
+    for m in FUNC_DEF_RE.finditer(flat):
+        sig, name, args = m.group(1), m.group(2), m.group(3)
+        head = sig[: sig.rfind(name)].strip()
+        if name in PROTO_KEYWORDS or not head or re.search(r"\b(class|struct|enum|union|namespace|template|operator)\b|\[", sig):
+            continue
+        if first is None:
+            first = m.start(1)          # prototypes go before the first function, even setup()
+        if name in PROTO_DECLARED or "=" in args:
+            continue                    # already declared / default arguments may not be repeated
+        protos.append(" ".join(sig.split()) + ";")
+    if not protos:
+        return None
+    line = text.count("\n", 0, first) + 1
+    # Insert at the start of the line that holds the first definition.
+    cut = text.rfind("\n", 0, first) + 1
+    name = src.as_posix()
+    return (f'#line 1 "{name}"\n' + text[:cut] + "\n".join(protos) + "\n" +
+            f'#line {line} "{name}"\n' + text[cut:])
+
+
+# ---------------------------------------------------------------- Arduino libraries
+# Sketches can use ordinary Arduino libraries (SparkFun Qwiic drivers, ArduinoJson,
+# ...). Like the Arduino builder, bsk follows #include lines: a header that is not
+# in the sketch or the SDK selects the library that provides it, whose sources are
+# compiled into the sketch, and its own #includes are followed in turn.
+
+INCLUDE_RE = re.compile(r'^[ \t]*#[ \t]*include[ \t]*[<"]([^>"]+)[>"]', re.M)
+LIB_SKIP_DIRS = {"examples", "extras", "test", "tests", "docs", "doc", ".git", ".github", ".development"}
+
+
+def arduino_user_dirs():
+    """Sketchbook folders from the Arduino configs we know about, then the default."""
+    dirs = []
+    cfgs = [Path.home() / ".arduinoIDE" / "arduino-cli.yaml"]
+    if os.environ.get("LOCALAPPDATA"):
+        cfgs.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15" / "arduino-cli.yaml")
+    cli = shutil.which("arduino-cli") or os.environ.get("BSK_ARDUINO_CLI")
+    if cli:
+        cfgs.append(Path(cli).parent / "arduino-cli.yaml")
+    for cfg in cfgs:
+        if cfg.exists():
+            for line in cfg.read_text(errors="ignore").splitlines():
+                if line.strip().startswith("user:"):
+                    dirs.append(Path(line.split(":", 1)[1].strip()))
+    dirs.append(Path.home() / "Documents" / "Arduino")
+    return dirs
+
+
+def library_roots(proj):
+    roots = [proj / "libraries"]
+    roots += [Path(p) for p in os.environ.get("BSK_LIBRARIES", "").split(os.pathsep) if p]
+    roots += [d / "libraries" for d in arduino_user_dirs()]
+    seen, out = set(), []
+    for r in roots:
+        if r.is_dir() and r.resolve() not in seen:
+            seen.add(r.resolve())
+            out.append(r)
+    return out
+
+
+def lib_src_dirs(lib):
+    """Include folders of a library: src/ (1.5 format), else the root (+ utility/)."""
+    if (lib / "src").is_dir():
+        return [lib / "src"]
+    return [lib] + ([lib / "utility"] if (lib / "utility").is_dir() else [])
+
+
+def lib_files(lib):
+    """Every source and header of a library, skipping examples, tests and docs."""
+    if (lib / "src").is_dir():
+        found = [f for f in (lib / "src").rglob("*")
+                 if f.is_file() and not LIB_SKIP_DIRS.intersection(f.relative_to(lib).parts)]
+    else:
+        found = [f for f in lib.iterdir() if f.is_file()]
+        if (lib / "utility").is_dir():
+            found += [f for f in (lib / "utility").rglob("*") if f.is_file()]
+    return [f for f in found if f.suffix in (".c", ".cpp", ".h", ".hpp")]
+
+
+def index_libraries(roots):
+    """header path (as #included) -> library folder; earlier roots win."""
+    idx = {}
+    for root in roots:
+        for lib in sorted(p for p in root.iterdir() if p.is_dir()):
+            for d in lib_src_dirs(lib):
+                for h in d.rglob("*.h*"):
+                    if h.suffix in (".h", ".hpp") and not LIB_SKIP_DIRS.intersection(h.relative_to(lib).parts):
+                        idx.setdefault(h.relative_to(d).as_posix(), lib)
+    return idx
+
+
+def resolve_libraries(proj, sources, include_dirs):
+    """The libraries the sketch needs, in discovery order."""
+    roots = library_roots(proj)
+    if not roots:
+        return []
+    idx = None
+    libs, known = [], list(include_dirs)
+    queue, seen = list(sources), set()
+    while queue:
+        f = queue.pop()
+        if f in seen:
+            continue
+        seen.add(f)
+        for name in INCLUDE_RE.findall(f.read_text(errors="ignore")):
+            if (f.parent / name).exists() or any((d / name).exists() for d in known):
+                continue
+            if idx is None:
+                idx = index_libraries(roots)
+            lib = idx.get(name)
+            if lib and lib not in libs:
+                libs.append(lib)
+                known += lib_src_dirs(lib)
+                queue += lib_files(lib)
+    return libs
+
 
 def build(proj, target_name=None):
     proj = Path(proj).resolve()
@@ -218,13 +420,14 @@ def build(proj, target_name=None):
     gcc = find_gcc(target)
     t0 = time.time()
 
-    inc = ["-I", str(SDK / "include"), "-I", str(SDK / "include" / "compat")]
-    for sdk_dir in target["sdk_dirs"]:
-        inc += ["-I", str(sdk_dir)]
-    inc += ["-I", str(proj)]
-    defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}"]
+    base_dirs = [SDK / "include", SDK / "include" / "compat", *target["sdk_dirs"], proj]
+    libs = resolve_libraries(proj, user, base_dirs)
+    inc = []
+    for d in base_dirs + [d for lib in libs for d in lib_src_dirs(lib)]:
+        inc += ["-I", str(d)]
+    defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
 
-    def compile_one(src, obj, extra_defs=()):
+    def compile_one(src, obj, extra_defs=(), quiet=False):
         if src.suffix == ".ino":
             # Like Arduino: C++, with the core header included automatically.
             lang = ["-x", "c++", *CXXFLAGS, "-include", "baseline.h"]
@@ -232,13 +435,36 @@ def build(proj, target_name=None):
             lang = CXXFLAGS
         else:
             lang = CFLAGS
-        run([gcc, *lang, *target["cflags"], *inc, *extra_defs, "-c", str(src), "-o", str(obj)])
+        obj.parent.mkdir(parents=True, exist_ok=True)
+        run([gcc, *lang, *target["cflags"], *PLATFORM_DEFINES, *inc, *extra_defs,
+             *(["-w"] if quiet else []), "-c", str(src), "-o", str(obj)])
 
     objs = []
     for src in user + [SDK / "src" / "sketch_crt.c"]:     # crt carries the sketch's name/stack
         obj = out / (src.name + ".o")
+        if src.suffix == ".ino":
+            with_protos = ino_with_prototypes(src)
+            if with_protos is not None:
+                gen = out / (src.name + ".cpp")
+                gen.write_text(with_protos)
+                compile_one(gen, obj, ["-include", "baseline.h", *defs])
+                objs.append(str(obj))
+                continue
         compile_one(src, obj, defs)
         objs.append(str(obj))
+    # Libraries: compiled into build/<target>/libs/<library>/, and only again when a
+    # file of that library (or the SDK/bsk) changes. Their warnings are not shown.
+    sdk_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"), Path(__file__)])
+    for lib in libs:
+        files = lib_files(lib)
+        lib_dep = max([sdk_dep] + [f.stat().st_mtime for f in files])
+        for src in (f for f in files if f.suffix in (".c", ".cpp")):
+            obj = out / "libs" / lib.name / (src.relative_to(lib).as_posix().replace("/", "__") + ".o")
+            if not obj.exists() or obj.stat().st_mtime < lib_dep:
+                compile_one(src, obj, quiet=True)
+            objs.append(str(obj))
+    if libs:
+        print("libraries: " + ", ".join(lib.name for lib in libs))
     # The C library shim, C++ runtime and Arduino-style objects are the same for
     # every sketch: compile them once per target into sdk/build/<target> and reuse them.
     cache = SDK / "build" / target["name"]
@@ -250,7 +476,8 @@ def build(proj, target_name=None):
     shared = ["sketch_libc.c", "sketch_time.c", *target["sdk_sources"]] + (
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
-         "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp"] if cxx else [])
+         "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp",
+         "sketch_extras.cpp"] if cxx else [])
     for name in shared:
         src = SDK / "src" / name
         obj = cache / (name + ".o")
@@ -263,10 +490,13 @@ def build(proj, target_name=None):
          str(ROOT / target["linker_script"]), "-o", str(ld)])
 
     elf = out / (cfg["name"] + ".elf")
-    run([gcc, *target.get("ldflags", []), "-nostdlib", "-nostartfiles",
+    # -fno-rtti picks the toolchain's no-rtti multilib, matching how sketches compile.
+    # libstdc++ supplies the out-of-line parts of std::string, std::map, ...; the
+    # SDK supplies operator new/delete and the std::__throw_* hooks (no exceptions).
+    run([gcc, *target.get("ldflags", []), "-fno-rtti", "-nostdlib", "-nostartfiles",
          "-T", str(ld), "-T", str(target["chip_dir"] / "sdk" / "rom.ld"),
          "-Wl,--gc-sections", "-Wl,--no-undefined", "-Wl,-Map," + str(out / (cfg["name"] + ".map")),
-         *objs, "-lgcc", "-o", str(elf)])
+         *objs, "-Wl,--start-group", "-lstdc++", "-lm", "-lgcc", "-Wl,--end-group", "-o", str(elf)])
 
     image = make_image(elf.read_bytes(), target)
     bsk = out / (cfg["name"] + ".bsk")
@@ -377,6 +607,43 @@ def open_port(port, baud):
     return s
 
 
+# Baud rates Baseline's console may use on a USB-serial chip, fastest first:
+# 921600 (classic ESP32 Baselines from ABI 1.6) and 115200 (older ones). Native
+# USB ports ignore the baud rate.
+CONSOLE_BAUDS = (921600, 115200)
+_baud_cache = {}
+
+
+def is_native_usb_port(port):
+    serial = import_serial()
+    return any(p.device == port and p.vid == ESPRESSIF_VID for p in serial.tools.list_ports.comports())
+
+
+def console_baud(port, baud=None):
+    """The baud rate to talk to Baseline on this port: the one given, or found
+    by asking at each of CONSOLE_BAUDS until Baseline answers."""
+    if baud:
+        return baud
+    if port in _baud_cache:
+        return _baud_cache[port]
+    if is_native_usb_port(port):
+        return CONSOLE_BAUDS[-1]
+    for b in CONSOLE_BAUDS:
+        try:
+            with open_port(port, b) as s:
+                s.reset_input_buffer()
+                s.write(f"{PROTO_PREFIX} INFO\n".encode())
+                deadline, buf = time.time() + 1.0, b""
+                while time.time() < deadline:
+                    buf += s.read(s.in_waiting or 1)
+                    if f"{PROTO_PREFIX} OK".encode() in buf:
+                        _baud_cache[port] = b
+                        return b
+        except OSError:
+            break
+    return CONSOLE_BAUDS[0]     # nothing answered (no Baseline yet, or it is busy): assume the current one
+
+
 OTA_PORT = 3232
 
 
@@ -431,6 +698,7 @@ def open_link_port(args):
         conn = NetPort(args.host, args.password or os.environ.get("BSK_OTA_PASSWORD"))
         return conn.port, conn
     port = find_port(args.port)
+    args.baud = console_baud(port, args.baud)
     return port, open_port(port, args.baud)
 
 
@@ -482,7 +750,8 @@ def cmd_info(args):
 
 
 def cmd_safe(args):
-    with open_port(find_port(args.port), args.baud) as s:
+    port = find_port(args.port)
+    with open_port(port, console_baud(port, args.baud)) as s:
         Link(s).request("SAFE")
         print("rebooting into safe mode")
 
@@ -507,19 +776,128 @@ def cmd_upload(args):
         board = LEGACY_TARGETS.get(board, board)
         if args.target and args.target != board:
             sys.exit(f"error: the board runs the {board} Baseline, not {args.target}")
-        image = build(args.dir, board).read_bytes()
-        digest = hashlib.sha256(image).hexdigest()
-        t0 = time.time()
-        link.request(f"BEGIN {len(image)} {digest}", timeout=15)   # erases the slot
-        for off in range(0, len(image), CHUNK):
-            data = base64.b64encode(image[off:off + CHUNK]).decode()
-            link.request(f"DATA {off} {data}")
-            print(f"\r  {min(off + CHUNK, len(image))}/{len(image)} bytes", end="", flush=True)
-        print()
-        print("installed:", link.request("END", timeout=10))
-        print(f"upload took {time.time() - t0:.2f}s")
+        send_image(link, build(args.dir, board).read_bytes())
         if args.monitor:
             monitor(s, port, args.baud, link, follow=not args.port)
+
+
+def send_image(link, image, quiet=False):
+    """Upload a .bsk image over an open link; Baseline installs it and reboots."""
+    digest = hashlib.sha256(image).hexdigest()
+    t0 = time.time()
+    link.request(f"BEGIN {len(image)} {digest}", timeout=15)   # erases the slot
+    for off in range(0, len(image), CHUNK):
+        data = base64.b64encode(image[off:off + CHUNK]).decode()
+        link.request(f"DATA {off} {data}")
+        if not quiet:
+            print(f"\r  {min(off + CHUNK, len(image))}/{len(image)} bytes", end="", flush=True)
+    if not quiet:
+        print()
+    installed = link.request("END", timeout=10)
+    if not quiet:
+        print("installed:", installed)
+        print(f"upload took {time.time() - t0:.2f}s")
+    return installed
+
+
+# ---------------------------------------------------------------- bsk test
+
+TESTS = ROOT / "tools" / "tests"
+
+
+def board_request(port, baud, line, attempts=40):
+    """Send one loader command, waiting for the board to (re)appear."""
+    serial = import_serial()
+    for _ in range(attempts):
+        try:
+            with open_port(port, baud) as s:
+                link = Link(s, echo=False)
+                try:
+                    return link.request(line, timeout=3)
+                except SystemExit:
+                    pass
+        except (serial.SerialException, OSError):
+            pass
+        time.sleep(0.5)
+    sys.exit(f"error: no reply from {port} to {line}")
+
+
+def capture_console(port, baud, until, timeout):
+    """Console text until a line containing `until`, following the port across reboots."""
+    serial = import_serial()
+    out, deadline, s = b"", time.time() + timeout, None
+    while time.time() < deadline:
+        try:
+            if s is None:
+                s = open_port(port, baud)
+            out += s.read(s.in_waiting or 1)
+            if until.encode() in out and out.endswith(b"\n"):
+                break
+        except (serial.SerialException, OSError):
+            if s:
+                s.close()
+            s = None
+            time.sleep(0.3)
+    if s:
+        s.close()
+    return out.decode(errors="replace")
+
+
+def upload_dir(port, baud, proj, target):
+    image = build(proj, target).read_bytes()
+    with open_port(port, baud) as s:
+        return send_image(Link(s, echo=False), image, quiet=True)
+
+
+def cmd_test(args):
+    """Bring-up test: selftest (with a deep sleep), crash rollback, watchdog rollback."""
+    port = find_port(args.port)
+    baud = console_baud(port, args.baud)
+    fields = info_fields(board_request(port, baud, "INFO"))
+    target = LEGACY_TARGETS.get(fields.get("target") or fields.get("chip"), fields.get("target") or fields.get("chip"))
+    print(f"testing {target} on {port}: Baseline {fields.get('baseline')} ABI {fields.get('abi')}")
+    board_request(port, baud, "CRASHCLEAR")
+    rows = []           # (check, PASS/FAIL/SKIP/LOOK, detail)
+
+    print("1/3 selftest (about a minute, including a 2 s deep sleep)...")
+    upload_dir(port, baud, ROOT / "examples" / "selftest", target)
+    text = capture_console(port, baud, "RESULT:", 180)
+    for line in text.splitlines():
+        m = re.match(r"^(PASS|FAIL|SKIP|LOOK)  (.*)$", line.strip())
+        if m:
+            rows.append((m.group(2), m.group(1), ""))
+    result = re.search(r"RESULT: (\d+) passed, (\d+) failed", text)
+    if not result:
+        rows.append(("selftest finished", "FAIL", "no RESULT line within 3 minutes"))
+        print(text[-2000:])
+
+    print("2/3 crash rollback...")
+    upload_dir(port, baud, TESTS / "crash_test", target)
+    time.sleep(4)
+    f = info_fields(board_request(port, baud, "INFO"))
+    rows.append(("crash in setup() rolls back to selftest", "PASS" if f.get("sketch") == "selftest" else "FAIL",
+                 f"running {f.get('sketch')}"))
+    rows.append(("crash recorded (INFO crash=)", "PASS" if f.get("crash", '"-"') != '"-"' else "FAIL",
+                 f.get("crash", "").strip('"')[:80]))
+
+    print("3/3 watchdog rollback (about 15 s)...")
+    board_request(port, baud, "CRASHCLEAR")
+    upload_dir(port, baud, TESTS / "hang_test", target)
+    time.sleep(12)
+    f = info_fields(board_request(port, baud, "INFO"))
+    rows.append(("hung loop() caught by the watchdog, rolls back", "PASS" if f.get("sketch") == "selftest" else "FAIL",
+                 f"running {f.get('sketch')}, reset={f.get('reset')}"))
+    board_request(port, baud, "CRASHCLEAR")
+
+    width = max(len(r[0]) for r in rows)
+    print()
+    for name, status, detail in rows:
+        print(f"  {status:4}  {name:{width}}  {detail}")
+    failed = sum(1 for r in rows if r[1] == "FAIL")
+    passed = sum(1 for r in rows if r[1] == "PASS")
+    print(f"\n{target}: {passed} passed, {failed} failed, {sum(1 for r in rows if r[1] == 'SKIP')} skipped"
+          + ("; check the LOOK items by eye" if any(r[1] == "LOOK" for r in rows) else ""))
+    sys.exit(1 if failed else 0)
 
 
 def board_ports():
@@ -569,7 +947,8 @@ def monitor(s, port, baud, link=None, follow=True):
 
 def cmd_monitor(args):
     port = find_port(args.port)
-    monitor(open_port(port, args.baud), port, args.baud, follow=not args.port)
+    baud = console_baud(port, args.baud)
+    monitor(open_port(port, baud), port, baud, follow=not args.port)
 
 
 # ---------------------------------------------------------------- baseline firmware
@@ -1001,8 +1380,13 @@ def main():
             p.add_argument("--host", help="upload over WiFi to NAME[.local][:port] (sketch must call ArduinoOTA.begin())")
             p.add_argument("--password", help="OTA password (or set BSK_OTA_PASSWORD)")
         p.add_argument("-p", "--port", help="serial port (default: the plugged-in board)")
-        p.add_argument("-b", "--baud", type=int, default=115200)
+        p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
         p.set_defaults(fn=fn)
+
+    p = sub.add_parser("test", help="bring-up test: selftest, crash and watchdog rollback")
+    p.add_argument("-p", "--port", help="serial port (default: the plugged-in board)")
+    p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
+    p.set_defaults(fn=cmd_test)
 
     p = sub.add_parser("baseline", help="build or flash a Baseline blob")
     p.add_argument("action", choices=["build", "flash"])

@@ -82,3 +82,19 @@ extern "C" void bl_impl_uart_flush(int port)
         u->flush();
     }
 }
+
+extern "C" int bl_impl_uart_set_rx_buffer(int port, size_t size)
+{
+    HardwareSerial *u = uart_of(port);
+    if (!u) {
+        return port == 2 ? BL_ERR_UNSUPPORTED : BL_ERR_ARG;
+    }
+    // Arduino only accepts this before begin(), and sizes above the hardware FIFO.
+    return u->setRxBufferSize(size) ? BL_OK : BL_ERR_FAIL;
+}
+
+extern "C" int bl_impl_uart_available_for_write(int port)
+{
+    HardwareSerial *u = uart_of(port);
+    return u ? u->availableForWrite() : 0;
+}

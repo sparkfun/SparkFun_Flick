@@ -20,12 +20,19 @@
 #define BL_BOARD_SDA            21          /* Qwiic */
 #define BL_BOARD_SCL            22
 #define BL_BOARD_A0             36
+#define BL_BOARD_A3             39
+#define BL_BOARD_A4             32
+#define BL_BOARD_A5             33
+#define BL_BOARD_A6             34
+#define BL_BOARD_A7             35
 #define BL_BOARD_SCK            18
 #define BL_BOARD_MISO           19
 #define BL_BOARD_MOSI           23
 #define BL_BOARD_SS             5
 #define BL_BOARD_SD_CS          5           /* microSD on SPI (assumed SS; check the schematic) */
 #define BL_BOARD_FUEL_GAUGE_ALERT 4         /* MAX17048 ALERT, when its jumper is closed */
+
+#define BL_BOARD_FUEL_GAUGE_ADDR 0x36        /* MAX17048 LiPo fuel gauge on the Qwiic bus */
 
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           (-1)        /* RX/TX on the header are UART0, the console */

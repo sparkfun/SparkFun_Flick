@@ -254,3 +254,6 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
+
+# bsk sketch secrets (WiFi passwords, keys)
+secrets.cfg

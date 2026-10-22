@@ -376,3 +376,28 @@ extern "C" int bl_impl_net_resolve(const char *host, uint32_t *ip)
     *ip = (uint32_t)addr;
     return BL_OK;
 }
+
+/* ---- WiFi/network events for WiFi.onEvent (ABI 1.6) ----
+ * Arduino's Network event task calls on_event(); the sketch takes the event
+ * numbers from the queue on its own task (the SDK's pump). Registered on the
+ * first call, which the SDK makes as soon as the sketch registers a callback. */
+static QueueHandle_t s_events;
+
+static void on_event(arduino_event_id_t event)
+{
+    int e = (int)event;
+    xQueueSend(s_events, &e, 0);    // full queue: the event is dropped
+}
+
+extern "C" int bl_impl_wifi_event_take(void)
+{
+    if (!s_events) {
+        s_events = xQueueCreate(16, sizeof(int));
+        if (!s_events) {
+            return -1;
+        }
+        Network.onEvent(on_event);
+    }
+    int e;
+    return xQueueReceive(s_events, &e, 0) == pdTRUE ? e : -1;
+}
