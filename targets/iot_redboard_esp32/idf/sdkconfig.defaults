@@ -18,3 +18,8 @@ CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_BT_BTC_TASK_STACK_SIZE=6144
 CONFIG_BT_BTU_TASK_STACK_SIZE=4352
 CONFIG_TIMER_TASK_STACK_SIZE=4096
+
+# microSD (FAT): mounting reserves a file object for each of the 8 files that
+# may be open, and with a per-file cache each holds a 4 KB sector buffer (~33 KB,
+# more than BLE can spare). Without it, open files share the volume's buffer.
+# CONFIG_FATFS_PER_FILE_CACHE is not set

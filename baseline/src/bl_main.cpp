@@ -10,6 +10,13 @@ void bl_main(void)
 {
     bl_console_init();
     bl_state_init();
+#ifdef BL_BOARD_EN_3V3_SW
+    // The board's switched 3.3 V rail (Qwiic and microSD on the DataLogger IoT)
+    // is off until driven high. Sketches may turn it off with digitalWrite();
+    // deep sleep lets it fall back to off.
+    pinMode(BL_BOARD_EN_3V3_SW, OUTPUT);
+    digitalWrite(BL_BOARD_EN_3V3_SW, HIGH);
+#endif
     bl_usb_boot(bl_state_safe_mode_reason() != NULL);     // USB device mode, if the sketch asked for it
 
     BLOG_I("Baseline %s, ABI %d.%d, %s (%s), reset reason %d, free heap %u",

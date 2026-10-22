@@ -105,11 +105,10 @@ static const char *check_header(const bl_sketch_header_t *h, uint32_t part_size)
 
 static const char *check_sha256(const esp_partition_t *p, const bl_sketch_header_t *h)
 {
-    const size_t chunk = 4096;
-    uint8_t *buf = malloc(chunk);
-    if (!buf) {
-        return "out of memory";
-    }
+    // On the stack, not the heap: an upload must verify even while the running
+    // sketch has used up the heap (WiFi + BLE + microSD on a board without PSRAM).
+    const size_t chunk = 512;
+    uint8_t buf[512];
     uint8_t digest[32];
     mbedtls_sha256_context ctx;
     mbedtls_sha256_init(&ctx);
@@ -128,7 +127,6 @@ static const char *check_sha256(const esp_partition_t *p, const bl_sketch_header
     }
     mbedtls_sha256_finish(&ctx, digest);
     mbedtls_sha256_free(&ctx);
-    free(buf);
     if (!err && memcmp(digest, h->sha256, 32) != 0) {
         err = "SHA-256 mismatch (corrupt image)";
     }

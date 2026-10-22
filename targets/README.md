@@ -34,7 +34,7 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `thing_plus_esp32` | esp32 | SparkFun Thing Plus - ESP32 WROOM (USB-C), the "Thing Plus C" | tested |
 | `rtk_postcard` | esp32 | SparkFun RTK Postcard (ESP32-PICO-MINI-02, LG290P GNSS) | chip tested; board pins from the docs |
 | `iot_redboard_esp32` | esp32 | SparkFun IoT RedBoard - ESP32 | not run on hardware |
-| `datalogger_iot` | esp32 | SparkFun DataLogger IoT (and 9DoF) | not run on hardware |
+| `datalogger_iot` | esp32 | SparkFun DataLogger IoT (and 9DoF) | `bsk test` passes on the base board (2026-10-22); 9DoF not run |
 | `thing_plus_esp32s3` | esp32s3 | SparkFun Thing Plus - ESP32-S3 | tested |
 | `pro_micro_esp32c3` | esp32c3 | SparkFun Pro Micro - ESP32-C3 | not run on hardware |
 | `qwiic_pocket_esp32c6` | esp32c6 | SparkFun Qwiic Pocket Development Board - ESP32-C6 | not run on hardware |
