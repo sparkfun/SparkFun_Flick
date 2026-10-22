@@ -2,7 +2,8 @@
  * bl_board.h - SparkFun Qwiic Pocket Development Board - ESP32-C6.
  * ESP32-C6 (RISC-V, single core, no PSRAM), 4 MB flash, native USB-C, Qwiic.
  * Pins: Arduino-ESP32's sparkfun_esp32c6_qwiic_pocket variant.
- * NOT YET CHECKED ON HARDWARE.
+ * Pins also from docs.sparkfun.com/SparkFun_Qwiic_Pocket_Dev_Board_ESP32_C6:
+ * STAT LED 23, Qwiic 6/7, battery voltage on GPIO 1 (divider x1.688), no fuel gauge.
  *
  * Board facts for a product target, included at the end of the chip's
  * bl_target.h: seen by Baseline (default pins) and by sketches. #defines only.
@@ -28,6 +29,9 @@
 #define BL_BOARD_MISO           4   /* POCI */
 #define BL_BOARD_MOSI           3   /* PICO */
 #define BL_BOARD_SS             2
+
+#define BL_BOARD_VBAT_ADC       1           /* LiPo voltage through a divider (MCP73831 charger) */
+#define BL_BOARD_VBAT_SCALE     1.688f      /* battery mV = analogReadMilliVolts(VBAT) x this */
 
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           17          /* the pins labeled RX/TX */

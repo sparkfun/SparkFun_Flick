@@ -3,8 +3,7 @@
  * ESP32-C3 (RISC-V, single core, no PSRAM), 4 MB flash, native USB-C, Qwiic.
  * Pins: Arduino-ESP32's sparkfun_pro_micro_esp32c3 variant.
  * NOT YET CHECKED ON HARDWARE.
- * Check whether the LED on GPIO 10 is a plain LED or a WS2812 (if WS2812,
- * add BL_BOARD_RGB_LED 10).
+ * The LED on GPIO 10 is a plain blue LED (checked on hardware 2026-10-22).
  *
  * Board facts for a product target, included at the end of the chip's
  * bl_target.h: seen by Baseline (default pins) and by sketches. #defines only.

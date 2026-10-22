@@ -178,6 +178,13 @@ static void check_i2c()
 #else
     SKIP("on-board I2C device", "this board has none listed in bl_board.h");
 #endif
+#ifdef BL_BOARD_VBAT_ADC
+    // Battery voltage through the board's divider (ADC check): a LiPo reads
+    // 3.0-4.3 V; with no battery the charger's output floats near 4.2 V.
+    int vbat = (int)(analogReadMilliVolts(BL_BOARD_VBAT_ADC) * BL_BOARD_VBAT_SCALE);
+    Serial.printf("battery %d mV (ADC GPIO %d)\n", vbat, BL_BOARD_VBAT_ADC);
+    CHECK("battery voltage via ADC plausible (3.0-4.4 V)", vbat >= 3000 && vbat <= 4400);
+#endif
 }
 
 static void check_leds()
