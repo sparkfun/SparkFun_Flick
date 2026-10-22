@@ -46,3 +46,6 @@ CONFIG_ARDUINO_SELECTIVE_AsyncUDP=y
 # The partition table is the target's partitions.csv (staged into main/).
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="main/partitions.csv"
+
+# Baseline has no BLE Mesh API; Arduino's base enables it (~6 KB of static RAM).
+# CONFIG_BLE_MESH is not set

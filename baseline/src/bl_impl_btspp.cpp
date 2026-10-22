@@ -5,6 +5,7 @@
 #include "sdkconfig.h"
 #include "gen/bl_impl.h"
 #include "sketch_loader.h"
+#include "bl_console.h"
 
 #if defined(CONFIG_BT_SPP_ENABLED)
 #include <BluetoothSerial.h>
@@ -17,6 +18,11 @@ extern "C" int bl_impl_bt_spp_begin(const char *name)
 {
     if (!s_bt) {
         s_bt = new BluetoothSerial();
+    }
+    if (!s_started && btMemReleased(BT_MODE_CLASSIC_BT)) {
+        // BLE started first and gave Bluetooth Classic's memory to the heap.
+        BLOG_E("Bluetooth Classic is unavailable after BLE has started; restart, then begin SPP first");
+        return BL_ERR_FAIL;
     }
     if (!s_started) {
         WdtPause wdt;   // starting the Bluetooth stack takes about a second

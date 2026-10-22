@@ -860,13 +860,19 @@ def cmd_test(args):
     rows = []           # (check, PASS/FAIL/SKIP/LOOK, detail)
 
     print("1/3 selftest (about a minute, including a 2 s deep sleep)...")
-    upload_dir(port, baud, ROOT / "examples" / "selftest", target)
-    text = capture_console(port, baud, "RESULT:", 180)
-    for line in text.splitlines():
-        m = re.match(r"^(PASS|FAIL|SKIP|LOOK)  (.*)$", line.strip())
-        if m:
-            rows.append((m.group(2), m.group(1), ""))
-    result = re.search(r"RESULT: (\d+) passed, (\d+) failed", text)
+    for attempt in range(2):
+        upload_dir(port, baud, ROOT / "examples" / "selftest", target)
+        text = capture_console(port, baud, "RESULT:", 180)
+        found = [m.groups() for m in re.finditer(r"^[ \t]*(PASS|FAIL|SKIP|LOOK)  (.*?)\s*$", text, re.M)]
+        result = re.search(r"RESULT: (\d+) passed, (\d+) failed", text)
+        # The selftest's own count covers both phases. Fewer PASS/FAIL lines
+        # than that means the capture missed console output (seen once on a
+        # CH340 right after an upload), so run the selftest again.
+        seen = sum(1 for status, _ in found if status in ("PASS", "FAIL"))
+        if not result or seen >= int(result.group(1)) + int(result.group(2)):
+            break
+        print(f"  saw {seen} of {int(result.group(1)) + int(result.group(2))} results on the console; running the selftest again")
+    rows += [(name, status, "") for status, name in found]
     if not result:
         rows.append(("selftest finished", "FAIL", "no RESULT line within 3 minutes"))
         print(text[-2000:])

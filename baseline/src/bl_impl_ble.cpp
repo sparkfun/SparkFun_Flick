@@ -83,6 +83,15 @@ static bool ensure_init(const char *name)
     if (!s_events) {
         s_events = xQueueCreate(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t));
     }
+#if CONFIG_BTDM_CTRL_MODE_BTDM
+    // Classic ESP32: if Bluetooth Classic (SPP) has not started, give its
+    // controller memory (~30 KB of internal RAM) back to the heap and run the
+    // controller BLE-only. Without PSRAM, Bluedroid does not fit next to WiFi
+    // otherwise. SPP then reports a failure until the next restart.
+    if (esp_bt_controller_get_status() == ESP_BT_CONTROLLER_STATUS_IDLE && !btMemReleased(BT_MODE_CLASSIC_BT)) {
+        btMemRelease(BT_MODE_CLASSIC_BT);
+    }
+#endif
     if (!s_events || !BLEDevice::init(name && *name ? name : "Baseline") || !BLEDevice::getInitialized()) {
         BLOG_E("BLE could not start (largest free internal block %u bytes)",
                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
