@@ -212,6 +212,8 @@ static void check_radios()
     WiFi.scanDelete();
 
 #ifdef WIFI_SSID
+    static volatile int got_ip;
+    WiFi.onEvent([](WiFiEvent_t) { got_ip++; }, ARDUINO_EVENT_WIFI_STA_GOT_IP);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     uint32_t start = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
@@ -219,6 +221,8 @@ static void check_radios()
     }
     bool up = WiFi.status() == WL_CONNECTED;
     CHECK("WiFi connects to " WIFI_SSID, up);
+    delay(200);     // lets the event callback run
+    CHECK("WiFi.onEvent saw GOT_IP", !up || got_ip > 0);
     if (up) {
         configTime(0, 0, "pool.ntp.org");
         struct tm now;
