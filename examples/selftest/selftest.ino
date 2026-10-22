@@ -182,13 +182,20 @@ static void check_i2c()
 
 static void check_leds()
 {
-    Serial.println("LOOK  status LED blinks 3 times");
-    pinMode(LED_BUILTIN, OUTPUT);
-    for (int i = 0; i < 3; i++) {
-        digitalWrite(LED_BUILTIN, HIGH);
-        delay(150);
-        digitalWrite(LED_BUILTIN, LOW);
-        delay(150);
+#if defined(RGB_BUILTIN)
+    const bool plain_led = LED_BUILTIN != RGB_BUILTIN;     // some boards' only LED is the RGB one
+#else
+    const bool plain_led = true;
+#endif
+    if (plain_led) {
+        Serial.println("LOOK  status LED blinks 3 times");
+        pinMode(LED_BUILTIN, OUTPUT);
+        for (int i = 0; i < 3; i++) {
+            digitalWrite(LED_BUILTIN, HIGH);
+            delay(150);
+            digitalWrite(LED_BUILTIN, LOW);
+            delay(150);
+        }
     }
 #ifdef RGB_BUILTIN
     Serial.println("LOOK  RGB LED shows red, green, blue");
