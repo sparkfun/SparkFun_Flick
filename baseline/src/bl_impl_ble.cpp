@@ -4,6 +4,7 @@
  * BLE callbacks run on the NimBLE host task; they only queue bl_ble_event_t
  * records, which the SDK's pump delivers to the sketch on the sketch task. */
 #include <Arduino.h>
+#include "esp_heap_caps.h"
 #include <atomic>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -13,6 +14,7 @@
 #include "freertos/stream_buffer.h"
 #include "freertos/queue.h"
 #include "gen/bl_impl.h"
+#include "bl_console.h"
 #include "bl_str.h"
 #include "sketch_loader.h"
 
@@ -69,16 +71,25 @@ static void push_data(uint8_t type, int handle, const uint8_t *data, size_t len,
     push_event(ev);
 }
 
-static void ensure_init(const char *name)
+/* Start the BLE stack once. Returns false if it could not start: typically
+ * not enough internal RAM, e.g. on a board without PSRAM after WiFi has taken
+ * its share. Every API entry checks this and returns BL_ERR_NO_MEM, so a
+ * sketch gets an error instead of a crash. A later call tries again. */
+static bool ensure_init(const char *name)
 {
     if (s_inited) {
-        return;
+        return true;
     }
     if (!s_events) {
         s_events = xQueueCreate(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t));
     }
-    BLEDevice::init(name && *name ? name : "Baseline");
+    if (!s_events || !BLEDevice::init(name && *name ? name : "Baseline") || !BLEDevice::getInitialized()) {
+        BLOG_E("BLE could not start (largest free internal block %u bytes)",
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+        return false;
+    }
     s_inited = true;
+    return true;
 }
 
 /* ---- BLE serial (NUS) state ---- */
@@ -124,7 +135,9 @@ static ServerCallbacks s_server_cb;
 
 static BLEServer *ensure_server()
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return NULL;
+    }
     if (!s_server) {
         s_server = BLEDevice::createServer();
         s_server->setCallbacks(&s_server_cb);
@@ -150,8 +163,12 @@ extern "C" int bl_impl_ble_serial_begin(const char *name)
     if (!s_nus_rx) {
         return BL_ERR_NO_MEM;
     }
-    ensure_init(name);
-    BLEServer *server = ensure_server();
+    BLEServer *server = ensure_init(name) ? ensure_server() : NULL;
+    if (!server) {
+        vStreamBufferDelete(s_nus_rx);
+        s_nus_rx = NULL;
+        return BL_ERR_NO_MEM;
+    }
     BLEService *svc = server->createService(NUS_SERVICE);
     s_nus_tx = svc->createCharacteristic(NUS_TX, BLECharacteristic::PROPERTY_NOTIFY);
 #if defined(CONFIG_BLUEDROID_ENABLED)
@@ -202,7 +219,9 @@ extern "C" int bl_impl_ble_serial_read(void)
 
 extern "C" int bl_impl_ble_init(const char *name)
 {
-    ensure_init(name);
+    if (!ensure_init(name)) {
+        return BL_ERR_NO_MEM;
+    }
     return BL_OK;
 }
 
@@ -222,7 +241,9 @@ extern "C" void bl_impl_ble_deinit(void)
 
 extern "C" int bl_impl_ble_address(char *buf, size_t size)
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     String a = BLEDevice::getAddress().toString();
     if (buf && size) {
         bl_copy_str(buf, size, a);
@@ -232,7 +253,9 @@ extern "C" int bl_impl_ble_address(char *buf, size_t size)
 
 extern "C" int bl_impl_ble_set_mtu(uint16_t mtu)
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     return BLEDevice::setMTU(mtu) == ESP_OK ? BL_OK : BL_ERR_FAIL;
 }
 
@@ -240,8 +263,7 @@ extern "C" int bl_impl_ble_set_mtu(uint16_t mtu)
 
 extern "C" int bl_impl_ble_server_create(void)
 {
-    ensure_server();
-    return 0;
+    return ensure_server() ? 0 : BL_ERR_NO_MEM;
 }
 
 extern "C" int bl_impl_ble_server_connected_count(void)
@@ -262,6 +284,9 @@ extern "C" int bl_impl_ble_service_create(const char *uuid, int num_handles)
         return BL_ERR_ARG;
     }
     BLEServer *server = ensure_server();
+    if (!server) {
+        return BL_ERR_NO_MEM;
+    }
     for (int h = 0; h < MAX_SERVICES; h++) {
         if (!s_services[h]) {
             s_services[h] = server->createService(BLEUUID(uuid), num_handles > 0 ? num_handles : 15, 0);
@@ -405,7 +430,9 @@ extern "C" int bl_impl_ble_char_add_descriptor(int ch, const char *uuid, const u
 
 extern "C" int bl_impl_ble_adv_config(int what, const char *text, const uint8_t *data, size_t value)
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     BLEAdvertising *adv = BLEDevice::getAdvertising();
     switch (what) {
     case BL_BLE_ADV_SERVICE_UUID:
@@ -443,7 +470,9 @@ extern "C" int bl_impl_ble_adv_config(int what, const char *text, const uint8_t 
 
 extern "C" int bl_impl_ble_adv_start(void)
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     BLEDevice::startAdvertising();
     return BL_OK;
 }
@@ -524,7 +553,9 @@ static void scan_complete(BLEScanResults)
 
 extern "C" int bl_impl_ble_scan_start(uint32_t seconds, int active, uint16_t interval_ms, uint16_t window_ms)
 {
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     BLEScan *scan = BLEDevice::getScan();
     // wantDuplicates = true: otherwise the BLE library keeps its own copy of
     // every device it hears for the whole scan, which runs the classic ESP32
@@ -626,7 +657,9 @@ extern "C" int bl_impl_ble_client_connect(const char *address, int addr_type)
     if (!address) {
         return BL_ERR_ARG;
     }
-    ensure_init(NULL);
+    if (!ensure_init(NULL)) {
+        return BL_ERR_NO_MEM;
+    }
     int h = -1;
     for (int i = 0; i < MAX_CLIENTS; i++) {
         if (!s_clients[i]) {

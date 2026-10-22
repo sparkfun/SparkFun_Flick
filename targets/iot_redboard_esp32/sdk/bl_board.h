@@ -1,9 +1,9 @@
 /*
  * bl_board.h - SparkFun IoT RedBoard - ESP32 (Arduino R3 form factor).
- * Classic ESP32, 4 MB flash, CH340G USB-serial, microSD, Qwiic, MAX17048.
+ * ESP32-D0WD-V3 (rev 3.1), 16 MB flash (esptool; Arduino's board file says 4 MB),
+ * CH340 USB-serial, microSD, Qwiic, MAX17048.
  * Pins: Arduino-ESP32's sparkfun_esp32_iot_redboard variant and the SparkFun
- * hookup guide. NOT YET CHECKED ON HARDWARE, nor that the chip is rev 3.0+
- * (the hookup guide names an ESP32-D0WDQ6; Baseline needs rev 3.0 or later).
+ * hookup guide.
  *
  * Board facts for a product target, included at the end of the chip's
  * bl_target.h: seen by Baseline (default pins) and by sketches. #defines only.

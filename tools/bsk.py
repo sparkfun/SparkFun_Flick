@@ -1349,6 +1349,11 @@ def cmd_baseline(args):
 # ---------------------------------------------------------------- main
 
 def main():
+    # Board output can hold bytes the terminal cannot show (the classic ESP32's
+    # ROM boot lines arrive at 115200 while the console runs at 921600).
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     ap = argparse.ArgumentParser(prog="bsk", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
