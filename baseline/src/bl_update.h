@@ -21,11 +21,11 @@ const char *bl_update_mode_name(void);
  * if the sketch must not start this boot. */
 bool bl_update_boot(void);
 
-/* Baseline push from bsk (loader commands UBEGIN/UDATA/UEND). kind is "app"
+/* Baseline push from flick (loader commands UBEGIN/UDATA/UEND). kind is "app"
  * (the raw app image, for two-slot boards) or "bsu" (the package, for staged
  * boards). Each returns NULL or an error text. bl_update_push_begin sets
  * *restart when the board must first restart into update mode (the reply
- * says so, and bsk sends again). After a successful end the caller restarts. */
+ * says so, and flick sends again). After a successful end the caller restarts. */
 const char *bl_update_push_begin(const char *kind, uint32_t size, const uint8_t sha256[32], bool via_wifi,
                                  bool *restart);
 const char *bl_update_push_data(const uint8_t *data, size_t len);

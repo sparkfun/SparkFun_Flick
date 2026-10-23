@@ -516,7 +516,7 @@ extern MDNSResponder MDNS;
 
 /* ---------------- ArduinoOTA ----------------
  * Baseline uploads sketches over WiFi (not firmware images like Arduino's OTA):
- *   python tools/bsk.py upload my_sketch --host NAME [--password PW]
+ *   python tools/flick.py upload my_sketch --host NAME [--password PW]
  * Baseline's own task receives the upload, so handle() has nothing to do, and
  * because the board reboots into the new sketch the onStart/onEnd/onProgress/
  * onError callbacks are accepted but never called. Call begin() once WiFi is
@@ -559,7 +559,7 @@ extern ArduinoOTAClass ArduinoOTA;
 /* ---------------- BaselineUpdate (ABI 1.7) ----------------
  * The board fetches its own updates over HTTP(S) (a GitHub release, your
  * server, or `python -m http.server` on your PC):
- *   BaselineUpdate.sketchFromUrl("http://server/my_sketch.bsk");
+ *   BaselineUpdate.sketchFromUrl("http://server/my_sketch.flick");
  *   BaselineUpdate.baselineFromUrl("http://server/baseline-<target>.bsu", sketchUrl);
  * Both restart the board on success and return only on failure (a BL_ERR_*
  * code; the console says why). A new sketch rolls back if it crashes on its
@@ -570,7 +570,7 @@ extern ArduinoOTAClass ArduinoOTA;
  *           LittleFS, so pass sketchUrl to have Baseline install a sketch
  *           afterwards;
  *         BL_UPDATE_NONE - over USB only.
- * The PC can push the same updates: bsk upload --host / bsk baseline update --host. */
+ * The PC can push the same updates: flick upload --host / flick baseline update --host. */
 class BaselineUpdateClass {
 public:
     int mode() { return bl_baseline_update_mode(); }

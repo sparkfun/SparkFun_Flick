@@ -1,9 +1,9 @@
 // wifi_ota.ino - update this board over WiFi from your PC: the sketch, and Baseline itself.
 //
 // Upload this once over USB. After that, from a PC on the same network:
-//   python tools/bsk.py upload my_sketch --host baseline          a new sketch
-//   python tools/bsk.py baseline update --host baseline           a new Baseline (built for this board)
-//   python tools/bsk.py baseline update --host baseline --file baseline-<target>.bsu   a downloaded one
+//   python tools/flick.py upload my_sketch --host baseline          a new sketch
+//   python tools/flick.py baseline update --host baseline           a new Baseline (built for this board)
+//   python tools/flick.py baseline update --host baseline --file baseline-<target>.bsu   a downloaded one
 // Any sketch that calls ArduinoOTA.begin() can be updated the same way.
 //
 // Baseline updates: boards with 8 or 16 MB of flash keep running this sketch

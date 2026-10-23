@@ -31,7 +31,7 @@ void loop()
             Media.press(CONSUMER_CONTROL_VOLUME_INCREMENT);
             Media.release();
         } else {
-            Keyboard.println("Hello from Baseline Sketcher!");
+            Keyboard.println("Hello from Flick!");
         }
     }
     delay(10);

@@ -1,4 +1,4 @@
-// crash_test - used by `bsk test`: crashes in setup(), so Baseline must roll
+// crash_test - used by `flick test`: crashes in setup(), so Baseline must roll
 // back to the previous sketch and record the crash.
 void setup()
 {

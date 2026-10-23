@@ -15,7 +15,7 @@
  * console replies lost a byte (0 of 120 at 921600), and uploads were no faster,
  * being bound by request/reply round trips. A board may set BL_PORT_CONSOLE_BAUD
  * in its bl_board.h. The ROM and bootloader messages stay at 115200
- * (chips/esp32/idf/sdkconfig.defaults says why). bsk tries 921600,
+ * (chips/esp32/idf/sdkconfig.defaults says why). flick tries 921600,
  * 2000000 (Baselines built in between), then 115200 (older Baselines). */
 #define BL_PORT_CONSOLE_USB 0
 #ifndef BL_PORT_CONSOLE_BAUD

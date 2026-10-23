@@ -3,9 +3,9 @@
 //
 // The server holds, side by side:
 //   baseline-version.txt          the newest Baseline version, e.g. 0.2.0
-//   baseline-<target>.bsu         the update for each kind of board; bsk
+//   baseline-<target>.bsu         the update for each kind of board; flick
 //                                 baseline build writes dist/<target>/baseline-<target>.bsu
-//   ota_pull_baseline.bsk         this sketch (build/<target>/ota_pull_baseline.bsk)
+//   ota_pull_baseline.flick         this sketch (build/<target>/ota_pull_baseline.flick)
 //
 // Boards with 8 or 16 MB of flash keep this sketch: the new Baseline goes into
 // the second Baseline slot, and the old one comes back if it fails to start.
@@ -16,7 +16,7 @@
 // Try it with your PC as the server, on the same network as the board:
 //   1. Set UPDATE_URL below to http://<your PC's IP>:8000 and upload this sketch over USB.
 //   2. Into one folder, copy dist/<target>/baseline-<target>.bsu, this
-//      sketch's .bsk, and a baseline-version.txt newer than the version the
+//      sketch's .flick, and a baseline-version.txt newer than the version the
 //      board prints. Serve the folder: python -m http.server 8000
 // Within a minute the board downloads the update (about 1.3 MB), restarts,
 // and prints the new version.
@@ -71,7 +71,7 @@ void checkForUpdate()
     Serial.printf("installing Baseline %s (now %s, update mode %s)...\n", latest.c_str(), running,
                   BaselineUpdate.modeName());
     int err = BaselineUpdate.baselineFromUrl(UPDATE_URL "/baseline-" BL_TARGET_NAME ".bsu",
-                                             UPDATE_URL "/ota_pull_baseline.bsk");    // restarts when it works
+                                             UPDATE_URL "/ota_pull_baseline.flick");    // restarts when it works
     Serial.printf("update failed (%d); trying again later\n", err);
 }
 

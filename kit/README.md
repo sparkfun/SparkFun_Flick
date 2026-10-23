@@ -1,4 +1,4 @@
-# Baseline Sketcher kit
+# Flick kit
 
 Write Arduino sketches for SparkFun ESP32 boards. They build in about a second and upload in under a second, over USB or WiFi. The board runs **Baseline**: precompiled firmware with WiFi, BLE, storage and the rest of Arduino-ESP32 already inside. Your sketch is only your own code.
 
@@ -9,24 +9,24 @@ Write Arduino sketches for SparkFun ESP32 boards. They build in about a second a
 
   ```
   pip install -r requirements.txt
-  python tools/bsk.py baseline flash --file baseline-<your board>.bin
+  python tools/flick.py baseline flash --file baseline-<your board>.bin
   ```
 
-`python tools/bsk.py targets` lists the boards.
+`python tools/flick.py targets` lists the boards.
 
 ## 2. Install the compiler (once)
 
 ```
 pip install -r requirements.txt
-python tools/bsk.py setup -t <your board>
+python tools/flick.py setup -t <your board>
 ```
 
-This downloads Espressif's GCC for your board's chip (170–670 MB) into `~/.baseline-sketcher`. If you already have Arduino-ESP32 installed, `bsk` uses that compiler and you can skip this step.
+This downloads Espressif's GCC for your board's chip (170–670 MB) into `~/.flick`. If you already have Arduino-ESP32 installed, `flick` uses that compiler and you can skip this step.
 
 ## 3. Build and upload
 
 ```
-python tools/bsk.py upload examples/blink -m
+python tools/flick.py upload examples/blink -m
 ```
 
 `-m` shows the serial output; press Ctrl+C to quit. In VS Code, Ctrl+Shift+B does the same for the sketch open in the editor.
@@ -39,11 +39,11 @@ Open this folder in Claude Code, VS Code with Copilot, Cursor or similar. `AGENT
 - "Log the fuel gauge's battery voltage to the microSD card every minute, with the time from NTP."
 - "Turn examples/wifi_ota into a web page that shows the board's temperature."
 
-The assistant finds and installs Arduino libraries with `python tools/bsk.py lib install "<name>"`. You can do the same yourself:
+The assistant finds and installs Arduino libraries with `python tools/flick.py lib install "<name>"`. You can do the same yourself:
 
 ```
-python tools/bsk.py lib search qwiic oled
-python tools/bsk.py lib install "SparkFun Qwiic OLED Arduino Library"
+python tools/flick.py lib search qwiic oled
+python tools/flick.py lib install "SparkFun Qwiic OLED Arduino Library"
 ```
 
 ## More

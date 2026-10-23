@@ -52,7 +52,7 @@ and all lead to Baseline.
 | LittleFS | `LittleFS.begin(formatOnFail)/end/format/totalBytes/usedBytes/open/exists/remove/rename/mkdir/rmdir`; `File`: `print/write/read/readBytes/peek/available/seek/position/size/name/path/isDirectory/openNextFile/rewindDirectory/getLastWrite/flush/close`; `fs::FS`, `fs::File`, `FILE_READ/WRITE/APPEND` |
 | mDNS | `MDNS.begin/end/addService/addServiceTxt/queryHost/queryService/hostname(i)/address(i)/port(i)` |
 | MQTT | `PubSubClient`: `setServer/setCallback/setClient/setKeepAlive/setSocketTimeout/setBufferSize`, `connect` (all forms, with will and credentials), `publish/publish_P/beginPublish/endPublish`, `subscribe/unsubscribe`, `loop/connected/state/disconnect`, `MQTT_*` states; TLS with `WiFiClientSecure` |
-| WiFi upload | `ArduinoOTA.setHostname/setPassword/setPort/begin/handle/end`; then `bsk upload <sketch> --host NAME` |
+| WiFi upload | `ArduinoOTA.setHostname/setPassword/setPort/begin/handle/end`; then `flick upload <sketch> --host NAME` |
 | ESP-NOW | `esp_now_init`, `esp_now_register_recv_cb`, `esp_now_register_send_cb` (both the IDF 5 and the older callback forms), `esp_now_add_peer`, `esp_now_del_peer`, `esp_now_is_peer_exist`, `esp_now_send` |
 | BLE | `BLEDevice`, `BLEServer`, `BLEService`, `BLECharacteristic` (read/write/notify/indicate, `setValue/getValue/getData`), `BLEDescriptor`, `BLE2902`, `BLE2901`, `BLEAdvertising`, `BLEAdvertisementData`, `BLEScan` (blocking and background), `BLEAdvertisedDevice`, `BLEScanResults`, `BLEClient`, `BLERemoteService`, `BLERemoteCharacteristic` (read/write/`registerForNotify`), `BLEUUID`, `BLEAddress`, and all the callback classes |
 | BLE serial | `BLESerial`: a ready-made BLE serial port (Nordic UART) |
@@ -65,16 +65,16 @@ and all lead to Baseline.
 
 ## Arduino libraries
 
-Sketches can use ordinary Arduino libraries. `bsk build` follows the sketch's `#include` lines, as the Arduino IDE does: a header that is not in the sketch or the SDK selects the library that provides it, the library's sources are compiled into the sketch, and its own includes are followed in turn. Libraries are looked up in:
+Sketches can use ordinary Arduino libraries. `flick build` follows the sketch's `#include` lines, as the Arduino IDE does: a header that is not in the sketch or the SDK selects the library that provides it, the library's sources are compiled into the sketch, and its own includes are followed in turn. Libraries are looked up in:
 1. the sketch's own `libraries/` folder,
-2. the folders in `$BSK_LIBRARIES` (separated by `;` on Windows, `:` elsewhere),
+2. the folders in `$FLICK_LIBRARIES` (separated by `;` on Windows, `:` elsewhere),
 3. the Arduino IDE's libraries folder (from its `arduino-cli.yaml`, else `Documents/Arduino/libraries`).
 
 Install libraries with the Arduino IDE's Library Manager or `arduino-cli lib install`, as usual. The SDK's own headers win, so `Wire.h`, `SPI.h`, `WiFi.h` and the other classic headers keep pointing at Baseline. Library warnings are not shown; errors are.
 
 **Checked** (October 2026): the first example of each of these compiles unchanged for the S3, the C6 and the classic ESP32: ArduinoJson; SparkFun BME280, BMP581, BMI270, ICM-20948, ISM330DHCX, MMC5983MA, TMP102, TMP117, SHTC3, AHT20, SCD30, SCD4x, VEML7700, VCNL4040, VL53L1X, NAU7802, Qwiic Button, Qwiic Relay, Qwiic Joystick, Qwiic Twist, Qwiic Ultrasonic, Qwiic Alphanumeric, Qwiic OLED, I2C Mux, External EEPROM, u-blox GNSS v3 and LG290P GNSS. (TMP102's example uses `A3`, which not every board has.)
 
-Like the Arduino IDE, `bsk` declares the functions a `.ino` defines, so a sketch may call a function before its definition.
+Like the Arduino IDE, `flick` declares the functions a `.ino` defines, so a sketch may call a function before its definition.
 
 **Secrets.** Put `KEY = value` lines in `secrets.cfg` at the repository root (git-ignored; see `secrets.cfg.example`) and every sketch is built with `-DKEY="value"`: `#ifdef WIFI_SSID` ... `WiFi.begin(WIFI_SSID, WIFI_PASSWORD)` keeps passwords out of the sketch.
 
@@ -103,7 +103,7 @@ back until it does.
 - **LittleFS** always uses the `userfs` partition (1.2 MB); at most 8 files or directories can be open at once.
 - **Preferences:** the namespace `baseline` is reserved; at most 4 namespaces open at once.
 - **PubSubClient** callbacks run inside `mqtt.loop()`, as in the original. The payload buffer has a NUL after the data, so it can be printed as text. `WiFiClientSecure::setInsecure()` is ignored for MQTT (the broker's certificate is always checked).
-- **ArduinoOTA** opens Baseline's update port: `bsk upload --host` sends sketches and `bsk baseline update --host` sends Baseline. The board reboots into the update, so the `onStart/onEnd/onProgress/onError` callbacks are never called. To have the board fetch its own updates, use `BaselineUpdate` (docs/OTA.md).
+- **ArduinoOTA** opens Baseline's update port: `flick upload --host` sends sketches and `flick baseline update --host` sends Baseline. The board reboots into the update, so the `onStart/onEnd/onProgress/onError` callbacks are never called. To have the board fetch its own updates, use `BaselineUpdate` (docs/OTA.md).
 - **Board pins** (`LED_BUILTIN`, `STAT_LED`, `RGB_BUILTIN`, `SDA`, `SCL`, `A0`, and the `Serial1` defaults) come from the target:
   - ESP32-S3 Thing Plus: LED 0, RGB 46, Qwiic 8/9, `Serial1` on RX 44 / TX 43.
   - Thing Plus C: LED 13, RGB 2, Qwiic 21/22, `Serial1` on RX 16 / TX 17.
@@ -114,7 +114,7 @@ back until it does.
 - **Touch** values go down when touched on the classic ESP32 and up on the S3; pick the interrupt threshold accordingly.
 - **FastLED** runs on Baseline's RMT driver at any output pin (bit-banged on the classic ESP32, with interrupts off on the sketch's core while a frame goes out: about 30 µs per LED). Color palettes, SPI chipsets (APA102, WS2801) and RGBW are not supported; color correction, temperature and dithering are accepted but ignored. `setMaxPowerInVoltsAndMilliamps` uses a simple estimate (20 mA per full channel).
 - **Servo** uses 50 Hz, 14-bit LEDC; `write()` takes degrees below 500 and microseconds above.
-- **USB device mode** (S3): the first `USB.begin()` with a new set of devices reboots the board into USB device mode (the sketch starts again). Serial, `bsk upload` and `bsk monitor` keep working through the new USB serial port, whose COM number may change. Crash messages are not shown in this mode (the coredump still records them). Safe mode, installing another sketch, or `bsk baseline flash` turn it off. USB descriptor settings (VID/PID, names) are fixed.
+- **USB device mode** (S3): the first `USB.begin()` with a new set of devices reboots the board into USB device mode (the sketch starts again). Serial, `flick upload` and `flick monitor` keep working through the new USB serial port, whose COM number may change. Crash messages are not shown in this mode (the coredump still records them). Safe mode, installing another sketch, or `flick baseline flash` turn it off. USB descriptor settings (VID/PID, names) are fixed.
 - **I2S** uses one port. `available()` reads ahead up to 128 bytes, which waits for samples.
 - **microSD** shares the SPI bus with `SPI` on the Thing Plus C.
 - **Not supported:** ESP-NOW encryption, `WiFi.scanNetworks(true)` (async; it scans synchronously), HTTP file uploads to `WebServer`, and BLE extended advertising.

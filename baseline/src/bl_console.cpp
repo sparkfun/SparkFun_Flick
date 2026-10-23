@@ -5,7 +5,7 @@
 #include "bl_port.h"
 
 #if BL_PORT_CONSOLE_USB && (!ARDUINO_USB_CDC_ON_BOOT || !ARDUINO_USB_MODE)
-#error "Baseline needs 'USB CDC On Boot: Enabled' and 'USB Mode: Hardware CDC and JTAG' (bsk baseline sets these)"
+#error "Baseline needs 'USB CDC On Boot: Enabled' and 'USB Mode: Hardware CDC and JTAG' (flick baseline sets these)"
 #endif
 
 static int log_vprintf(const char *fmt, va_list ap)

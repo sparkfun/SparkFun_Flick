@@ -3,7 +3,7 @@
  * sketch_entry() (which Baseline calls after it has mapped the image and
  * initialized .data/.bss), delay()/yield(), and the callback pump.
  *
- * bsk build passes -DBL_SKETCH_NAME="..." and -DBL_SKETCH_STACK=...
+ * flick build passes -DBL_SKETCH_NAME="..." and -DBL_SKETCH_STACK=...
  */
 #include "baseline.h"
 #include "sketch_abi.h"

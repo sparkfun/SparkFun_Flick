@@ -17,7 +17,7 @@ void loop()
         wasConnected = connected;
         Serial.println(connected ? "BLE connected" : "BLE disconnected");
         if (connected) {
-            BLESerial.println("Hello from Baseline Sketcher!");
+            BLESerial.println("Hello from Flick!");
         }
     }
 

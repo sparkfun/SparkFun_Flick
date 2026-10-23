@@ -10,7 +10,7 @@
  * copied image's SHA-256 matches. Then the normal boot loads the new Baseline,
  * which wipes the staging area.
  *
- * bsk copies this folder into the IDF project of 4 MB targets (stage_idf),
+ * flick copies this folder into the IDF project of 4 MB targets (stage_idf),
  * with bsu_inflate.c, bsu_inflate.h and bsu_format.h from baseline/src/bsu.
  */
 #include <string.h>

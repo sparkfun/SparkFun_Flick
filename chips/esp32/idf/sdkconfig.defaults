@@ -11,7 +11,7 @@ CONFIG_ESP32_REV_MIN_3=y
 CONFIG_FREERTOS_PLACE_FUNCTIONS_INTO_FLASH=y
 CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH=y
 
-# Flash size: from the target's flash_size (bsk adds CONFIG_ESPTOOLPY_FLASHSIZE_*).
+# Flash size: from the target's flash_size (flick adds CONFIG_ESPTOOLPY_FLASHSIZE_*).
 
 # Internal RAM: Bluedroid init takes ~82 KB and left too little for WiFi, so
 # BLE + WiFi together ran out of memory. With PSRAM on the board, let WiFi/lwIP

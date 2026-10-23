@@ -1,4 +1,4 @@
-// blink.ino - a Baseline Sketcher sketch. baseline.h is included automatically.
+// blink.ino - a Flick sketch. baseline.h is included automatically.
 
 void setup()
 {

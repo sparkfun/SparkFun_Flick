@@ -9,7 +9,7 @@ bool ledOn = false;
 
 void handleRoot()
 {
-    String html = "<html><body><h1>Baseline Sketcher</h1>";
+    String html = "<html><body><h1>Flick</h1>";
     html += "<p>LED is " + String(ledOn ? "ON" : "OFF") + "</p>";
     html += "<p><a href='/toggle'>Toggle LED</a></p>";
     html += "<p>Uptime: " + String(millis() / 1000) + " s</p></body></html>";

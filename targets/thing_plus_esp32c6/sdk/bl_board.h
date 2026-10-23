@@ -3,7 +3,7 @@
  * ESP32-C6 (RISC-V, single core, no PSRAM), native USB-C, Qwiic, microSD.
  * Pins: Arduino-ESP32's sparkfun_esp32c6_thing_plus variant and
  * docs.sparkfun.com/SparkFun_Thing_Plus_ESP32_C6.
- * Checked on hardware 2026-10-21/22 (bsk test).
+ * Checked on hardware 2026-10-21/22 (flick test).
  * Flash: 16 MB (esptool, 2026-10-21; Arduino's board file says 4 MB).
  * The only LED is the WS2812 on GPIO 23, so LED_BUILTIN points at it.
  * microSD on SPI: CS 18 (SCK 19, PICO 20, POCI 21), card detect 22.

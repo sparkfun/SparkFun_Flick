@@ -1,5 +1,5 @@
-# Baseline Sketcher partition table - ESP32-C5, 8 MB flash.
-# bsk stages the table matching the target's flash_size as main/partitions.csv.
+# Flick partition table - ESP32-C5, 8 MB flash.
+# flick stages the table matching the target's flash_size as main/partitions.csv.
 # The bootloader is at 0x2000 and Baseline slot 0 at 0x10000.
 # Two Baseline slots (ota_0/ota_1): an update over WiFi goes to the slot not
 # running, and IDF rolls back to the other if the new Baseline does not

@@ -30,7 +30,7 @@
 #define BL_SKETCH_DEFAULT_STACK     8192
 #define BL_SKETCH_MIN_STACK         3072
 
-/* Byte offsets of fields that bsk.py patches after linking. Kept in sync with
+/* Byte offsets of fields that flick.py patches after linking. Kept in sync with
  * the struct below by static asserts in Baseline. */
 #define BL_HDR_OFF_IMAGE_SIZE       12
 #define BL_HDR_OFF_BUILD_ID         96
@@ -59,7 +59,7 @@ typedef struct {
     uint16_t chip_id;           /*  6 BL_TARGET_CHIP_ID */
     uint16_t abi_major;         /*  8 must equal Baseline's */
     uint16_t abi_minor;         /* 10 must be <= Baseline's */
-    uint32_t image_size;        /* 12 total bytes incl. header (patched by bsk) */
+    uint32_t image_size;        /* 12 total bytes incl. header (patched by flick) */
     uint32_t flags;             /* 16 reserved, 0 */
     uint32_t entry;             /* 20 IBUS address of sketch_entry */
     uint32_t data_load;         /* 24 DBUS address of .data initial values */
@@ -72,7 +72,7 @@ typedef struct {
     uint32_t stack_size;        /* 52 sketch task stack, bytes */
     char     name[32];          /* 56 */
     uint8_t  reserved0[8];      /* 88 */
-    char     build_id[16];      /* 96 patched by bsk */
+    char     build_id[16];      /* 96 patched by flick */
     uint8_t  reserved1[112];    /* 112 */
     uint8_t  sha256[32];        /* 224 SHA-256 of the whole image with this field zeroed */
 } bl_sketch_header_t;

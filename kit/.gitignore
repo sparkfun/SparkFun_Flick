@@ -1,4 +1,4 @@
-# bsk build output, downloaded libraries and secrets
+# flick build output, downloaded libraries and secrets
 build/
 libraries/
 secrets.cfg

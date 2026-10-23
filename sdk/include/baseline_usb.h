@@ -7,8 +7,8 @@
  * As in Arduino: begin() each device, then USB.begin(). The first time a
  * sketch asks for a set of devices, Baseline reboots into USB device mode (the
  * sketch starts again and USB.begin() then returns true). The board keeps its
- * USB serial port, so Serial and `bsk upload` work as before; the COM port
- * number may change once. Safe mode, `bsk baseline flash`, and installing a
+ * USB serial port, so Serial and `flick upload` work as before; the COM port
+ * number may change once. Safe mode, `flick baseline flash`, and installing a
  * different sketch switch USB device mode off again.
  *
  * On the classic ESP32 (no USB device hardware) USB.begin() returns false.

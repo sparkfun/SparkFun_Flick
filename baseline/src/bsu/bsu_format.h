@@ -2,8 +2,8 @@
  * bsu_format.h - Baseline update packages (.bsu) and the staging record.
  *
  * Shared by Baseline (baseline/src/bl_update.cpp), the 4 MB boards'
- * bootloader hook (idf/bootloader_components/bsu_stage) and bsk
- * (tools/bsk.py, make_bsu), so keep the three in step.
+ * bootloader hook (idf/bootloader_components/bsu_stage) and flick
+ * (tools/flick.py, make_bsu), so keep the three in step.
  *
  * A .bsu file is a bsu_header_t followed by the Baseline app image (the IDF
  * app .bin, as flashed at the app partition) compressed with raw deflate

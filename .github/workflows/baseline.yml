@@ -14,7 +14,7 @@ on:
       - "idf/**"
       - "api/**"
       - "sdk/include/**"
-      - "tools/bsk.py"
+      - "tools/flick.py"
       - "tools/ci/build_baseline.sh"
       - ".github/workflows/baseline.yml"
   pull_request:
@@ -25,7 +25,7 @@ on:
       - "idf/**"
       - "api/**"
       - "sdk/include/**"
-      - "tools/bsk.py"
+      - "tools/flick.py"
       - "tools/ci/build_baseline.sh"
       - ".github/workflows/baseline.yml"
   workflow_dispatch:

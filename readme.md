@@ -38,7 +38,7 @@ The Baseline 'blob' includes the following libraries and features. If your code 
 * **USB device** (ESP32-S3): the board becomes a USB keyboard, mouse, gamepad, media remote or MIDI instrument
 * **Storage:** `Preferences` (settings that survive power cycles), `LittleFS` (on-board files) and microSD cards (`SD`, `SD_MMC`)
 * **Battery:** the LiPo fuel gauge (`SFE_MAX1704X`): voltage, percent charged, charge rate
-* **Over-the-air updates:** sketches *and Baseline itself*, pushed from the PC (`ArduinoOTA`, `bsk ... --host`) or pulled by the board from a web server such as a GitHub release (`BaselineUpdate`). See [docs/OTA.md](docs/OTA.md).
+* **Over-the-air updates:** sketches *and Baseline itself*, pushed from the PC (`ArduinoOTA`, `flick ... --host`) or pulled by the board from a web server such as a GitHub release (`BaselineUpdate`). See [docs/OTA.md](docs/OTA.md).
 * **Releases:** each release has a download page with a **Flash** button per board, the over-the-air updates, and a sketch kit (with `AGENTS.md` for AI assistants). See [docs/RELEASING.md](docs/RELEASING.md).
 * **Extras:** `String`, `IPAddress`, `printf`/`snprintf`, `random`, `map`, `constrain`, `log_i`/`ESP_LOGI` logging, and `ESP` chip and memory info
 

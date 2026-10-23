@@ -38,7 +38,7 @@ static void serve(NetworkClient &client)
     uint32_t last = millis();
     static uint8_t buf[512];
     while (s_run && client.connected() && millis() - last < IDLE_TIMEOUT_MS) {
-        // bsk keeps several lines in flight during big transfers: read in
+        // flick keeps several lines in flight during big transfers: read in
         // blocks, and let other tasks run after every command (the idle task's
         // watchdog starves otherwise).
         int n = client.available() ? client.read(buf, sizeof(buf)) : 0;
@@ -131,7 +131,7 @@ extern "C" int bl_impl_ota_begin(const char *hostname, const char *password, uin
         port = 3232;
     }
     if (hostname && *hostname && bl_mdns_ensure(hostname)) {
-        MDNS.addService("bsk", "tcp", port);
+        MDNS.addService("flick", "tcp", port);
     }
     s_server = new NetworkServer(port);
     s_server->begin();

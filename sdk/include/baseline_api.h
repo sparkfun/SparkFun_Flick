@@ -817,7 +817,7 @@ static inline int bl_last_crash(char *buf, size_t size) { return BL->last_crash(
 static inline int bl_wifi_event_take(void) { return BL->wifi_event_take(); }
 /* How Baseline updates over the air: BL_UPDATE_DUAL (two Baseline slots; sketch and files kept), BL_UPDATE_STAGED (4 MB flash; each update erases the sketch and LittleFS) or BL_UPDATE_NONE. */
 static inline int bl_baseline_update_mode(void) { return BL->baseline_update_mode(); }
-/* Download a sketch (.bsk) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure. */
+/* Download a sketch (.flick) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure. */
 static inline int bl_ota_pull_sketch(const char *url) { return BL->ota_pull_sketch(url); }
 /* Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure. */
 static inline int bl_ota_pull_baseline(const char *url, const char *sketch_url) { return BL->ota_pull_baseline(url, sketch_url); }

@@ -4,27 +4,27 @@ A board running Baseline can be updated without a USB cable. You can update the 
 
 There are two ways to deliver an update:
 
-- **Push:** your PC sends the update over WiFi with `bsk`. The board must be running a sketch that calls `ArduinoOTA.begin()`.
+- **Push:** your PC sends the update over WiFi with `flick`. The board must be running a sketch that calls `ArduinoOTA.begin()`.
 - **Pull:** the board downloads the update from a web server, such as a GitHub release, your own server, or `python -m http.server` on your PC. The sketch decides when, with `BaselineUpdate`.
 
 | | Push from the PC | Pull by the board |
 |---|---|---|
-| Sketch | `bsk upload my_sketch --host baseline` | `BaselineUpdate.sketchFromUrl(url)` |
-| Baseline | `bsk baseline update --host baseline` | `BaselineUpdate.baselineFromUrl(url, sketchUrl)` |
+| Sketch | `flick upload my_sketch --host baseline` | `BaselineUpdate.sketchFromUrl(url)` |
+| Baseline | `flick baseline update --host baseline` | `BaselineUpdate.baselineFromUrl(url, sketchUrl)` |
 | Example | `examples/wifi_ota` | `examples/ota_pull_sketch`, `examples/ota_pull_baseline` |
 
-The same `bsk` commands also work over USB: use `-p COMx` instead of `--host`. `bsk baseline update` updates Baseline over USB without esptool.
+The same `flick` commands also work over USB: use `-p COMx` instead of `--host`. `flick baseline update` updates Baseline over USB without esptool.
 
 ## What gets downloaded
 
-- **Sketches** are the `.bsk` files `bsk build` writes to `build/<target>/<sketch>.bsk`.
-- **Baseline** updates are `.bsu` files. `bsk baseline build -t <target>` writes `dist/<target>/baseline-<target>.bsu` next to the USB image. A `.bsu` holds the Baseline app compressed (about 60% of its size), with the chip, the board (target) and the version in its header.
+- **Sketches** are the `.flick` files `flick build` writes to `build/<target>/<sketch>.flick`.
+- **Baseline** updates are `.bsu` files. `flick baseline build -t <target>` writes `dist/<target>/baseline-<target>.bsu` next to the USB image. A `.bsu` holds the Baseline app compressed (about 60% of its size), with the chip, the board (target) and the version in its header.
   - A board refuses a `.bsu` made for another board.
   - Every board takes the same kind of file.
 
 ## Two kinds of boards
 
-`BaselineUpdate.mode()` (and `update=` in `bsk info`) tells which kind a board is.
+`BaselineUpdate.mode()` (and `update=` in `flick info`) tells which kind a board is.
 
 **`BL_UPDATE_DUAL`: 8 and 16 MB of flash.**
 - **Boards:** IoT RedBoard, DataLogger IoT, Thing Plus C, Thing Plus C6, Thing Plus C5, RTK Postcard and the ESP32-P4 board.
@@ -41,7 +41,7 @@ The same `bsk` commands also work over USB: use `-p COMx` instead of `--host`. `
   - With a pull, give `baselineFromUrl` a sketch URL as well. Baseline then reconnects to WiFi and installs that sketch after the update.
   - With a push, upload a sketch over USB afterwards, since the board is no longer on WiFi.
 
-Both kinds need one USB flash with a Baseline that has these features: `python tools/bsk.py baseline flash -t <target>`. On 8/16 MB boards this flash changes the partition table, which erases LittleFS once.
+Both kinds need one USB flash with a Baseline that has these features: `python tools/flick.py baseline flash -t <target>`. On 8/16 MB boards this flash changes the partition table, which erases LittleFS once.
 
 ## A pull, step by step
 
@@ -50,14 +50,14 @@ Both kinds need one USB flash with a Baseline that has these features: `python t
 ```
 baseline-version.txt          0.2.0
 baseline-<target>.bsu         one per kind of board (from dist/<target>/)
-ota_pull_baseline.bsk         the sketch, for 4 MB boards to reinstall
+ota_pull_baseline.flick         the sketch, for 4 MB boards to reinstall
 ```
 
 When the server's version is newer than `BaselineUpdate.baselineVersion()`, the sketch calls:
 
 ```cpp
 BaselineUpdate.baselineFromUrl(UPDATE_URL "/baseline-" BL_TARGET_NAME ".bsu",
-                               UPDATE_URL "/ota_pull_baseline.bsk");
+                               UPDATE_URL "/ota_pull_baseline.flick");
 ```
 
 On success the board restarts, and the call returns only on failure. `BL_TARGET_NAME` is the board's target name, so one sketch serves every kind of board.
@@ -73,11 +73,11 @@ On success the board restarts, and the call returns only on failure. `BL_TARGET_
 - **`baseline/src/bsu/`:**
   - `bsu_format.h`: the `.bsu` header and the staging record.
   - `bsu_inflate.c`: a raw-deflate decoder that reads its 32 KB window back from flash, so it needs about 6 KB of RAM. The bootloader uses it too.
-- **`idf/bootloader_components/bsu_stage`:** the bootloader hook. `bsk` builds it only into 4 MB targets, and it adds about 3.3 KB to the bootloader.
+- **`idf/bootloader_components/bsu_stage`:** the bootloader hook. `flick` builds it only into 4 MB targets, and it adds about 3.3 KB to the bootloader.
 - **Loader commands:** `UBEGIN <app|bsu> <size> <sha256>`, `UDATA <offset> <base64>`, `UEND`.
-  - `bsk` sends the raw app image to two-slot boards and the `.bsu` to staged ones.
-  - A staged board first answers that it is restarting into update mode, and `bsk` sends again.
-  - Over WiFi, `bsk` keeps 16 lines in flight.
+  - `flick` sends the raw app image to two-slot boards and the `.bsu` to staged ones.
+  - A staged board first answers that it is restarting into update mode, and `flick` sends again.
+  - Over WiFi, `flick` keeps 16 lines in flight.
 - **API (ABI 1.7):** `baseline_update_mode`, `ota_pull_sketch`, `ota_pull_baseline`. The SDK wraps them in `BaselineUpdate` (`sdk/include/baseline_net.h`).
 
 Measured on 2026-10-23:

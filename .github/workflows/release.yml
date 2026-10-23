@@ -1,6 +1,6 @@
 # Release: push a tag vX.Y.Z (matching BASELINE_VERSION in baseline/src/bl_main.h).
 #   1. Baseline for every target (baseline.yml)
-#   2. the sketch kit (bsk package)
+#   2. the sketch kit (flick package)
 #   3. a GitHub release with the images, the .bsu updates and the kit
 #   4. the download page with "Flash" buttons on GitHub Pages (tools/make_site.py)
 # Run it by hand (workflow_dispatch) to rebuild the page without a release.
@@ -34,8 +34,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          python tools/bsk.py package
-          mkdir -p dist/kit && mv dist/baseline-sketcher-kit-*.zip dist/kit/
+          python tools/flick.py package
+          mkdir -p dist/kit && mv dist/flick-kit-*.zip dist/kit/
       - uses: actions/upload-artifact@v4
         with:
           name: kit

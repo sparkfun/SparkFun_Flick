@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Build every example with bsk and its plain-Arduino equivalent with
+"""Build every example with flick and its plain-Arduino equivalent with
 arduino-cli, time both, and write docs/BUILD_RESULTS.md.
 
   python tools/benchmark.py              # everything (Arduino clean builds take minutes)
-  python tools/benchmark.py --no-arduino # only the Baseline Sketcher examples
+  python tools/benchmark.py --no-arduino # only the Flick examples
 """
 import argparse
 import os
@@ -18,9 +18,9 @@ from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import bsk  # noqa: E402
+import flick  # noqa: E402
 
-ROOT = bsk.ROOT
+ROOT = flick.ROOT
 EXAMPLES = ROOT / "examples"
 ARDUINO_BENCH = ROOT / "benchmarks" / "arduino"
 OUT = ROOT / "docs" / "BUILD_RESULTS.md"
@@ -40,10 +40,10 @@ def timed(cmd, env=None):
 
 
 def bench_sketch(proj):
-    cmd = [sys.executable, str(ROOT / "tools" / "bsk.py"), "build", str(proj), "-t", TARGET]
+    cmd = [sys.executable, str(ROOT / "tools" / "flick.py"), "build", str(proj), "-t", TARGET]
     timed(cmd)                                  # warm-up (fills the shared SDK object cache)
     times = [timed(cmd) for _ in range(RUNS)]
-    image = (proj / "build" / TARGET / (proj.name + ".bsk")).read_bytes()
+    image = (proj / "build" / TARGET / (proj.name + ".flick")).read_bytes()
     f = struct.unpack_from("<IHHHHIIIIIIII", image, 0)
     data_start, data_end, bss_start, bss_end = f[9], f[10], f[11], f[12]
     ram = (data_end - data_start) + (bss_end - bss_start)
@@ -78,18 +78,18 @@ def main():
         print(f"{p.name:18} {r['bytes']:6} bytes  {r['time']:.2f}s")
 
     arduino = {}
-    core = bsk.newest_esp32_core()
+    core = flick.newest_esp32_core()
     if not args.no_arduino:
         env = dict(os.environ, ARDUINO_DIRECTORIES_DATA=str(core[1]))
-        cli = bsk.find_arduino_cli()
+        cli = flick.find_arduino_cli()
         for p in sorted(q for q in ARDUINO_BENCH.iterdir() if q.is_dir()):
             print(f"arduino {p.name} ...", flush=True)
             arduino[p.name] = bench_arduino(p, cli, env)
             a = arduino[p.name]
             print(f"  clean {a['clean']:.1f}s  rebuild {a['rebuild']:.1f}s  {a['bytes']} bytes")
 
-    baseline_bin = bsk.baseline_build_path(TARGET) / "baseline.ino.bin"
-    gcc_ver = subprocess.run([bsk.find_gcc(bsk.load_target(TARGET)), "-dumpversion"],
+    baseline_bin = flick.baseline_build_path(TARGET) / "baseline.ino.bin"
+    gcc_ver = subprocess.run([flick.find_gcc(flick.load_target(TARGET)), "-dumpversion"],
                              capture_output=True, text=True).stdout.strip()
 
     o = ["# Build results\n\n",
@@ -106,9 +106,9 @@ def main():
                  "I2C, ADC, PWM, the RGB LED driver, and the sketch loader. A sketch contains only "
                  "your code and calls into Baseline through a table of function pointers.\n\n")
 
-    o.append("## Baseline Sketcher examples\n\n")
-    o.append(f"Build time is the median of {RUNS} runs of `bsk build`, including Python start-up. "
-             "Image is the `.bsk` file that gets uploaded. RAM is the sketch's static data (.data + .bss).\n\n")
+    o.append("## Flick examples\n\n")
+    o.append(f"Build time is the median of {RUNS} runs of `flick build`, including Python start-up. "
+             "Image is the `.flick` file that gets uploaded. RAM is the sketch's static data (.data + .bss).\n\n")
     o.append("| Example | Image (bytes) | Static RAM (bytes) | Build time |\n|---|---:|---:|---:|\n")
     for name, r in results.items():
         o.append(f"| [{name}](../examples/{name}/{name}.ino) | {fmt_bytes(r['bytes'])} | "
@@ -121,8 +121,8 @@ def main():
                  "- **Arduino clean**: `--clean`, so nothing is cached. This is the first build, or the first after changing board options.\n"
                  "- **Arduino rebuild**: only the sketch changed. The core and libraries come from cache. This is the everyday edit-compile loop.\n"
                  "- **Upload size**: what has to be sent to the board. For Arduino this is the full application "
-                 "image (esptool compresses it on the wire). For Baseline Sketcher it is the `.bsk` file.\n\n")
-        o.append("| Sketch | Arduino clean | Arduino rebuild | Baseline Sketcher | Speed-up vs rebuild "
+                 "image (esptool compresses it on the wire). For Flick it is the `.flick` file.\n\n")
+        o.append("| Sketch | Arduino clean | Arduino rebuild | Flick | Speed-up vs rebuild "
                  "| Arduino upload (bytes) | Sketcher upload (bytes) | Size ratio |\n"
                  "|---|---:|---:|---:|---:|---:|---:|---:|\n")
         for name, a in arduino.items():
@@ -135,7 +135,7 @@ def main():
 
     o.append("\n## Notes\n\n"
              "- Upload times are not measured by this script. Measured by hand on 2026-10-18 (see readme.md): "
-             "`bsk upload` takes about 0.03 s for the upload itself; `arduino-cli upload` takes 7-9 s.\n"
+             "`flick upload` takes about 0.03 s for the upload itself; `arduino-cli upload` takes 7-9 s.\n"
              "- Example images are not stand-alone firmware: they only run on a board that has the matching "
              "Baseline (ABI 1.x) installed.\n")
     OUT.parent.mkdir(exist_ok=True)

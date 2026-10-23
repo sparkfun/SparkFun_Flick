@@ -8,7 +8,7 @@
             "label": "Sketch: build + upload + monitor",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/bsk.py", "upload", "${fileDirname}", "--monitor"],
+            "args": ["${workspaceFolder}/tools/flick.py", "upload", "${fileDirname}", "--monitor"],
             "group": { "kind": "build", "isDefault": true },
             "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
@@ -18,7 +18,7 @@
             "label": "Sketch: build only",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/bsk.py", "build", "${fileDirname}"],
+            "args": ["${workspaceFolder}/tools/flick.py", "build", "${fileDirname}"],
             "group": "build",
             "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
@@ -27,7 +27,7 @@
             "label": "Serial monitor",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/bsk.py", "monitor"],
+            "args": ["${workspaceFolder}/tools/flick.py", "monitor"],
             "problemMatcher": [],
             "presentation": { "reveal": "always", "panel": "dedicated" }
         },
@@ -35,7 +35,7 @@
             "label": "Baseline: flash firmware (one time)",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/bsk.py", "baseline", "flash"],
+            "args": ["${workspaceFolder}/tools/flick.py", "baseline", "flash"],
             "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
         },
@@ -43,7 +43,7 @@
             "label": "Baseline: reboot into safe mode",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/bsk.py", "safe"],
+            "args": ["${workspaceFolder}/tools/flick.py", "safe"],
             "problemMatcher": [],
             "presentation": { "reveal": "always", "panel": "dedicated" }
         }

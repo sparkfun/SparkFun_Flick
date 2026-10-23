@@ -1,4 +1,4 @@
-# Writing sketches for Baseline Sketcher
+# Writing sketches for Flick
 
 This file is for AI coding assistants (Claude Code, Copilot, Cursor, Codex, ...) working in this folder. Read it before writing or changing a sketch.
 
@@ -6,20 +6,20 @@ This file is for AI coding assistants (Claude Code, Copilot, Cursor, Codex, ...)
 
 The board runs **Baseline**: precompiled firmware with Arduino-ESP32 3.3, WiFi, BLE, storage and the rest already inside. A **sketch** is small native code that calls into Baseline through a table of functions (the ABI). Sketches build in about a second and upload in under a second.
 
-You write ordinary Arduino code (`setup()`, `loop()`, `Serial`, `WiFi`, `Wire`, ...) and build it with `tools/bsk.py`, not with the Arduino IDE.
+You write ordinary Arduino code (`setup()`, `loop()`, `Serial`, `WiFi`, `Wire`, ...) and build it with `tools/flick.py`, not with the Arduino IDE.
 
 ## Commands
 
 All commands run from this folder.
 
 ```
-python tools/bsk.py upload my_sketch -m      build for the plugged-in board, upload, then show serial output
-python tools/bsk.py build my_sketch -t TGT   build only (TGT: python tools/bsk.py targets)
-python tools/bsk.py new my_sketch            create a sketch folder
-python tools/bsk.py monitor                  serial console
-python tools/bsk.py info                     Baseline version, ABI, board (target), running sketch, last crash
-python tools/bsk.py lib search WORDS         search the Arduino Library Manager
-python tools/bsk.py lib install "NAME"       install a library into libraries/
+python tools/flick.py upload my_sketch -m      build for the plugged-in board, upload, then show serial output
+python tools/flick.py build my_sketch -t TGT   build only (TGT: python tools/flick.py targets)
+python tools/flick.py new my_sketch            create a sketch folder
+python tools/flick.py monitor                  serial console
+python tools/flick.py info                     Baseline version, ABI, board (target), running sketch, last crash
+python tools/flick.py lib search WORDS         search the Arduino Library Manager
+python tools/flick.py lib install "NAME"       install a library into libraries/
 ```
 
 - `upload` asks the board which target it is and builds for it.
@@ -53,13 +53,13 @@ A sketch is a folder named like its main file: `my_sketch/my_sketch.ino`.
 
 ## When things go wrong
 
-- **Crashes roll back:** a new sketch that crashes on its first run is replaced by the previous one, and `python tools/bsk.py info` shows `crash="..."` with the task and the program counter. Several crashes in a row put the board in safe mode (no sketch runs); upload a fixed sketch.
-- **Missing library header:** `python tools/bsk.py lib search <words>`, then `lib install "<exact name>"`.
-- **Upload fails:** run `python tools/bsk.py info`. If it doesn't answer, Baseline is not on the board (README.md).
+- **Crashes roll back:** a new sketch that crashes on its first run is replaced by the previous one, and `python tools/flick.py info` shows `crash="..."` with the task and the program counter. Several crashes in a row put the board in safe mode (no sketch runs); upload a fixed sketch.
+- **Missing library header:** `python tools/flick.py lib search <words>`, then `lib install "<exact name>"`.
+- **Upload fails:** run `python tools/flick.py info`. If it doesn't answer, Baseline is not on the board (README.md).
 
 ## Over the air
 
-- **Push from the PC:** a sketch that calls `ArduinoOTA.begin()` (see `examples/wifi_ota`) accepts uploads with `python tools/bsk.py upload my_sketch --host baseline`.
+- **Push from the PC:** a sketch that calls `ArduinoOTA.begin()` (see `examples/wifi_ota`) accepts uploads with `python tools/flick.py upload my_sketch --host baseline`.
 - **Pull from a web server:** the board can download its own updates with `BaselineUpdate`.
 - **Baseline too:** both work for Baseline as well. See `docs/OTA.md` and `examples/ota_pull_*`.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build every example for the given targets (CI check of the SDK and bsk).
+"""Build every example for the given targets (CI check of the SDK and flick).
 
   python tools/ci/build_examples.py TARGET [TARGET ...]
 
@@ -21,7 +21,7 @@ def main():
     for target in sys.argv[1:]:
         built, skipped = 0, []
         for ex in sorted(p for p in (ROOT / "examples").iterdir() if (p / f"{p.name}.ino").exists()):
-            r = subprocess.run([sys.executable, str(ROOT / "tools" / "bsk.py"), "build", str(ex), "-t", target],
+            r = subprocess.run([sys.executable, str(ROOT / "tools" / "flick.py"), "build", str(ex), "-t", target],
                                capture_output=True, text=True)
             if r.returncode == 0:
                 built += 1

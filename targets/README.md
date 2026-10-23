@@ -34,12 +34,12 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `thing_plus_esp32` | esp32 | SparkFun Thing Plus - ESP32 WROOM (USB-C), the "Thing Plus C" | tested |
 | `rtk_postcard` | esp32 | SparkFun RTK Postcard (ESP32-PICO-MINI-02, LG290P GNSS) | chip tested; board pins from the docs |
 | `iot_redboard_esp32` | esp32 | SparkFun IoT RedBoard - ESP32 | tested |
-| `datalogger_iot` | esp32 | SparkFun DataLogger IoT (and 9DoF) | `bsk test` passes on the base board (2026-10-22); 9DoF not run |
-| `iot_redboard_esp32p4_poe` | esp32p4 | SparkFun IoT RedBoard - ESP32-P4, PoE version (no radio; Ethernet) | `bsk test` passes (2026-10-23); Ethernet not yet supported |
+| `datalogger_iot` | esp32 | SparkFun DataLogger IoT (and 9DoF) | `flick test` passes on the base board (2026-10-22); 9DoF not run |
+| `iot_redboard_esp32p4_poe` | esp32p4 | SparkFun IoT RedBoard - ESP32-P4, PoE version (no radio; Ethernet) | `flick test` passes (2026-10-23); Ethernet not yet supported |
 | `thing_plus_esp32s3` | esp32s3 | SparkFun Thing Plus - ESP32-S3 | tested |
 | `pro_micro_esp32c3` | esp32c3 | SparkFun Pro Micro - ESP32-C3 | not run on hardware |
 | `qwiic_pocket_esp32c6` | esp32c6 | SparkFun Qwiic Pocket Development Board - ESP32-C6 | not run on hardware |
-| `thing_plus_esp32c6` | esp32c6 | SparkFun Thing Plus - ESP32-C6 (16 MB flash) | tested: `bsk test` 31/31 (with WiFi, microSD), RGB LED by eye |
+| `thing_plus_esp32c6` | esp32c6 | SparkFun Thing Plus - ESP32-C6 (16 MB flash) | tested: `flick test` 31/31 (with WiFi, microSD), RGB LED by eye |
 | `thing_plus_esp32c5` | esp32c5 | SparkFun Thing Plus - ESP32-C5 | not run on hardware |
 
 The classic ESP32 targets need chip revision 3.0 or later (`esptool flash-id` shows it).
@@ -47,18 +47,18 @@ The classic ESP32 targets need chip revision 3.0 or later (`esptool flash-id` sh
 ## The rules
 
 - **The API table is the same on every target.** A function a chip can't do still has its slot and returns `BL_ERR_UNSUPPORTED`. For example, Bluetooth Classic SPP on the S3. A sketch therefore compiles everywhere and fails gracefully at run time.
-- **A sketch binary belongs to one target.** Its header carries the chip ID and Baseline refuses a sketch built for another chip; within a chip, the board's pins are compiled in. `bsk upload` asks the board which target it runs (`INFO` reports `chip=` and `target=`) and builds for that target automatically.
-- **Later files win.** `bsk baseline` copies `baseline/`, then `chips/<chip>/baseline/`, then `targets/<t>/baseline/` (if any) into `%LOCALAPPDATA%\BaselineSketcher\<t>\idf\main`, and builds that copy. The sketch include path has the target's `sdk/` before the chip's.
+- **A sketch binary belongs to one target.** Its header carries the chip ID and Baseline refuses a sketch built for another chip; within a chip, the board's pins are compiled in. `flick upload` asks the board which target it runs (`INFO` reports `chip=` and `target=`) and builds for that target automatically.
+- **Later files win.** `flick baseline` copies `baseline/`, then `chips/<chip>/baseline/`, then `targets/<t>/baseline/` (if any) into `%LOCALAPPDATA%\Flick\<t>\idf\main`, and builds that copy. The sketch include path has the target's `sdk/` before the chip's.
 - **Board facts go in `bl_board.h`, never in Baseline code.** Baseline's default pins (`Wire.begin()`, `SPI.begin()`, `SD.begin()`, `Serial1.begin()`) come from it, not from the Arduino variant, because all classic-ESP32 boards share the generic `esp32` variant.
 
 ## Commands
 
 ```
-python tools/bsk.py targets                                   # list targets
-python tools/bsk.py baseline build -t rtk_postcard            # -> dist/rtk_postcard/baseline-rtk_postcard.bin
-python tools/bsk.py baseline flash -t rtk_postcard            # build and flash it
-python tools/bsk.py build examples/blink -t rtk_postcard      # build a sketch for a target
-python tools/bsk.py upload examples/blink                     # the board says which target it is
+python tools/flick.py targets                                   # list targets
+python tools/flick.py baseline build -t rtk_postcard            # -> dist/rtk_postcard/baseline-rtk_postcard.bin
+python tools/flick.py baseline flash -t rtk_postcard            # build and flash it
+python tools/flick.py build examples/blink -t rtk_postcard      # build a sketch for a target
+python tools/flick.py upload examples/blink                     # the board says which target it is
 ```
 
 ## Adding a target
@@ -67,7 +67,7 @@ python tools/bsk.py upload examples/blink                     # the board says w
 1. Create `targets/<name>/target.json` with `"chip"`, `"description"` and `"flash_size"` (a size the chip has a `partitions-<N>MB.csv` for).
 2. Create `targets/<name>/sdk/bl_board.h`: copy one from a board on the same chip and change the pins. Arduino-ESP32's `variants/<board>/pins_arduino.h` and the board's hookup guide are the sources. `BL_TARGET_NAME` must equal the folder name.
 3. If the board has an Arduino variant of its own, set `CONFIG_ARDUINO_VARIANT` in `targets/<name>/idf/sdkconfig.defaults`.
-4. `bsk baseline build -t <name>`, then flash it and run a sketch.
+4. `flick baseline build -t <name>`, then flash it and run a sketch.
 
 **A new ESP32-family chip (H2, C61, P4, S2...)**
 1. Copy the closest chip folder: `esp32s3` for Xtensa, `esp32c6` for RISC-V.

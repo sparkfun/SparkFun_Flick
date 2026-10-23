@@ -3,15 +3,15 @@
 //
 // The server holds two files side by side:
 //   sketch-version.txt     the newest version number, e.g. 2
-//   ota_pull_sketch.bsk    that version of the sketch (bsk build writes it to
-//                          build/<target>/ota_pull_sketch.bsk)
+//   ota_pull_sketch.flick    that version of the sketch (flick build writes it to
+//                          build/<target>/ota_pull_sketch.flick)
 // Any web server works: GitHub releases, your own, or your PC.
 //
 // Try it with your PC as the server, on the same network as the board:
 //   1. Set UPDATE_URL below to http://<your PC's IP>:8000 and upload this
 //      sketch over USB. It prints "running version 1".
-//   2. Change SKETCH_VERSION to 2 and build: python tools/bsk.py build examples/ota_pull_sketch
-//   3. Put the .bsk in a folder with sketch-version.txt containing 2, and serve
+//   2. Change SKETCH_VERSION to 2 and build: python tools/flick.py build examples/ota_pull_sketch
+//   3. Put the .flick in a folder with sketch-version.txt containing 2, and serve
 //      that folder: python -m http.server 8000
 // Within a minute the board installs version 2 and prints "running version 2".
 // If a new version crashed on its first run, Baseline would go back to the old one.
@@ -57,7 +57,7 @@ void checkForUpdate()
         return;
     }
     Serial.printf("installing version %d...\n", latest);
-    int err = BaselineUpdate.sketchFromUrl(UPDATE_URL "/ota_pull_sketch.bsk");   // restarts when it works
+    int err = BaselineUpdate.sketchFromUrl(UPDATE_URL "/ota_pull_sketch.flick");   // restarts when it works
     Serial.printf("update failed (%d); trying again later\n", err);
 }
 

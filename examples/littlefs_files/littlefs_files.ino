@@ -40,7 +40,7 @@ void setup()
     f.close();
 
     f = LittleFS.open("/hello.txt", FILE_WRITE);
-    f.println("Hello from Baseline Sketcher");
+    f.println("Hello from Flick");
     f.close();
 
     f = LittleFS.open("/hello.txt");

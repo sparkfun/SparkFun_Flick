@@ -1,5 +1,5 @@
 // selftest.ino - bring-up checks for a new board or Baseline build.
-// Upload it (or run `bsk test`), then read the console: one PASS/FAIL/SKIP line
+// Upload it (or run `flick test`), then read the console: one PASS/FAIL/SKIP line
 // per check and a RESULT line at the end.
 //
 //   - memory and PSRAM (PSRAM checks are skipped on boards without it)
@@ -10,7 +10,7 @@
 //   - microSD, if the board has a slot and a card is in it
 //   - the status and RGB LEDs (look at the board when it says LOOK)
 //   - WiFi scan and BLE scan (needs networks / devices nearby)
-//   - WiFi connection, NTP and HTTP, if WIFI_SSID is set (secrets.cfg, see bsk)
+//   - WiFi connection, NTP and HTTP, if WIFI_SSID is set (secrets.cfg, see flick)
 //   - deep sleep: the board sleeps for 2 s; after the timer wakes it, the
 //     second phase checks that RTC memory and Preferences survived.
 #include <Preferences.h>

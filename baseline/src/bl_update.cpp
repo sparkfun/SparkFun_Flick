@@ -13,7 +13,7 @@
  *                    file wipes the staging area. Every update erases the
  *                    sketch and the files (ota_pull_baseline can re-install a
  *                    sketch afterwards).
- * Push: bsk sends over USB or the WiFi OTA port with UBEGIN/UDATA/UEND
+ * Push: flick sends over USB or the WiFi OTA port with UBEGIN/UDATA/UEND
  *   (loader_proto.c): the raw app image to two-slot boards, the package to
  *   staged ones.
  * Pull: the sketch calls ota_pull_baseline(url, sketch_url) or
@@ -22,7 +22,7 @@
  * Update mode: Baseline restarts without starting the sketch (an RTC flag),
  * so nothing runs from the sketch slots while they are overwritten. It
  * reconnects to WiFi with the credentials the WiFi driver saved, then runs the
- * pull whose URLs are in NVS, or waits (UPDATE_WAIT_MS at most) for bsk to
+ * pull whose URLs are in NVS, or waits (UPDATE_WAIT_MS at most) for flick to
  * push, re-opening the OTA port with the settings ota_begin saved.
  */
 #include <Arduino.h>
@@ -307,7 +307,7 @@ static void stage_finish(void)
     nvs_put("staged", NULL);
 }
 
-/* ------------------------------------------------------------- push (bsk) */
+/* ------------------------------------------------------------- push (flick) */
 
 enum { KIND_APP = 1, KIND_BSU = 2 };
 
@@ -605,7 +605,7 @@ static const char *pull_baseline_staged(const char *url)
     return err;
 }
 
-/* Download a sketch (.bsk) into the free slot and make it the next to run. */
+/* Download a sketch (.flick) into the free slot and make it the next to run. */
 static const char *pull_sketch(const char *url)
 {
     int slot = bl_state_active_slot() ^ 1;      // never overwrite the running sketch
@@ -779,7 +779,7 @@ extern "C" bool bl_update_boot(void)
 
     if (mode == UPD_WAIT_USB || mode == UPD_WAIT_WIFI) {
         s_update_mode = true;
-        sketch_set_status("update mode: waiting for bsk");
+        sketch_set_status("update mode: waiting for flick");
         BLOG_I("update mode: waiting for the Baseline update (sketch not started)");
         if (mode == UPD_WAIT_WIFI && wifi_up()) {
             bl_ota_start_saved();

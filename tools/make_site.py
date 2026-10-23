@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Build the Baseline Sketcher download page (GitHub Pages).
+"""Build the Flick download page (GitHub Pages).
 
-  python tools/make_site.py [--out site_build] [--kit dist/baseline-sketcher-kit-<ver>.zip]
+  python tools/make_site.py [--out site_build] [--kit dist/flick-kit-<ver>.zip]
 
 Reads targets/*/target.json and the built images in dist/<target>/
-(bsk baseline build), and writes a static site:
+(flick baseline build), and writes a static site:
   index.html                  boards, "Flash" buttons (ESP Web Tools, Chrome/Edge), downloads
   manifests/<target>.json     ESP Web Tools manifests
   firmware/<target>/          baseline-<target>.bin (USB/web flash at 0x0) and .bsu (over the air)
@@ -17,6 +17,7 @@ this and publishes the result.
 import argparse
 import html
 import json
+import os
 import re
 import shutil
 import sys
@@ -37,8 +38,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="site_build")
     ap.add_argument("--dist", default=str(ROOT / "dist"))
-    ap.add_argument("--kit", help="the sketch kit zip (default: newest dist/baseline-sketcher-kit-*.zip)")
-    ap.add_argument("--repo", default="https://github.com/sparkfun/Baseline_Sketcher")
+    ap.add_argument("--kit", help="the sketch kit zip (default: newest dist/flick-kit-*.zip)")
+    gh = os.environ.get("GITHUB_REPOSITORY")      # set by GitHub Actions: follows a renamed repo
+    ap.add_argument("--repo", default=f"https://github.com/{gh}" if gh else "https://github.com/sparkfun/Flick")
     args = ap.parse_args()
     out, dist = Path(args.out), Path(args.dist)
     version = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / "baseline/src/bl_main.h").read_text()).group(1)
@@ -78,7 +80,7 @@ def main():
         flash_mb = int(t["flash_size"].rstrip("MB"))
         rows.append((board, name, t, flash_mb, bin_, bsu))
 
-    kit = Path(args.kit) if args.kit else max(dist.glob("baseline-sketcher-kit-*.zip"), default=None,
+    kit = Path(args.kit) if args.kit else max(dist.glob("flick-kit-*.zip"), default=None,
                                               key=lambda p: p.stat().st_mtime)
     kit_link = ""
     if kit and kit.exists():
@@ -109,7 +111,7 @@ def main():
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Baseline Sketcher</title>
+<title>Flick</title>
 <script type="module" src="{ESP_WEB_TOOLS}"></script>
 <style>
   :root {{ --red: #e0311d; --ink: #1d1d1f; --mute: #6b6b70; --line: #e4e4e7; --bg: #fafafa; }}
@@ -143,7 +145,7 @@ def main():
 </head>
 <body>
 <header><div>
-  <h1>Baseline Sketcher</h1>
+  <h1>Flick</h1>
   <p>Arduino sketches for SparkFun ESP32 boards that build in about a second and upload in under one, over USB or WiFi.
   The board runs Baseline, precompiled firmware with Arduino-ESP32, WiFi, BLE and storage inside; your sketch is only your code.</p>
 </div></header>
@@ -151,8 +153,8 @@ def main():
   <h2>Get started</h2>
   <div class="steps">
     <div class="step"><b>1. Flash Baseline</b><p>Plug in your board and press <i>Flash</i> next to it below (Chrome or Edge). Once per board.</p></div>
-    <div class="step"><b>2. Get the kit</b><p>Unzip it, then run <code>pip install -r requirements.txt</code> and <code>python tools/bsk.py setup</code>.</p></div>
-    <div class="step"><b>3. Write sketches</b><p>Ask your AI assistant in the kit folder, or run <code>python tools/bsk.py upload examples/blink -m</code>.</p></div>
+    <div class="step"><b>2. Get the kit</b><p>Unzip it, then run <code>pip install -r requirements.txt</code> and <code>python tools/flick.py setup</code>.</p></div>
+    <div class="step"><b>3. Write sketches</b><p>Ask your AI assistant in the kit folder, or run <code>python tools/flick.py upload examples/blink -m</code>.</p></div>
   </div>
   <p style="margin-top:16px">{f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>' if kit_link else ''}</p>
 
@@ -163,15 +165,15 @@ def main():
 {chr(10).join(row_html(*r) for r in rows)}
     </tbody>
   </table></div>
-  <p class="target"><i>.bin</i>: the full image, flash at 0x0 (<code>python tools/bsk.py baseline flash --file ...</code>).
-  <i>.bsu</i>: a Baseline update over WiFi (<code>bsk baseline update --file ...</code> or <code>BaselineUpdate.baselineFromUrl()</code>).
+  <p class="target"><i>.bin</i>: the full image, flash at 0x0 (<code>python tools/flick.py baseline flash --file ...</code>).
+  <i>.bsu</i>: a Baseline update over WiFi (<code>flick baseline update --file ...</code> or <code>BaselineUpdate.baselineFromUrl()</code>).
   Boards with 8 or 16 MB keep their sketch through an over-the-air update; 4 MB boards lose the sketch and LittleFS.</p>
 
   <h2>Why a kit, and not just the firmware?</h2>
   <p>Baseline on its own runs whatever sketch you upload, but sketches are built against the kit's headers
   (<code>sdk/</code>), which say exactly what Baseline provides. The kit also has <code>AGENTS.md</code>,
   which tells AI coding assistants how to build and upload and what Baseline can't do, plus the examples and
-  <code>bsk</code> (build, upload, serial monitor, libraries, updates).</p>
+  <code>flick</code> (build, upload, serial monitor, libraries, updates).</p>
 
   <footer>Baseline {version} · ABI {'.'.join(abi)} · <a href="{args.repo}">source</a></footer>
 </main>
