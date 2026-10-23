@@ -14,9 +14,7 @@
         "-mlongcalls"
     ],
     "linker_script": "sdk/ld/sketch_esp.ld.in",
-    "sdk_sources": [
-        "sketch_ctype.c"
-    ],
+    "sdk_sources": [],
     "usb_vids": [
         "1A86",
         "10C4",

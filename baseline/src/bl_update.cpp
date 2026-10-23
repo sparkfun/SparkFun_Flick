@@ -255,11 +255,31 @@ static void http_close(http_t *h)
 
 /* ------------------------------------------------------- staged packages */
 
+/* The staging area is erased a sector at a time, just ahead of the writes.
+ * Erasing all of it at once blocks for seconds, and on a single-core chip
+ * WiFi cannot run meanwhile: the connection bringing the package drops. */
+static uint32_t s_erased_to;    /* staging is erased up to this flash address */
+
 static const char *stage_erase(uint32_t stage, uint32_t pkg_size)
 {
-    uint32_t len = align_up(BSU_STAGE_PKG_OFFSET + pkg_size, SECTOR);
-    BLOG_I("update: erasing %u KB of staging area", (unsigned)(len / 1024));
-    return esp_flash_erase_region(NULL, stage, len) == ESP_OK ? NULL : "staging erase failed";
+    BLOG_I("update: staging %u KB", (unsigned)(align_up(BSU_STAGE_PKG_OFFSET + pkg_size, SECTOR) / 1024));
+    if (esp_flash_erase_region(NULL, stage, SECTOR) != ESP_OK) {    // the record's sector
+        return "staging erase failed";
+    }
+    s_erased_to = stage + SECTOR;
+    return NULL;
+}
+
+static esp_err_t stage_write(uint32_t addr, const void *data, size_t len)
+{
+    while (s_erased_to < addr + len) {
+        esp_err_t e = esp_flash_erase_region(NULL, s_erased_to, SECTOR);
+        if (e != ESP_OK) {
+            return e;
+        }
+        s_erased_to += SECTOR;
+    }
+    return esp_flash_write(NULL, data, addr, len);
 }
 
 /* After the whole package is stored: check it, then write the record that
@@ -405,7 +425,7 @@ extern "C" const char *bl_update_push_data(const uint8_t *data, size_t len)
             return "flash write failed";
         }
     } else {
-        if (esp_flash_write(NULL, data, s_push.stage + BSU_STAGE_PKG_OFFSET + s_push.next, len) != ESP_OK) {
+        if (stage_write(s_push.stage + BSU_STAGE_PKG_OFFSET + s_push.next, data, len) != ESP_OK) {
             bl_update_push_abort();
             return "flash write failed";
         }
@@ -572,7 +592,7 @@ static const char *pull_baseline_staged(const char *url)
     if (!err) {
         err = stage_erase(stage, pkg);
     }
-    if (!err && esp_flash_write(NULL, &hdr, stage + BSU_STAGE_PKG_OFFSET, sizeof(hdr)) != ESP_OK) {
+    if (!err && stage_write(stage + BSU_STAGE_PKG_OFFSET, &hdr, sizeof(hdr)) != ESP_OK) {
         err = "staging write failed";
     }
     if (!err) {
@@ -587,7 +607,7 @@ static const char *pull_baseline_staged(const char *url)
             int got = http_read(&h, buf, want);
             if (got <= 0) {
                 err = "download ended early";
-            } else if (esp_flash_write(NULL, buf, stage + BSU_STAGE_PKG_OFFSET + off, (size_t)got) != ESP_OK) {
+            } else if (stage_write(stage + BSU_STAGE_PKG_OFFSET + off, buf, (size_t)got) != ESP_OK) {
                 err = "staging write failed";
             } else {
                 mbedtls_sha256_update(&sha, buf, (size_t)got);

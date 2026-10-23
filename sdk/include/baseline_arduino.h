@@ -72,6 +72,24 @@ typedef uint16_t word;
 #endif
 static inline uint16_t makeWord(uint8_t h, uint8_t l) { return (uint16_t)((h << 8) | l); }
 
+/* Arduino's character tests (WCharacter.h), on <ctype.h> (ASCII). */
+inline bool isAlphaNumeric(int c) { return isalnum(c) != 0; }
+inline bool isAlpha(int c) { return isalpha(c) != 0; }
+inline bool isAscii(int c) { return isascii(c) != 0; }
+inline bool isWhitespace(int c) { return isblank(c) != 0; }
+inline bool isControl(int c) { return iscntrl(c) != 0; }
+inline bool isDigit(int c) { return isdigit(c) != 0; }
+inline bool isGraph(int c) { return isgraph(c) != 0; }
+inline bool isLowerCase(int c) { return islower(c) != 0; }
+inline bool isPrintable(int c) { return isprint(c) != 0; }
+inline bool isPunct(int c) { return ispunct(c) != 0; }
+inline bool isSpace(int c) { return isspace(c) != 0; }
+inline bool isUpperCase(int c) { return isupper(c) != 0; }
+inline bool isHexadecimalDigit(int c) { return isxdigit(c) != 0; }
+inline int toAscii(int c) { return toascii(c); }
+inline int toLowerCase(int c) { return tolower(c); }
+inline int toUpperCase(int c) { return toupper(c); }
+
 /* Board pins: from the target's bl_target.h (targets/<target>/sdk/). */
 #include "bl_target.h"
 static const int STAT_LED = BL_BOARD_STAT_LED;

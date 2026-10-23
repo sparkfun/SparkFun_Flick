@@ -92,6 +92,9 @@ static void check_basics()
     CHECK("String(-7)", String(-7) == "-7");
     CHECK("String(3.5, 2)", String(3.5, 2) == "3.50");
     CHECK("String from F()", String(F("flash")) == "flash");
+    CHECK("<ctype.h> and Arduino character tests",
+          isdigit('7') && !isdigit('a') && isalpha('Q') && isspace('\n') && isxdigit('F') && ispunct('!') &&
+          toupper('q') == 'Q' && tolower('Z') == 'z' && isDigit('3') && !isUpperCase('a') && toUpperCase('b') == 'B');
     CHECK("sqrt/pow (libm)", fabs(sqrt(2.0) * sqrt(2.0) - 2.0) < 1e-9 && pow(2.0, 10) == 1024.0);
     long r = random(1000);
     CHECK("random(1000) in range", r >= 0 && r < 1000);

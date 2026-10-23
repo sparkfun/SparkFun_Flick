@@ -493,7 +493,7 @@ def build(proj, target_name=None):
                                                  *(f for d in target["sdk_dirs"] for f in d.glob("*")),
                                                  target["dir"] / "target.json",
                                                  target["chip_dir"] / "chip.json", Path(__file__)])
-    shared = ["sketch_libc.c", "sketch_time.c", *target["sdk_sources"]] + (
+    shared = ["sketch_libc.c", "sketch_time.c", "sketch_ctype.c", *target["sdk_sources"]] + (
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
          "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp",
@@ -1707,7 +1707,7 @@ def cmd_baseline_update(args, target):
     conn.close()
     if kind == "bsu" and getattr(args, "host", None):
         # The update erased the sketch, so nothing will bring WiFi up again.
-        print("the bootloader installs the update now (about 10 s); the sketch was erased, so the board is "
+        print("the bootloader installs the update now (about 30 s); the sketch was erased, so the board is "
               "not on WiFi any more: upload a sketch over USB (or use ota_pull_baseline with a sketch URL)")
         return
     print("waiting for the board to restart" + (" (the bootloader installs the update)" if kind == "bsu" else ""))

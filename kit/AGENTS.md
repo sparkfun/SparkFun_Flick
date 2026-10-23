@@ -45,11 +45,10 @@ A sketch is a folder named like its main file: `my_sketch/my_sketch.ino`.
 
    If a build fails with an undefined reference, the call is not in Baseline. Use a supported alternative and say so; do not try to add it.
 2. **No C++ exceptions or RTTI** (`try`/`throw`, `dynamic_cast`, `typeid`).
-3. **No `<ctype.h>` macros yet** (`isdigit`, `isalpha`...). Compare characters directly (`c >= '0' && c <= '9'`).
-4. **Global and static data is limited to 32 KB** (64 KB on the ESP32-S3); the code to 512 KB (256 KB on 4 MB boards). Allocate big buffers with `malloc`/`new` in `setup()`. On boards with PSRAM, `ps_malloc` allocates there.
-5. **`loop()` must return, and nothing may block for 5 s without a `delay()`:** the watchdog restarts the board. Calls such as WiFi connects and HTTP requests handle this themselves.
-6. **Callbacks run on the sketch task** (interrupts, timers, WiFi/BLE events, `Ticker`): they arrive between `loop()` calls, not in interrupt context. Keep them short; don't busy-wait for them inside `loop()` without `delay()`.
-7. **Library compatibility:** Arduino libraries that use only Arduino APIs (most I2C/SPI sensor and display libraries, ArduinoJson, ...) work. Libraries that call ESP-IDF directly or need exceptions do not.
+3. **Global and static data is limited to 32 KB** (64 KB on the ESP32-S3); the code to 512 KB (256 KB on 4 MB boards). Allocate big buffers with `malloc`/`new` in `setup()`. On boards with PSRAM, `ps_malloc` allocates there.
+4. **`loop()` must return, and nothing may block for 5 s without a `delay()`:** the watchdog restarts the board. Calls such as WiFi connects and HTTP requests handle this themselves.
+5. **Callbacks run on the sketch task** (interrupts, timers, WiFi/BLE events, `Ticker`): they arrive between `loop()` calls, not in interrupt context. Keep them short; don't busy-wait for them inside `loop()` without `delay()`.
+6. **Library compatibility:** Arduino libraries that use only Arduino APIs (most I2C/SPI sensor and display libraries, ArduinoJson, ...) work. Libraries that call ESP-IDF directly or need exceptions do not.
 
 ## When things go wrong
 

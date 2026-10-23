@@ -82,23 +82,23 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 
 ## Over-the-air updates (docs/OTA.md)
 
-| Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) | Thing Plus C6 (dual, 16 MB) |
-|---|---|---|---|
-| Baseline push over USB (`flick baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased | ✅ 2.1 MB in 23 s (native USB) |
-| Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port | ⬜ |
-| A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` | ✅ `0.1.1-test` in `baseline_1` |
-| Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) | ⬜ |
-| Reset during the bootloader's install (power cut) | (n/a) | ✅ install starts again and finishes | (n/a) |
-| Sketch pull from a GitHub release (`ota_pull_sketch`) | ⬜ | ✅ v1 installed v2, v2 up to date | ⬜ |
-| Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (run on the C6 instead) | ✅ update mode download, bootloader install, sketch reinstalled from the release | ✅ inflated on the board into `baseline_1` while the sketch ran (17 s), restarted, sketch reinstalled, confirmed |
-| `flick test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 | ✅ 30/0/2 |
+| Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) | Thing Plus C6 (dual, 16 MB) | Qwiic Pocket C6 (staged, 4 MB) |
+|---|---|---|---|---|
+| Baseline push over USB (`flick baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased | ✅ 2.1 MB in 23 s (native USB) | ✅ 1.28 MB in 15 s |
+| Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port | ⬜ | ✅ 30 s, after the fix in issue 16 |
+| A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` | ✅ `0.1.1-test` in `baseline_1` | ✅ `0.1.1-test`, then back to 0.1.0 |
+| Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) | ⬜ | (one slot: n/a) |
+| Reset during the bootloader's install (power cut) | (n/a) | ✅ install starts again and finishes | (n/a) | ✅ install starts again and finishes |
+| Sketch pull from a GitHub release (`ota_pull_sketch`) | ⬜ | ✅ v1 installed v2, v2 up to date | ⬜ | (same code as the C3) |
+| Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (run on the C6 instead) | ✅ update mode download, bootloader install, sketch reinstalled from the release | ✅ inflated on the board into `baseline_1` while the sketch ran (17 s), restarted, sketch reinstalled, confirmed | (same code as the C3) |
+| `flick test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 | ✅ 30/0/2 | ✅ 31/0/3 |
 
 ## Not tested on hardware yet
 
 - `Wire1` (second I2C bus), `Serial1.setRxBufferSize`, `WiFiMulti`, `dacWrite`
 - ESP-NOW between two boards, MQTT, WiFi upload (`flick upload --host`), `BLESerial` with a phone, BLE server notify/write, WebServer, TCP/UDP examples
 - Safe mode by holding BOOT at reset
-- Staged updates on the Qwiic Pocket C6 and Thing Plus S3 (built; the C3 is tested)
+- Staged updates on the Thing Plus S3 (built; the C3 and Pocket C6 are tested)
 - Bluetooth Classic SPP pairing with a phone
 - I2S (needs an amplifier), servos, LED strips longer than one LED
 
@@ -119,3 +119,5 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 13. **OTA port starved the idle task's watchdog (2026-10-23, fixed).** With `flick` keeping 16 lines in flight over WiFi, the OTA task read one byte at a time (an lwIP call each) and handled line after line without yielding: the task watchdog reset the board. **Fixed:** `bl_ota.cpp` reads in 512-byte blocks and yields after every command.
 14. **GitHub release downloads failed with `HTTP_CLIENT: Out of buffer` (2026-10-23, fixed).** The redirect to GitHub's file storage carries a long signed URL that did not fit `esp_http_client`'s default 512-byte buffers. **Fixed:** 4 KB receive and 2 KB transmit buffers in `HTTPClient` (`bl_impl_wifi.cpp`) and in the update downloads (`bl_update.cpp`).
 15. **The bootloader logs to UART0, not USB.** On native-USB boards the staged install's own messages (`bsu_stage: installing ...`) are only on the TX pin; Baseline logs the outcome on the next start (`update: Baseline ... installed`).
+16. **Staged Baseline push over WiFi dropped on the Qwiic Pocket C6 (2026-10-23, fixed).** Update mode erased the whole staging area (1.26 MB, about 5 s) in one call before replying; on a single-core chip WiFi cannot run during a flash erase, and the connection dropped (`errno 113`). The C3 had survived the same erase by luck. **Fixed:** the staging area is erased one 4 KB sector at a time, just ahead of each write (push and download). Pocket C6 WiFi push then went through (30 s).
+17. **`<ctype.h>` (2026-10-23, added).** `isdigit`, `toupper`... and Arduino's `isDigit`... now work on every chip (`sdk/include/compat/ctype.h`, `sdk/src/sketch_ctype.c`, ASCII). newlib's own header needs locale tables Baseline does not export; libstdc++ still gets the class bits (`_U`, `_L`, ...) it defines `std::ctype_base` with. `selftest` checks them. Library sweep: 28/28 on the Pocket C6 and S3 (ArduinoJson needed the class bits).

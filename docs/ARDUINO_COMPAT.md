@@ -119,11 +119,12 @@ back until it does.
 - **microSD** shares the SPI bus with `SPI` on the Thing Plus C.
 - **Not supported:** ESP-NOW encryption, `WiFi.scanNetworks(true)` (async; it scans synchronously), HTTP file uploads to `WebServer`, and BLE extended advertising.
 
+- **Characters:** `<ctype.h>` / `<cctype>` (`isdigit`, `isalpha`, `toupper`, ...) and Arduino's `isDigit`, `isAlpha`, `isWhitespace`, `toUpperCase`, ... work on ASCII, as in the "C" locale.
+
 ## Not supported yet
 
 - SPIFFS, Arduino's `Update` / `HTTPUpdate` classes (use `BaselineUpdate`, docs/OTA.md), USB mass storage, camera
 - `rtc_gpio_*` pin isolation for deep sleep, ULP
-- `<ctype.h>` macros (`isdigit`, ...)
 - Arduino libraries from the Library Manager. A library can be added to Baseline and exposed through the API.
 
 If code uses something on this list, the build fails with "not declared".

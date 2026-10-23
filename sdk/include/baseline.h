@@ -12,7 +12,7 @@
  * strrchr, strstr, str[n]cat, str[n]casecmp, abs, labs, qsort). malloc/free,
  * printf/snprintf/sprintf, puts, atoi/atof/strtol/strtod are forwarded to
  * Baseline by sdk/src/sketch_libc.c. libgcc supplies integer/float helpers.
- * <ctype.h> macros are not supported yet. Raw API: docs/API.md.
+ * <ctype.h> (isdigit, toupper, ...) is ASCII-only, as in the "C" locale. Raw API: docs/API.md.
  */
 #ifndef BASELINE_H
 #define BASELINE_H
@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>       /* NAN, sqrt, pow, ... (libm is linked) */
+#include <ctype.h>      /* sdk/include/compat/ctype.h: isdigit, toupper, ... */
 #undef putchar      /* newlib macros that need its stdio internals */
 #undef getchar
 #include "baseline_pgmspace.h"   /* PROGMEM, pgm_read_byte, ... (no-ops on ESP32) */

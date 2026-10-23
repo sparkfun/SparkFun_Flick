@@ -40,7 +40,7 @@ def main():
     ap.add_argument("--dist", default=str(ROOT / "dist"))
     ap.add_argument("--kit", help="the sketch kit zip (default: newest dist/flick-kit-*.zip)")
     gh = os.environ.get("GITHUB_REPOSITORY")      # set by GitHub Actions: follows a renamed repo
-    ap.add_argument("--repo", default=f"https://github.com/{gh}" if gh else "https://github.com/sparkfun/Flick")
+    ap.add_argument("--repo", default=f"https://github.com/{gh}" if gh else "https://github.com/sparkfun/SparkFun_Flick")
     args = ap.parse_args()
     out, dist = Path(args.out), Path(args.dist)
     version = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / "baseline/src/bl_main.h").read_text()).group(1)
