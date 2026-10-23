@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -108,6 +109,7 @@ def load_target(name):
     defs = header_defines(chip_dir / "sdk" / "bl_target.h")
     t["ibus"], t["dbus"] = defs["BL_SKETCH_IBUS_BASE"], defs["BL_SKETCH_DBUS_BASE"]
     t["max_size"] = defs["BL_SKETCH_MAX_SIZE"]
+    t["chip_id"] = defs["BL_TARGET_CHIP_ID"]
     return t
 
 
@@ -722,6 +724,28 @@ class Link:
             self.buf += self.ser.read(self.ser.in_waiting or 1)
         return None
 
+    def request_status(self, line, timeout=5.0):
+        """(True, text) for OK, (False, text) for ERR, None if no reply."""
+        self.send(line)
+        return self.reply(timeout)
+
+    def reply(self, timeout=5.0):
+        """The next reply to a line already sent: (ok, text), or None."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r = self.readline(deadline - time.time())
+            if r is None:
+                break
+            if r.startswith(PROTO_PREFIX + " "):
+                body = r[len(PROTO_PREFIX) + 1:]
+                if body.startswith("OK"):
+                    return True, body[2:].strip()
+                if body.startswith("ERR"):
+                    return False, body[3:].strip()
+            elif self.echo and r:
+                print(r)
+        return None
+
     def request(self, line, timeout=5.0):
         self.send(line)
         deadline = time.time() + timeout
@@ -1117,6 +1141,12 @@ def sync_tree(src, dst, skip=()):
             shutil.copy2(f, out)
 
 
+def staged_updates(target):
+    """4 MB boards have one Baseline slot: Baseline updates are staged and the
+    bootloader installs them (8/16 MB boards have two slots)."""
+    return target["flash_size"] == "4MB"
+
+
 def stage_idf(target, core_dir, libs_dir):
     """Assemble the IDF project for a target (layout: idf/CMakeLists.txt)."""
     proj = BUILD_ROOT / target["name"] / "idf"
@@ -1133,6 +1163,16 @@ def stage_idf(target, core_dir, libs_dir):
         shutil.copy2(f, main / f.name)
     if sorted(main.rglob("*")) != before:
         (main / "CMakeLists.txt").touch()     # new or removed sources: make CMake glob again
+
+    # bootloader_components/bsu_stage: on 4 MB boards (one Baseline slot) the
+    # bootloader installs staged Baseline updates (baseline/src/bl_update.cpp).
+    boot = proj / "bootloader_components"
+    if staged_updates(target):
+        sync_tree(idf_src / "bootloader_components", boot)
+        for f in ("bsu_inflate.c", "bsu_inflate.h", "bsu_format.h"):
+            shutil.copy2(ROOT / "baseline" / "src" / "bsu" / f, boot / "bsu_stage" / f)
+    elif boot.exists():
+        shutil.rmtree(boot)
 
     # components/arduino: the installed core (no examples), with a trimmed manifest.
     arduino = proj / "components" / "arduino"
@@ -1214,7 +1254,7 @@ def build_baseline_idf(target, core):
     proj = stage_idf(target, core_dir, libs_dir)
     inc = ";".join(str(p).replace("\\", "/") for p in (SDK / "include", *target["sdk_dirs"]))
     idf_py = [str(py), str(idf_path / "tools" / "idf.py"), "-C", str(proj), "-B", str(proj / "build"),
-              f"-DBSK_DEFINES={';'.join(target.get('idf_defines', []))}"]
+              f"-DBSK_DEFINES={';'.join(target.get('idf_defines', []) + (['BL_UPDATE_STAGED_BOOTLOADER=1'] if staged_updates(target) else []))}"]
     if not (proj / "sdkconfig").exists():
         shutil.rmtree(proj / "build", ignore_errors=True)   # starting over: set-target won't clean a half-made build
         run(idf_py + [f"-DIDF_TARGET={target['idf_target']}", f"-DBSK_INCLUDE_DIRS={inc}", "set-target",
@@ -1231,6 +1271,9 @@ def build_baseline_idf(target, core):
         parts += [off, str(b / f)]
     run([str(py), "-m", "esptool", "--chip", target["idf_target"], "merge_bin", "-o", str(out)] + parts, env=env)
     print(f"Baseline blob: {out.relative_to(ROOT)} ({out.stat().st_size:,} bytes; flash at 0x0)")
+    bsu = make_bsu(target, b / args["app"]["file"], DIST / target["name"] / f"baseline-{target['name']}.bsu")
+    print(f"Baseline update: {bsu.relative_to(ROOT)} ({bsu.stat().st_size:,} bytes; bsk baseline update, "
+          "or ota_pull_baseline)")
     return proj, env, py, args
 
 
@@ -1313,7 +1356,145 @@ def leave_usb_device_mode(port, fixed_port):
     return new_port
 
 
+# ---------------------------------------------------------------- Baseline updates over the air
+
+# .bsu: the Baseline update package (baseline/src/bsu/bsu_format.h): a 128-byte
+# header, then the app image compressed with raw deflate.
+BSU_MAGIC = 0x31555342
+BSU_HEADER = struct.Struct("<IBBHII32s32s32s16s")
+
+
+def make_bsu(target, app_bin, out):
+    raw = Path(app_bin).read_bytes()
+    z = zlib.compressobj(9, zlib.DEFLATED, -15, 9)
+    comp = z.compress(raw) + z.flush()
+    version = header_defines(ROOT / "baseline" / "src" / "bl_main.h")["BASELINE_VERSION"]
+    hdr = BSU_HEADER.pack(BSU_MAGIC, 1, 0, target["chip_id"], len(raw), len(comp),
+                          hashlib.sha256(raw).digest(), hashlib.sha256(comp).digest(),
+                          target["name"].encode().ljust(32, b"\0"), version.encode()[:16].ljust(16, b"\0"))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(hdr + comp)
+    return out
+
+
+def parse_bsu(pkg):
+    """The .bsu header as a dict, after checking it and the compressed data's SHA-256."""
+    if len(pkg) < BSU_HEADER.size:
+        sys.exit("error: not a Baseline update (.bsu): too short")
+    magic, ver, _, chip, raw_size, comp_size, raw_sha, comp_sha, target, version = BSU_HEADER.unpack_from(pkg)
+    if magic != BSU_MAGIC or ver != 1:
+        sys.exit("error: not a Baseline update (.bsu)")
+    comp = pkg[BSU_HEADER.size:]
+    if len(comp) != comp_size or hashlib.sha256(comp).digest() != comp_sha:
+        sys.exit("error: the .bsu file is damaged")
+    return {"chip_id": chip, "raw_size": raw_size, "raw_sha": raw_sha, "comp": comp,
+            "target": target.rstrip(b"\0").decode(), "version": version.rstrip(b"\0").decode()}
+
+
+def reconnect(args, timeout=90):
+    """Open the link again after the board restarts (USB port or WiFi host)."""
+    deadline = time.time() + timeout
+    time.sleep(3)
+    while time.time() < deadline:
+        try:
+            if getattr(args, "host", None):
+                conn = NetPort(args.host, args.password or os.environ.get("BSK_OTA_PASSWORD"))
+            else:
+                port = find_port(args.port)
+                _baud_cache.pop(port, None)
+                conn = open_port(port, console_baud(port, None))
+            link = Link(conn, echo=False)
+            if link.request_status("INFO", timeout=3):
+                return conn, link
+            conn.close()
+        except (SystemExit, OSError):
+            pass
+        time.sleep(2)
+    sys.exit("error: the board did not come back after restarting")
+
+
+def send_update(link, kind, data):
+    """UBEGIN/UDATA/UEND. Returns None when stored, or the ERR text of UBEGIN."""
+    r = link.request_status(f"UBEGIN {kind} {len(data)} {hashlib.sha256(data).hexdigest()}", timeout=60)
+    if r is None:
+        sys.exit("error: no reply to UBEGIN")
+    if not r[0]:
+        return r[1]
+    t0 = time.time()
+    # Over WiFi, keep several lines in flight (TCP keeps them in order): one
+    # reply per line would cost a network round trip each. Over USB, one at a time.
+    window = 16 if isinstance(link.ser, NetPort) else 1
+    pending, shown = 0, -1
+    for off in range(0, len(data), CHUNK):
+        link.send(f"UDATA {off} {base64.b64encode(data[off:off + CHUNK]).decode()}")
+        pending += 1
+        while pending >= window or (pending and off + CHUNK >= len(data)):
+            r = link.reply(10)
+            if not r or not r[0]:
+                sys.exit(f"\nerror from Baseline: {r[1] if r else 'no reply'}")
+            pending -= 1
+        pct = min(off + CHUNK, len(data)) * 100 // len(data)
+        if pct // 10 != shown:
+            shown = pct // 10
+            print(f"\r  {pct}%", end="", flush=True)
+    print()
+    print(link.request("UEND", timeout=60))
+    print(f"sent in {time.time() - t0:.1f}s")
+    return None
+
+
+def cmd_baseline_update(args, target):
+    """Update Baseline over USB or WiFi (--host) without esptool."""
+    if args.file:
+        bsu = Path(args.file)
+    else:
+        build_baseline_idf(target, newest_esp32_core())
+        bsu = DIST / target["name"] / f"baseline-{target['name']}.bsu"
+    pkg = bsu.read_bytes()
+    h = parse_bsu(pkg)
+    port, conn = open_link_port(args)
+    link = Link(conn, echo=False)
+    fields = info_fields(link.request("INFO"))
+    board = fields.get("target") or fields.get("chip")
+    if board != h["target"]:
+        sys.exit(f"error: {bsu.name} is for {h['target']}; the board on {port} runs {board}")
+    mode = fields.get("update", "none")
+    print(f"{port}: Baseline {fields.get('baseline')} in {fields.get('bpart', '?')}, update mode {mode}; "
+          f"sending Baseline {h['version']} ({bsu.name})")
+    if mode == "dual":
+        kind, data = "app", zlib.decompress(h["comp"], -15)
+        if hashlib.sha256(data).digest() != h["raw_sha"]:
+            sys.exit("error: the .bsu file is damaged")
+    elif mode == "staged":
+        kind, data = "bsu", pkg
+        print("note: on this board the update erases the sketch and LittleFS")
+    else:
+        sys.exit("error: this Baseline cannot be updated over the air (flash it once over USB: bsk baseline flash)")
+    for _ in range(2):
+        err = send_update(link, kind, data)
+        if err is None:
+            break
+        if "update mode" not in err:
+            sys.exit(f"error from Baseline: {err}")
+        print("the board restarts into update mode (the sketch stops); reconnecting...")
+        conn.close()
+        conn, link = reconnect(args)
+    else:
+        sys.exit("error: the board did not take the update")
+    conn.close()
+    print("waiting for the board to restart" + (" (the bootloader installs the update)" if kind == "bsu" else ""))
+    conn, link = reconnect(args, timeout=120)
+    with conn:
+        info = info_fields(link.request("INFO"))
+    print(f"now: Baseline {info.get('baseline')} in {info.get('bpart', '?')}, sketch {info.get('sketch')} "
+          f"({info.get('status')})")
+
+
 def cmd_baseline(args):
+    if args.action == "update" and not args.target:
+        _, conn = open_link_port(args)      # the target the board runs
+        with conn:
+            args.target = info_fields(Link(conn, echo=False).request("INFO")).get("target")
     target = load_target(args.target or DEFAULT_TARGET)
     min_core = tuple(int(x) for x in target["min_core"].split("."))
     core = newest_esp32_core()
@@ -1322,6 +1503,8 @@ def cmd_baseline(args):
         sys.exit(f"error: Baseline needs Arduino-ESP32 core >= {target['min_core']} (found {found}). "
                  "Install it with the Arduino IDE Boards Manager.")
     print(f"target {target['name']}: {target['description']}")
+    if args.action == "update":
+        return cmd_baseline_update(args, target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)
         if args.action == "flash":
@@ -1404,10 +1587,14 @@ def main():
     p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
     p.set_defaults(fn=cmd_test)
 
-    p = sub.add_parser("baseline", help="build or flash a Baseline blob")
-    p.add_argument("action", choices=["build", "flash"])
+    p = sub.add_parser("baseline", help="build, flash (USB, esptool) or update (USB or WiFi) Baseline")
+    p.add_argument("action", choices=["build", "flash", "update"])
     p.add_argument("-t", "--target", help=targets_help + "; default " + DEFAULT_TARGET)
     p.add_argument("-p", "--port")
+    p.add_argument("--host", help="update: over WiFi to NAME[.local][:port] (the sketch must call ArduinoOTA.begin())")
+    p.add_argument("--password", help="update: OTA password (or set BSK_OTA_PASSWORD)")
+    p.add_argument("--file", help="update: a .bsu file (default: build it for --target)")
+    p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
     p.set_defaults(fn=cmd_baseline)
 
     args = ap.parse_args()

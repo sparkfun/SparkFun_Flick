@@ -264,4 +264,7 @@ const bl_api_t bl_api_table = {
     .reset_reason = bl_impl_reset_reason,
     .last_crash = bl_impl_last_crash,
     .wifi_event_take = bl_impl_wifi_event_take,
+    .baseline_update_mode = bl_impl_baseline_update_mode,
+    .ota_pull_sketch = bl_impl_ota_pull_sketch,
+    .ota_pull_baseline = bl_impl_ota_pull_baseline,
 };

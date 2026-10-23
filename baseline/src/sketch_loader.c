@@ -256,6 +256,11 @@ const char *sketch_status(void)
     return s_status;
 }
 
+void sketch_set_status(const char *status)
+{
+    s_status = status;
+}
+
 const char *sketch_name(void)
 {
     return s_hdr.magic == BL_SKETCH_MAGIC ? s_hdr.name : "";

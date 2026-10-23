@@ -20,6 +20,11 @@
 #define BL_ERR_NACK         -6      /* I2C: no acknowledge */
 #define BL_ERR_TIMEOUT      -7
 
+/* How this board updates Baseline over the air (baseline_update_mode). */
+#define BL_UPDATE_NONE      0       /* only over USB */
+#define BL_UPDATE_DUAL      1       /* two Baseline slots: the sketch and files are kept */
+#define BL_UPDATE_STAGED    2       /* 4 MB flash: each update erases the sketch and LittleFS */
+
 /* ---- WiFi status (same values as Arduino's wl_status_t) ---- */
 #define BL_WIFI_IDLE            0
 #define BL_WIFI_NO_SSID         1

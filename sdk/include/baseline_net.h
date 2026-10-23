@@ -556,5 +556,35 @@ extern ArduinoOTAClass ArduinoOTA;
 #define OTA_RECEIVE_ERROR 3
 #define OTA_END_ERROR     4
 
+/* ---------------- BaselineUpdate (ABI 1.7) ----------------
+ * The board fetches its own updates over HTTP(S) (a GitHub release, your
+ * server, or `python -m http.server` on your PC):
+ *   BaselineUpdate.sketchFromUrl("http://server/my_sketch.bsk");
+ *   BaselineUpdate.baselineFromUrl("http://server/baseline-<target>.bsu", sketchUrl);
+ * Both restart the board on success and return only on failure (a BL_ERR_*
+ * code; the console says why). A new sketch rolls back if it crashes on its
+ * first run, a new Baseline (two-slot boards) if it fails to start.
+ * mode(): BL_UPDATE_DUAL - 8/16 MB boards: two Baseline slots, the sketch and
+ *           files are kept;
+ *         BL_UPDATE_STAGED - 4 MB boards: the update erases the sketch and
+ *           LittleFS, so pass sketchUrl to have Baseline install a sketch
+ *           afterwards;
+ *         BL_UPDATE_NONE - over USB only.
+ * The PC can push the same updates: bsk upload --host / bsk baseline update --host. */
+class BaselineUpdateClass {
+public:
+    int mode() { return bl_baseline_update_mode(); }
+    const char *modeName()
+    {
+        int m = mode();
+        return m == BL_UPDATE_DUAL ? "dual" : m == BL_UPDATE_STAGED ? "staged" : "none";
+    }
+    const char *baselineVersion() { return bl_baseline_version(); }
+    int sketchFromUrl(const char *url) { return bl_ota_pull_sketch(url); }
+    int baselineFromUrl(const char *url, const char *sketchUrl = nullptr) { return bl_ota_pull_baseline(url, sketchUrl); }
+};
+
+static BaselineUpdateClass BaselineUpdate;
+
 #endif /* __cplusplus */
 #endif /* BASELINE_NET_H */

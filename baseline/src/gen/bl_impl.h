@@ -269,6 +269,9 @@ float bl_impl_temperature_read(void);
 int bl_impl_reset_reason(void);
 int bl_impl_last_crash(char *buf, size_t size);
 int bl_impl_wifi_event_take(void);
+int bl_impl_baseline_update_mode(void);
+int bl_impl_ota_pull_sketch(const char *url);
+int bl_impl_ota_pull_baseline(const char *url, const char *sketch_url);
 
 #ifdef __cplusplus
 }

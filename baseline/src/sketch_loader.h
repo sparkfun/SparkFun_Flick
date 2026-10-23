@@ -35,6 +35,7 @@ struct WdtPause {
 extern "C" {
 #endif
 const char *sketch_status(void);
+void        sketch_set_status(const char *status);     /* e.g. "update mode" when no sketch runs */
 const char *sketch_name(void);
 
 #ifdef __cplusplus

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_system.h"
+#include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/stream_buffer.h"
@@ -13,6 +14,7 @@
 #include "bl_console.h"
 #include "bl_main.h"
 #include "bl_state.h"
+#include "bl_update.h"
 #include "loader_proto.h"
 #include "sketch_loader.h"
 
@@ -109,10 +111,12 @@ static void cmd_info(void)
     if (bl_impl_last_crash(crash, sizeof(crash)) <= 0) {
         strcpy(crash, "-");
     }
-    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d crash=\"%s\"",
+    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d update=%s "
+       "bpart=%s crash=\"%s\"",
        BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
-       (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), crash);
+       (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), bl_update_mode_name(),
+       esp_ota_get_running_partition()->label, crash);
 }
 
 static void cmd_begin(char *args)
@@ -214,6 +218,69 @@ static void cmd_end(void)
     restart_soon();
 }
 
+/* ---- Baseline updates (bl_update.cpp): UBEGIN <app|bsu> <size> <sha256>,
+ * UDATA <offset> <base64>, UEND. ---- */
+static uint32_t s_unext;
+
+static void cmd_ubegin(char *args)
+{
+    char *kind = strtok(args, " ");
+    char *size_s = strtok(NULL, " ");
+    char *sha_s = strtok(NULL, " ");
+    uint8_t sha[32];
+    if (!kind || !size_s || !parse_sha(sha_s, sha)) {
+        ERR("usage: UBEGIN app|bsu <size> <sha256>");
+        return;
+    }
+    upload_reset();     // one transfer at a time
+    s_unext = 0;
+    bool restart = false;
+    bool via_wifi = s_sink != NULL && s_sink != console_sink;
+    const char *err = bl_update_push_begin(kind, strtoul(size_s, NULL, 10), sha, via_wifi, &restart);
+    if (err) {
+        ERR("%s", err);
+        if (restart) {
+            restart_soon();
+        }
+        return;
+    }
+    OK("ready");
+}
+
+static void cmd_udata(char *args)
+{
+    static uint8_t buf[DATA_MAX];
+    char *off_s = strtok(args, " ");
+    char *b64 = strtok(NULL, " ");
+    if (!off_s || !b64 || strtoul(off_s, NULL, 10) != s_unext) {
+        ERR("expected offset %u", (unsigned)s_unext);
+        return;
+    }
+    size_t n = 0;
+    if (mbedtls_base64_decode(buf, sizeof(buf), &n, (const unsigned char *)b64, strlen(b64)) != 0) {
+        ERR("bad base64");
+        return;
+    }
+    const char *err = bl_update_push_data(buf, n);
+    if (err) {
+        ERR("%s", err);
+        return;
+    }
+    s_unext += n;
+    OK("%u", (unsigned)s_unext);
+}
+
+static void cmd_uend(void)
+{
+    const char *err = bl_update_push_end();
+    if (err) {
+        ERR("rejected: %s", err);
+        return;
+    }
+    OK("Baseline update stored; rebooting");
+    restart_soon();
+}
+
 static void handle_line(char *line)
 {
     if (strncmp(line, "@BSK ", 5) != 0) {
@@ -235,8 +302,15 @@ static void handle_line(char *line)
         cmd_data(args);
     } else if (!strcmp(cmd, "END")) {
         cmd_end();
+    } else if (!strcmp(cmd, "UBEGIN")) {
+        cmd_ubegin(args);
+    } else if (!strcmp(cmd, "UDATA")) {
+        cmd_udata(args);
+    } else if (!strcmp(cmd, "UEND")) {
+        cmd_uend();
     } else if (!strcmp(cmd, "ABORT")) {
         upload_reset();
+        bl_update_push_abort();
         OK("aborted");
     } else if (!strcmp(cmd, "SAFE")) {
         bl_state_request_safe_mode();

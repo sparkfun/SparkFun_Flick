@@ -3,6 +3,7 @@
 #include "bl_console.h"
 #include "bl_state.h"
 #include "loader_proto.h"
+#include "bl_update.h"
 #include "sketch_loader.h"
 #include "gen/bl_impl.h"
 
@@ -24,6 +25,9 @@ void bl_main(void)
            (unsigned)esp_get_free_heap_size());
 
     loader_start();
+    if (bl_update_boot()) {
+        return;     // update mode (bl_update.cpp): no sketch this boot
+    }
 
     const char *safe = bl_state_safe_mode_reason();
     if (safe) {

@@ -1,13 +1,25 @@
-// wifi_ota.ino - accept sketch uploads over WiFi.
-// Upload this once over USB. After that, from the same network:
-//   python tools/bsk.py upload examples/wifi_ota --host baseline
-// (any sketch that calls ArduinoOTA.begin() can be replaced the same way).
+// wifi_ota.ino - update this board over WiFi from your PC: the sketch, and Baseline itself.
+//
+// Upload this once over USB. After that, from a PC on the same network:
+//   python tools/bsk.py upload my_sketch --host baseline          a new sketch
+//   python tools/bsk.py baseline update --host baseline           a new Baseline (built for this board)
+//   python tools/bsk.py baseline update --host baseline --file baseline-<target>.bsu   a downloaded one
+// Any sketch that calls ArduinoOTA.begin() can be updated the same way.
+//
+// Baseline updates: boards with 8 or 16 MB of flash keep running this sketch
+// while the new Baseline arrives, then restart into it (the old Baseline comes
+// back if the new one fails to start). On 4 MB boards (Pro Micro C3, Qwiic
+// Pocket C6, Thing Plus S3) Baseline first restarts without the sketch, and
+// the update erases the sketch and LittleFS: upload a sketch again afterwards.
+//
+// WiFi: WIFI_SSID / WIFI_PASSWORD from secrets.cfg (see secrets.cfg.example).
 #include <WiFi.h>
 #include <ArduinoOTA.h>
-#include <ESPmDNS.h>
 
-const char *WIFI_SSID = "your-network";
-const char *WIFI_PASSWORD = "your-password";
+#ifndef WIFI_SSID
+#define WIFI_SSID "your-network"
+#define WIFI_PASSWORD "your-password"
+#endif
 
 void setup()
 {
@@ -21,10 +33,10 @@ void setup()
     Serial.println(WiFi.localIP());
 
     ArduinoOTA.setHostname("baseline");     // reachable as baseline.local
-    // ArduinoOTA.setPassword("secret");    // then upload with --password secret
+    // ArduinoOTA.setPassword("secret");    // then add --password secret
     ArduinoOTA.begin();
-    MDNS.addService("http", "tcp", 80);     // MDNS is already running for OTA
-    Serial.println("Ready for WiFi uploads: bsk upload <sketch> --host baseline");
+    Serial.printf("Ready for WiFi updates (Baseline %s, update mode %s)\n", BaselineUpdate.baselineVersion(),
+                  BaselineUpdate.modeName());
 }
 
 void loop()

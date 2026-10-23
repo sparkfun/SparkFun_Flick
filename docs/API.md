@@ -1,4 +1,4 @@
-# Baseline API reference (ABI 1.6)
+# Baseline API reference (ABI 1.7)
 
 Generated from `api/baseline_api.txt` by `tools/gen_api.py`. Do not edit.
 
@@ -265,3 +265,6 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_reset_reason` | `int reset_reason(void)` | 1.6 | Why the chip last reset (esp_reset_reason_t values: 1 power-on, 3 software, 4 panic, 5-7 watchdogs, 8 deep sleep, ...). |
 | `bl_last_crash` | `int last_crash(char *buf, size_t size)` | 1.6 | One-line summary of the last crash from the coredump (task, cause, PC). Returns its length, or 0 if there is none. |
 | `bl_wifi_event_take` | `int wifi_event_take(void)` | 1.6 | Next WiFi/network event (Arduino-ESP32 3.3 arduino_event_id_t values) for WiFi.onEvent, or -1. |
+| `bl_baseline_update_mode` | `int baseline_update_mode(void)` | 1.7 | How Baseline updates over the air: BL_UPDATE_DUAL (two Baseline slots; sketch and files kept), BL_UPDATE_STAGED (4 MB flash; each update erases the sketch and LittleFS) or BL_UPDATE_NONE. |
+| `bl_ota_pull_sketch` | `int ota_pull_sketch(const char *url)` | 1.7 | Download a sketch (.bsk) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure. |
+| `bl_ota_pull_baseline` | `int ota_pull_baseline(const char *url, const char *sketch_url)` | 1.7 | Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure. |
