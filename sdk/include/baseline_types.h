@@ -29,6 +29,7 @@
 #define BL_WIFI_CONNECTION_LOST 5
 #define BL_WIFI_DISCONNECTED    6
 #define BL_WIFI_STOPPED         254
+#define BL_WIFI_NO_SHIELD       255     /* this chip has no WiFi (ESP32-P4) */
 
 /* ---- GPIO ---- */
 #define BL_LOW               0

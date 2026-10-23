@@ -4,6 +4,15 @@
  * BLE callbacks run on the NimBLE host task; they only queue bl_ble_event_t
  * records, which the SDK's pump delivers to the sketch on the sketch task. */
 #include <Arduino.h>
+#include "soc/soc_caps.h"
+
+#if !SOC_BT_SUPPORTED
+/* no Bluetooth on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "gen/bl_impl.h"
+#define BL_STUB_BLE 1
+#include "gen/bl_impl_stubs.inc"
+#else
+
 #include "esp_heap_caps.h"
 #include <atomic>
 #include <BLEDevice.h>
@@ -815,3 +824,5 @@ extern "C" int bl_impl_ble_event_take(bl_ble_event_t *ev)
 {
     return (ev && s_events && xQueueReceive(s_events, ev, 0) == pdTRUE) ? 1 : 0;
 }
+
+#endif /* SOC_BT_SUPPORTED */

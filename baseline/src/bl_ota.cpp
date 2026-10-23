@@ -6,6 +6,7 @@
  * Baseline image only. */
 #include <Arduino.h>
 #include <WiFi.h>
+#include <Network.h>     // NetworkServer/Client: on a chip without WiFi, WiFi.h is empty
 #include <ESPmDNS.h>
 #include "gen/bl_impl.h"
 #include "bl_console.h"

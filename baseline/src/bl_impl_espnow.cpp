@@ -1,6 +1,15 @@
 /* API table: ESP-NOW. Received packets are queued by the WiFi task and the
  * sketch polls them, so no sketch code runs in a callback. */
 #include <Arduino.h>
+#include "soc/soc_caps.h"
+
+#if !SOC_WIFI_SUPPORTED
+/* no WiFi on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "gen/bl_impl.h"
+#define BL_STUB_ESPNOW 1
+#include "gen/bl_impl_stubs.inc"
+#else
+
 #include <WiFi.h>
 #include "esp_now.h"
 #include "freertos/queue.h"
@@ -115,3 +124,5 @@ extern "C" int bl_impl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size)
     memcpy(data, p.data, n);
     return (int)n;
 }
+
+#endif /* SOC_WIFI_SUPPORTED */

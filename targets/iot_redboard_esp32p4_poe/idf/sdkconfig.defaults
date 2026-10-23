@@ -1,0 +1,5 @@
+# iot_redboard_esp32p4_poe, on top of the chip's sdkconfig.defaults.
+# Arduino's generic P4 variant: its microSD power settings (slot 0, on-chip LDO
+# channel 4, power switch on GPIO 45 active low) match this board. Baseline
+# takes its default pins from sdk/bl_board.h.
+CONFIG_ARDUINO_VARIANT="esp32p4"

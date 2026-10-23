@@ -354,7 +354,7 @@ private:
 
 class BLEDevice {
 public:
-    static void init(const String &name = String());
+    static bool init(const String &name = String());     // false if BLE could not start (or the chip has none)
     static void deinit(bool release_memory = false);
     static bool getInitialized();
     static BLEServer *createServer();

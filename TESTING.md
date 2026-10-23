@@ -13,7 +13,7 @@ python tools/bsk.py upload examples/led_check     # LEDs, by eye: red, green, bl
 ```
 
 - `bsk test` runs `examples/selftest` (memory, PSRAM, Strings, libm, time, Preferences, LittleFS, microSD, Ticker, the board's I2C devices, WiFi scan, BLE scan, WiFi connect + `WiFi.onEvent` + NTP + HTTP, then a 2 s deep sleep and the checks after waking), then a crash in `setup()` (`tools/tests/crash_test`, must roll back and be recorded in `INFO`), then a `loop()` that never returns (`tools/tests/hang_test`, the watchdog must catch it and roll back).
-- WiFi checks need `secrets.cfg` (copy `secrets.cfg.example`); without it they are skipped.
+- WiFi checks need `secrets.cfg` (copy `secrets.cfg.example`); without it they are skipped. On a chip without a radio (ESP32-P4) the WiFi and BLE checks are skipped.
 - Before testing a new board, check it with `esptool flash-id`: the chip revision (classic ESP32: 3.0 or later) and the flash size against `flash_size` in its `target.json`.
 
 ## Boards
@@ -22,7 +22,8 @@ python tools/bsk.py upload examples/led_check     # LEDs, by eye: red, green, bl
 |---|---|---|---|---|---|---|
 | `thing_plus_esp32c6` | [Thing Plus - ESP32-C6](https://www.sparkfun.com/sparkfun-thing-plus-esp32-c6.html) | ESP32-C6 (0.0), 16 MB, none | 2026-10-22 | ✅ 31 passed, 0 failed, 1 skipped | ✅ RGB | **Fully tested** |
 | `iot_redboard_esp32` | [IoT RedBoard - ESP32](https://www.sparkfun.com/sparkfun-iot-redboard-esp32-development-board.html) | ESP32-D0WD-V3 (3.1), 16 MB, none | 2026-10-22 | ✅ 29 passed, 0 failed, 3 skipped at 2 Mbaud (2 runs; microSD skipped, no card); 30 / 0 / 2 earlier at 921600 | ✅ status (GPIO 18) + RGB | **Fully tested**; see issues 1, 8 |
-| `datalogger_iot` | [DataLogger IoT](https://www.sparkfun.com/sparkfun-datalogger-iot.html) / [DataLogger IoT - 9DoF](https://www.sparkfun.com/sparkfun-datalogger-iot-9dof.html) | ESP32-D0WD-V3 (3.1), 16 MB, none (base board tested) | 2026-10-22 | ✅ 30 passed, 0 failed, 2 skipped (2 runs) | 👀 status (GPIO 25) + RGB (26) | Tested; LEDs pending; see issues 9–11 |
+| `datalogger_iot` | [DataLogger IoT](https://www.sparkfun.com/sparkfun-datalogger-iot.html) / [DataLogger IoT - 9DoF](https://www.sparkfun.com/sparkfun-datalogger-iot-9dof.html) | ESP32-D0WD-V3 (3.1), 16 MB, none (base board tested) | 2026-10-22 | ✅ 30 passed, 0 failed, 2 skipped (2 runs) | ✅ status (GPIO 25) + RGB (26) | **Fully tested** (base board); see issues 9–11 |
+| `iot_redboard_esp32p4_poe` | IoT RedBoard - ESP32-P4 (PoE) (unreleased; no product page yet) | ESP32-P4 (3.2), 16 MB, PSRAM in package; no radio, Ethernet | 2026-10-23 | ✅ 30 passed, 0 failed, 2 skipped (WiFi, BLE: no radio) | 👀 RGB (GPIO 12) | Tested; RGB LED and OLED pending; Ethernet not yet supported |
 | `thing_plus_esp32c5` | [Thing Plus - ESP32-C5](https://www.sparkfun.com/sparkfun-thing-plus-esp32-c5.html) | ESP32-C5 (1.0), 8 MB, 8 MB | 2026-10-22 | ✅ 36 passed, 0 failed, 0 skipped | ✅ RGB | **Fully tested**; see issue 4 |
 | `pro_micro_esp32c3` | [Pro Micro - ESP32-C3](https://www.sparkfun.com/sparkfun-pro-micro-esp32-c3.html) | ESP32-C3 (0.4), 4 MB embedded, none | 2026-10-22 | ✅ 29 passed, 0 failed, 3 skipped (2 runs) | ✅ blue (GPIO 10, plain LED) | **Fully tested**; see issues 6, 7 |
 | `qwiic_pocket_esp32c6` | [Qwiic Pocket - ESP32-C6](https://www.sparkfun.com/sparkfun-qwiic-pocket-development-board-esp32-c6.html) | ESP32-C6FH4 (0.1), 4 MB embedded, none | 2026-10-22 | ✅ 30 passed, 0 failed, 3 skipped | ✅ blue (GPIO 23) | **Fully tested** |
@@ -34,29 +35,29 @@ python tools/bsk.py upload examples/led_check     # LEDs, by eye: red, green, bl
 
 Results on the current Baseline (ABI 1.6, ESP-IDF build) unless noted.
 
-| Feature | Thing Plus C6 | Thing Plus C5 | Pro Micro C3 | Qwiic Pocket C6 | IoT RedBoard | DataLogger IoT | Thing Plus S3 | Thing Plus C | Postcard |
-|---|---|---|---|---|---|---|---|---|---|
-| Baseline boots, `INFO` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Sketch upload | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ 2 Mbaud, 0.12 s for `blink` | ✅ 2 Mbaud (CH340) | ✅ (USB) | ⬜ | ⬜ |
-| Memory: `malloc` internal / PSRAM | ✅ / — | ✅ / ✅ 8 MB | ✅ / — | ✅ / — | ✅ / — | ✅ / — | ✅ / ✅ (2 MB) | ⬜ | ✅ (chip) / ✅ 2 MB |
-| Strings, `F()`, libm, time | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (before `F()`/libm) | ⬜ | ✅ (chip) |
-| Chip temperature | ✅ | ✅ | ✅ | ✅ | — (no sensor) | — (no sensor) | ⬜ | — | — |
-| Preferences (NVS) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ✅ (chip) |
-| LittleFS | ✅ 12.4 MB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ 1.2 MB | ⬜ | ✅ 3.9 MB (chip) |
-| microSD | ✅ SPI (CS 18) | ✅ SPI (CS 25) | — | — | ✅ SPI (CS 5) | ✅ SDMMC 4-bit, 7.6 GB (issue 9) | ⬜ SDMMC | ⬜ | — |
-| Ticker / timers | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ✅ (chip) |
-| On-board I2C device (MAX17048 0x36) | ✅ | ✅ | — | — (battery on ADC instead: ✅ 3215 mV) | ✅ | ✅ | ⬜ | ⬜ | — |
-| Qwiic devices with SparkFun libraries | ✅ BMI270 + 1.3" OLED | ✅ BMI270 + 1.3" OLED | ⬜ | ✅ BMI270 + 1.3" OLED | ⬜ (bus works) | ✅ BMI270 (OLED 👀) | ⬜ | ⬜ | ⬜ |
-| Status LED | — (RGB only) | — (RGB only) | ✅ blue | ✅ blue | ✅ | 👀 | ⬜ | ⬜ | ⬜ |
-| RGB LED | ✅ | ✅ | — | — | ✅ | 👀 | ⬜ | ⬜ | — |
-| WiFi scan | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ✅ (chip) |
-| WiFi connect, `WiFi.onEvent`, NTP, HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| BLE scan | ✅ | ✅ | ✅ (after fix, issue 7) | ✅ (with the issue 7 fix) | ✅ (after WiFi; issue 1) | ✅ (with microSD mounted; issue 10) | ✅ | ⬜ | ✅ (chip) |
-| Deep sleep timer wake, RTC memory, NVS kept | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| Crash rollback + crash in `INFO` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ (rollback ✅ earlier) | ⬜ | ⬜ |
-| Watchdog rollback | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
-| USB device mode (keyboard etc.) | — | — | — | — | — | — | ✅ round trip | — | — |
-| Bluetooth Classic SPP | — | — | — | — | ⬜ | ⬜ | — | ⬜ | ⬜ |
+| Feature | Thing Plus C6 | Thing Plus C5 | Pro Micro C3 | Qwiic Pocket C6 | IoT RedBoard | DataLogger IoT | IoT RedBoard P4 (PoE) | Thing Plus S3 | Thing Plus C | Postcard |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Baseline boots, `INFO` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ |
+| Sketch upload | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ 2 Mbaud, 0.12 s for `blink` | ✅ 2 Mbaud (CH340) | ✅ (USB) | ✅ (USB) | ⬜ | ⬜ |
+| Memory: `malloc` internal / PSRAM | ✅ / — | ✅ / ✅ 8 MB | ✅ / — | ✅ / — | ✅ / — | ✅ / — | ✅ / ✅ | ✅ / ✅ (2 MB) | ⬜ | ✅ (chip) / ✅ 2 MB |
+| Strings, `F()`, libm, time | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (before `F()`/libm) | ⬜ | ✅ (chip) |
+| Chip temperature | ✅ | ✅ | ✅ | ✅ | — (no sensor) | — (no sensor) | ✅ | ⬜ | — | — |
+| Preferences (NVS) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ✅ (chip) |
+| LittleFS | ✅ 12.4 MB | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ 1.2 MB | ⬜ | ✅ 3.9 MB (chip) |
+| microSD | ✅ SPI (CS 18) | ✅ SPI (CS 25) | — | — | ✅ SPI (CS 5) | ✅ SDMMC 4-bit, 7.6 GB (issue 9) | ✅ SDMMC 4-bit (on-chip LDO + power switch) | ⬜ SDMMC | ⬜ | — |
+| Ticker / timers | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ✅ (chip) |
+| On-board I2C device (MAX17048 0x36) | ✅ | ✅ | — | — (battery on ADC instead: ✅ 3215 mV) | ✅ | ✅ | ✅ | ⬜ | ⬜ | — |
+| Qwiic devices with SparkFun libraries | ✅ BMI270 + 1.3" OLED | ✅ BMI270 + 1.3" OLED | ⬜ | ✅ BMI270 + 1.3" OLED | ⬜ (bus works) | ✅ BMI270 (OLED 👀) | ✅ BMI270 (OLED 👀) | ⬜ | ⬜ | ⬜ |
+| Status LED | — (RGB only) | — (RGB only) | ✅ blue | ✅ blue | ✅ | ✅ | — (RGB only) | ⬜ | ⬜ | ⬜ |
+| RGB LED | ✅ | ✅ | — | — | ✅ | ✅ | 👀 | ⬜ | ⬜ | — |
+| WiFi scan | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — (no radio) | ✅ | ⬜ | ✅ (chip) |
+| WiFi connect, `WiFi.onEvent`, NTP, HTTP | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | — (no radio; Ethernet ⬜) | ⬜ | ⬜ | ⬜ |
+| BLE scan | ✅ | ✅ | ✅ (after fix, issue 7) | ✅ (with the issue 7 fix) | ✅ (after WiFi; issue 1) | ✅ (with microSD mounted; issue 10) | — (no radio) | ✅ | ⬜ | ✅ (chip) |
+| Deep sleep timer wake, RTC memory, NVS kept | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| Crash rollback + crash in `INFO` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ (rollback ✅ earlier) | ⬜ | ⬜ |
+| Watchdog rollback | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ | ⬜ |
+| USB device mode (keyboard etc.) | — | — | — | — | — | — | ⬜ | ✅ round trip | — | — |
+| Bluetooth Classic SPP | — | — | — | — | ⬜ | ⬜ | — | — | ⬜ | ⬜ |
 
 ## Library compile check
 
@@ -70,11 +71,12 @@ The first example of each library, unchanged, built as a Baseline sketch (`bsk b
 | `pro_micro_esp32c3` | ✅ 28 / 28 (2026-10-22) |
 | `qwiic_pocket_esp32c6` | ✅ 28 / 28 (2026-10-22) |
 | `datalogger_iot` | ✅ 28 / 28 (2026-10-22) |
+| `iot_redboard_esp32p4_poe` | ✅ 28 / 28 (2026-10-23) |
 | `rtk_postcard` (classic ESP32) | ⚠️ 27 / 28: the TMP102 example uses `A3`, which the Postcard has no pin for |
 
 Libraries: ArduinoJson; SparkFun BME280, BMP581, BMI270, ICM-20948, ISM330DHCX, MMC5983MA, TMP102, TMP117, SHTC3, AHT20, SCD30, SCD4x, VEML7700, VCNL4040, VL53L1X, NAU7802, Qwiic Button, Qwiic Relay, Qwiic Joystick, Qwiic Twist, Qwiic Ultrasonic, Qwiic Alphanumeric, Qwiic OLED, I2C Mux, External EEPROM, u-blox GNSS v3, LG290P GNSS.
 
-On hardware so far: BMI270 and Qwiic OLED (1.3") on the Thing Plus C6, the Thing Plus C5, the Qwiic Pocket C6 and the DataLogger IoT (BMI270).
+On hardware so far: BMI270 and Qwiic OLED (1.3") on the Thing Plus C6, the Thing Plus C5, the Qwiic Pocket C6, the DataLogger IoT (BMI270) and the IoT RedBoard P4 (BMI270).
 
 Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`touch_button` stops with a clear message on the C6, which has no touch sensor).
 
@@ -99,3 +101,4 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 9. **DataLogger IoT: Qwiic and microSD are on a switched 3.3 V rail (2026-10-22, fixed).** With Baseline as first written, the Qwiic scan found only the on-board fuel gauge, and the card failed with `sdmmc_host_clock_update_command ... 0x107` (a stock Arduino sketch failed the same way). GPIO 32 enables the rail (high = on; `kDLBoardEn3v3_SW` in SparkFun's firmware, not in the hookup guide). **Fixed:** targets can define `BL_BOARD_EN_3V3_SW`, and Baseline drives it high at boot. Also from SparkFun's firmware: the RX/TX header is RX 16, TX 17 (the hookup guide lists them the other way round; not yet checked with a loopback). A3 (GPIO 39) added.
 10. **No-PSRAM classic boards: microSD + WiFi + BLE ran out of RAM (2026-10-22, fixed).** Mounting the card reserved ~43 KB: FATFS sets aside a file object for each of the 8 files that may be open, and with the per-file cache each holds a 4 KB sector buffer. Bluedroid then failed to start (`assert failed: hci_hal_env_init`). **Fixed** on the RedBoard, Thing Plus C and DataLogger IoT by turning the per-file cache off (open files share the volume's buffer): the mount now costs ~10.6 KB. With microSD, WiFi and BLE all up, ~10 KB is left, so a sketch that also allocates large buffers can still run out; boards with PSRAM are not affected.
 11. **An upload failed with `rejected: out of memory` (2026-10-22, fixed).** Checking an uploaded sketch's SHA-256 took a 4 KB buffer from the heap, which a running sketch can have used up. **Fixed:** a 512-byte buffer on the loader's stack.
+12. **ESP32-P4: first chip without a radio (2026-10-23).** Arduino's WiFi and BLE libraries compile to nothing on the P4, so Baseline's WiFi, ESP-NOW and BLE files did not build. **Fixed:** `tools/gen_api.py` now also writes `baseline/src/gen/bl_impl_stubs.inc`: stubs grouped by prefix (`BL_STUB_WIFI`, `BL_STUB_BLE`, `BL_STUB_ESPNOW`), which a file includes when the chip lacks the hardware (`SOC_WIFI_SUPPORTED`, `SOC_BT_SUPPORTED`). Actions return `BL_ERR_UNSUPPORTED`; queries answer "nothing there" (0, or -1 for reads); `WiFi.status()` returns the new `WL_NO_SHIELD` (255, as in Arduino). `BLEDevice::init()` now returns `bool`, as in Arduino-ESP32 3.x. Arduino's P4 sdkconfig expects Espressif's dev board, with an ESP32-C6 for WiFi/BLE over SDIO (`esp_hosted`, slave reset on GPIO 54, which is A0 on this board); Baseline leaves that out and turns Bluetooth off for the P4.

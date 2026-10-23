@@ -114,11 +114,14 @@ BLEAddress::BLEAddress(const char *address, uint8_t type) : type_(type)
 
 /* ---- BLEDevice ---- */
 
-void BLEDevice::init(const String &name)
+bool BLEDevice::init(const String &name)
 {
-    bl_ble_init(name.length() ? name.c_str() : 0);
+    if (bl_ble_init(name.length() ? name.c_str() : 0) != BL_OK) {
+        return false;
+    }
     s_inited = true;
     bl_sketch_add_pump(ble_pump);
+    return true;
 }
 
 void BLEDevice::deinit(bool)

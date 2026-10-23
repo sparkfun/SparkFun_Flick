@@ -20,6 +20,7 @@ typedef int wl_status_t;
 #define WL_CONNECTION_LOST BL_WIFI_CONNECTION_LOST
 #define WL_DISCONNECTED    BL_WIFI_DISCONNECTED
 #define WL_STOPPED         BL_WIFI_STOPPED
+#define WL_NO_SHIELD       BL_WIFI_NO_SHIELD
 
 typedef enum { WIFI_OFF = 0, WIFI_STA = 1, WIFI_AP = 2, WIFI_AP_STA = 3 } wifi_mode_t;
 #define WIFI_MODE_NULL  WIFI_OFF

@@ -1,0 +1,6 @@
+{
+    "chip": "esp32p4",
+    "description": "SparkFun IoT RedBoard - ESP32-P4 (PoE): Arduino R3 form factor, ESP32-P4 rev 3, 16 MB flash, 32 MB PSRAM, Ethernet (DP83825), native USB",
+    "flash_size": "16MB",
+    "status": "bring-up"
+}

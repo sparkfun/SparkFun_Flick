@@ -1,5 +1,14 @@
 /* API table: WiFi (station) and HTTP GET. */
 #include <Arduino.h>
+#include "soc/soc_caps.h"
+
+#if !SOC_WIFI_SUPPORTED
+/* no WiFi on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "gen/bl_impl.h"
+#define BL_STUB_WIFI 1
+#include "gen/bl_impl_stubs.inc"
+#else
+
 #include <WiFi.h>
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
@@ -401,3 +410,5 @@ extern "C" int bl_impl_wifi_event_take(void)
     int e;
     return xQueueReceive(s_events, &e, 0) == pdTRUE ? e : -1;
 }
+
+#endif /* SOC_WIFI_SUPPORTED */

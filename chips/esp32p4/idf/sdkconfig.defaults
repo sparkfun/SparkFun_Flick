@@ -1,0 +1,10 @@
+# ESP32-P4 settings, on top of idf/sdkconfig.defaults (each product target
+# can add its own in targets/<target>/idf/sdkconfig.defaults). The console's
+# USB options are compile definitions (idf_defines in chip.json), and the flash
+# size comes from the target.
+
+# The P4 has no radio. Arduino's base sdkconfig assumes Espressif's dev board,
+# where an ESP32-C6 provides WiFi and BLE over SDIO (esp_hosted, slave reset on
+# GPIO 54). Baseline does not build esp_hosted, so leave Bluetooth out too;
+# Baseline's WiFi and BLE calls report BL_ERR_UNSUPPORTED on this chip.
+# CONFIG_BT_ENABLED is not set

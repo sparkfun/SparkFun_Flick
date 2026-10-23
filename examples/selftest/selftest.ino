@@ -39,12 +39,13 @@ static Saved *saved;
 #define SKIP(name, why) do { Serial.printf("SKIP  %s (%s)\n", name, why); saved->skipped++; } while (0)
 
 // External RAM on the data bus: classic ESP32 0x3F800000-0x3FC00000, ESP32-S3 0x3C000000-0x3E000000,
-// ESP32-C5 0x42000000-0x44000000 (heap pointers on the other chips never fall in these ranges).
+// ESP32-C5 0x42000000-0x44000000, ESP32-P4 0x48000000-0x4C000000 (heap pointers on the other chips
+// never fall in these ranges).
 static bool in_psram(const void *p)
 {
     uintptr_t a = (uintptr_t)p;
     return (a >= 0x3F800000 && a < 0x3FC00000) || (a >= 0x3C000000 && a < 0x3E000000) ||
-           (a >= 0x42000000 && a < 0x44000000);
+           (a >= 0x42000000 && a < 0x44000000) || (a >= 0x48000000 && a < 0x4C000000);
 }
 
 Ticker ticker;
@@ -216,8 +217,28 @@ static void check_leds()
 #endif
 }
 
+static void check_ble()
+{
+    if (!BLEDevice::init("selftest")) {
+        SKIP("BLE scan", "this chip has no Bluetooth, or BLE could not start");
+        return;
+    }
+    BLEScan *scan = BLEDevice::getScan();
+    scan->setActiveScan(true);
+    BLEScanResults *found = scan->start(3, false);
+    int ble = found ? found->getCount() : -1;
+    Serial.printf("BLE scan: %d devices\n", ble);
+    CHECK("BLE scan", ble >= 0);
+    scan->clearResults();
+}
+
 static void check_radios()
 {
+    if (WiFi.status() == WL_NO_SHIELD) {
+        SKIP("WiFi scan, connect, NTP, HTTP", "this chip has no WiFi");
+        check_ble();
+        return;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.disconnect();
     int nets = WiFi.scanNetworks();
@@ -253,14 +274,7 @@ static void check_radios()
     SKIP("WiFi connect, NTP, HTTP", "no WIFI_SSID (put it in secrets.cfg)");
 #endif
 
-    BLEDevice::init("selftest");
-    BLEScan *scan = BLEDevice::getScan();
-    scan->setActiveScan(true);
-    BLEScanResults *found = scan->start(3, false);
-    int ble = found ? found->getCount() : -1;
-    Serial.printf("BLE scan: %d devices\n", ble);
-    CHECK("BLE scan", ble >= 0);
-    scan->clearResults();
+    check_ble();
 }
 
 void setup()
