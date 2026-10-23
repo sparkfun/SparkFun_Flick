@@ -197,6 +197,10 @@ extern "C" int bl_impl_http_request(const char *method, const char *url, const c
     cfg.event_handler = http_request_event;
     cfg.user_data = &r;
     cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    // Redirects (GitHub release downloads) carry long signed URLs: the default
+    // 512-byte buffers cannot hold the Location header or the next request line.
+    cfg.buffer_size = 4096;
+    cfg.buffer_size_tx = 2048;
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
         return BL_ERR_NO_MEM;
@@ -253,6 +257,10 @@ extern "C" int bl_impl_http_get(const char *url, char *buf, size_t size, int *st
     cfg.event_handler = http_event;
     cfg.user_data = &body;
     cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    // Redirects (GitHub release downloads) carry long signed URLs: the default
+    // 512-byte buffers cannot hold the Location header or the next request line.
+    cfg.buffer_size = 4096;
+    cfg.buffer_size_tx = 2048;
     esp_http_client_handle_t client = esp_http_client_init(&cfg);
     if (!client) {
         return BL_ERR_NO_MEM;

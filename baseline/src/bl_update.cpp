@@ -194,7 +194,8 @@ static const char *http_open(http_t *h, const char *url)
     esp_http_client_config_t cfg = {};
     cfg.url = url;
     cfg.timeout_ms = 15000;
-    cfg.buffer_size = 2048;
+    cfg.buffer_size = 4096;     // GitHub's redirects: long Location headers ...
+    cfg.buffer_size_tx = 2048;  // ... and long request lines after them
     cfg.crt_bundle_attach = esp_crt_bundle_attach;
     h->c = esp_http_client_init(&cfg);
     if (!h->c) {

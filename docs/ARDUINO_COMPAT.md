@@ -103,7 +103,7 @@ back until it does.
 - **LittleFS** always uses the `userfs` partition (1.2 MB); at most 8 files or directories can be open at once.
 - **Preferences:** the namespace `baseline` is reserved; at most 4 namespaces open at once.
 - **PubSubClient** callbacks run inside `mqtt.loop()`, as in the original. The payload buffer has a NUL after the data, so it can be printed as text. `WiFiClientSecure::setInsecure()` is ignored for MQTT (the broker's certificate is always checked).
-- **ArduinoOTA** uploads *sketches* (with `bsk upload --host`), not firmware images. The board reboots into the new sketch, so the `onStart/onEnd/onProgress/onError` callbacks are never called. Baseline itself is still updated over USB.
+- **ArduinoOTA** opens Baseline's update port: `bsk upload --host` sends sketches and `bsk baseline update --host` sends Baseline. The board reboots into the update, so the `onStart/onEnd/onProgress/onError` callbacks are never called. To have the board fetch its own updates, use `BaselineUpdate` (docs/OTA.md).
 - **Board pins** (`LED_BUILTIN`, `STAT_LED`, `RGB_BUILTIN`, `SDA`, `SCL`, `A0`, and the `Serial1` defaults) come from the target:
   - ESP32-S3 Thing Plus: LED 0, RGB 46, Qwiic 8/9, `Serial1` on RX 44 / TX 43.
   - Thing Plus C: LED 13, RGB 2, Qwiic 21/22, `Serial1` on RX 16 / TX 17.
@@ -121,7 +121,7 @@ back until it does.
 
 ## Not supported yet
 
-- SPIFFS, `Update` (firmware OTA), USB mass storage, camera
+- SPIFFS, Arduino's `Update` / `HTTPUpdate` classes (use `BaselineUpdate`, docs/OTA.md), USB mass storage, camera
 - `rtc_gpio_*` pin isolation for deep sleep, ULP
 - `<ctype.h>` macros (`isdigit`, ...)
 - Arduino libraries from the Library Manager. A library can be added to Baseline and exposed through the API.

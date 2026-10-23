@@ -142,7 +142,7 @@ extern "C" int bl_impl_ota_begin(const char *hostname, const char *password, uin
         s_server = NULL;
         return BL_ERR_NO_MEM;
     }
-    BLOG_I("OTA: accepting sketch uploads on port %u%s", port, s_password.isEmpty() ? "" : " (password set)");
+    BLOG_I("OTA: accepting uploads on port %u%s", port, s_password.isEmpty() ? "" : " (password set)");
     return BL_OK;
 }
 

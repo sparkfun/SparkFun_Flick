@@ -80,11 +80,26 @@ On hardware so far: BMI270 and Qwiic OLED (1.3") on the Thing Plus C6, the Thing
 
 Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`touch_button` stops with a clear message on the C6, which has no touch sensor).
 
+## Over-the-air updates (docs/OTA.md)
+
+| Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) |
+|---|---|---|
+| Baseline push over USB (`bsk baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased |
+| Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port |
+| A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` |
+| Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) |
+| Reset during the bootloader's install (power cut) | (n/a) | ✅ install starts again and finishes |
+| Sketch pull from a GitHub release (`ota_pull_sketch`) | ⬜ | ✅ v1 installed v2, v2 up to date |
+| Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (dual pull inflates on the board: not yet run) | ✅ update mode download, bootloader install, sketch reinstalled from the release |
+| `bsk test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 |
+
 ## Not tested on hardware yet
 
 - `Wire1` (second I2C bus), `Serial1.setRxBufferSize`, `WiFiMulti`, `dacWrite`
 - ESP-NOW between two boards, MQTT, WiFi upload (`bsk upload --host`), `BLESerial` with a phone, BLE server notify/write, WebServer, TCP/UDP examples
 - Safe mode by holding BOOT at reset
+- Baseline pull on a two-slot board (`ota_pull_baseline` on the RedBoard, C6, C5...): the board inflates the `.bsu` itself
+- Staged updates on the Qwiic Pocket C6 and Thing Plus S3 (built; the C3 is tested)
 - Bluetooth Classic SPP pairing with a phone
 - I2S (needs an amplifier), servos, LED strips longer than one LED
 
@@ -102,3 +117,6 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 10. **No-PSRAM classic boards: microSD + WiFi + BLE ran out of RAM (2026-10-22, fixed).** Mounting the card reserved ~43 KB: FATFS sets aside a file object for each of the 8 files that may be open, and with the per-file cache each holds a 4 KB sector buffer. Bluedroid then failed to start (`assert failed: hci_hal_env_init`). **Fixed** on the RedBoard, Thing Plus C and DataLogger IoT by turning the per-file cache off (open files share the volume's buffer): the mount now costs ~10.6 KB. With microSD, WiFi and BLE all up, ~10 KB is left, so a sketch that also allocates large buffers can still run out; boards with PSRAM are not affected.
 11. **An upload failed with `rejected: out of memory` (2026-10-22, fixed).** Checking an uploaded sketch's SHA-256 took a 4 KB buffer from the heap, which a running sketch can have used up. **Fixed:** a 512-byte buffer on the loader's stack.
 12. **ESP32-P4: first chip without a radio (2026-10-23).** Arduino's WiFi and BLE libraries compile to nothing on the P4, so Baseline's WiFi, ESP-NOW and BLE files did not build. **Fixed:** `tools/gen_api.py` now also writes `baseline/src/gen/bl_impl_stubs.inc`: stubs grouped by prefix (`BL_STUB_WIFI`, `BL_STUB_BLE`, `BL_STUB_ESPNOW`), which a file includes when the chip lacks the hardware (`SOC_WIFI_SUPPORTED`, `SOC_BT_SUPPORTED`). Actions return `BL_ERR_UNSUPPORTED`; queries answer "nothing there" (0, or -1 for reads); `WiFi.status()` returns the new `WL_NO_SHIELD` (255, as in Arduino). `BLEDevice::init()` now returns `bool`, as in Arduino-ESP32 3.x. Arduino's P4 sdkconfig expects Espressif's dev board, with an ESP32-C6 for WiFi/BLE over SDIO (`esp_hosted`, slave reset on GPIO 54, which is A0 on this board); Baseline leaves that out and turns Bluetooth off for the P4.
+13. **OTA port starved the idle task's watchdog (2026-10-23, fixed).** With `bsk` keeping 16 lines in flight over WiFi, the OTA task read one byte at a time (an lwIP call each) and handled line after line without yielding: the task watchdog reset the board. **Fixed:** `bl_ota.cpp` reads in 512-byte blocks and yields after every command.
+14. **GitHub release downloads failed with `HTTP_CLIENT: Out of buffer` (2026-10-23, fixed).** The redirect to GitHub's file storage carries a long signed URL that did not fit `esp_http_client`'s default 512-byte buffers. **Fixed:** 4 KB receive and 2 KB transmit buffers in `HTTPClient` (`bl_impl_wifi.cpp`) and in the update downloads (`bl_update.cpp`).
+15. **The bootloader logs to UART0, not USB.** On native-USB boards the staged install's own messages (`bsu_stage: installing ...`) are only on the TX pin; Baseline logs the outcome on the next start (`update: Baseline ... installed`).

@@ -1482,6 +1482,11 @@ def cmd_baseline_update(args, target):
     else:
         sys.exit("error: the board did not take the update")
     conn.close()
+    if kind == "bsu" and getattr(args, "host", None):
+        # The update erased the sketch, so nothing will bring WiFi up again.
+        print("the bootloader installs the update now (about 10 s); the sketch was erased, so the board is "
+              "not on WiFi any more: upload a sketch over USB (or use ota_pull_baseline with a sketch URL)")
+        return
     print("waiting for the board to restart" + (" (the bootloader installs the update)" if kind == "bsu" else ""))
     conn, link = reconnect(args, timeout=120)
     with conn:
