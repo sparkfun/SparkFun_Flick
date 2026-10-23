@@ -258,3 +258,6 @@ abi_major=1
 6|int|reset_reason|void
 6|int|last_crash|char *buf, size_t size
 6|int|wifi_event_take|void
+7|int|baseline_update_mode|void
+7|int|ota_pull_sketch|const char *url
+7|int|ota_pull_baseline|const char *url, const char *sketch_url
