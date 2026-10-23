@@ -89,3 +89,5 @@ Measured on 2026-10-23:
 | Pro Micro C3 (staged) | native USB push | 1.26 MB `.bsu` | 14 s, then about 30 s for the bootloader's install |
 | Pro Micro C3 (staged) | WiFi push | 1.26 MB `.bsu` | 23 s, then about 30 s for the bootloader's install |
 | Pro Micro C3 (staged) | GitHub pull | 1.26 MB `.bsu` | 10 s download, then the install and the sketch reinstall |
+| Thing Plus C6 (dual) | native USB push | 2.1 MB raw image | 23 s |
+| Thing Plus C6 (dual) | GitHub pull | 1.28 MB `.bsu` | 17 s download and inflate into the free slot, sketch running |

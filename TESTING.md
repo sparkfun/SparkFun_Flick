@@ -82,23 +82,22 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 
 ## Over-the-air updates (docs/OTA.md)
 
-| Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) |
-|---|---|---|
-| Baseline push over USB (`bsk baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased |
-| Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port |
-| A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` |
-| Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) |
-| Reset during the bootloader's install (power cut) | (n/a) | ✅ install starts again and finishes |
-| Sketch pull from a GitHub release (`ota_pull_sketch`) | ⬜ | ✅ v1 installed v2, v2 up to date |
-| Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (dual pull inflates on the board: not yet run) | ✅ update mode download, bootloader install, sketch reinstalled from the release |
-| `bsk test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 |
+| Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) | Thing Plus C6 (dual, 16 MB) |
+|---|---|---|---|
+| Baseline push over USB (`bsk baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased | ✅ 2.1 MB in 23 s (native USB) |
+| Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port | ⬜ |
+| A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` | ✅ `0.1.1-test` in `baseline_1` |
+| Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) | ⬜ |
+| Reset during the bootloader's install (power cut) | (n/a) | ✅ install starts again and finishes | (n/a) |
+| Sketch pull from a GitHub release (`ota_pull_sketch`) | ⬜ | ✅ v1 installed v2, v2 up to date | ⬜ |
+| Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (run on the C6 instead) | ✅ update mode download, bootloader install, sketch reinstalled from the release | ✅ inflated on the board into `baseline_1` while the sketch ran (17 s), restarted, sketch reinstalled, confirmed |
+| `bsk test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 | ✅ 30/0/2 |
 
 ## Not tested on hardware yet
 
 - `Wire1` (second I2C bus), `Serial1.setRxBufferSize`, `WiFiMulti`, `dacWrite`
 - ESP-NOW between two boards, MQTT, WiFi upload (`bsk upload --host`), `BLESerial` with a phone, BLE server notify/write, WebServer, TCP/UDP examples
 - Safe mode by holding BOOT at reset
-- Baseline pull on a two-slot board (`ota_pull_baseline` on the RedBoard, C6, C5...): the board inflates the `.bsu` itself
 - Staged updates on the Qwiic Pocket C6 and Thing Plus S3 (built; the C3 is tested)
 - Bluetooth Classic SPP pairing with a phone
 - I2S (needs an amplifier), servos, LED strips longer than one LED
