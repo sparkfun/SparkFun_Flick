@@ -62,4 +62,4 @@ A Linux-built image was flashed to a Thing Plus C6 and passed `flick test` (2026
 
 ## Before 1.0
 
-A checklist for calling the ABI and the flash layout final: `TESTING.md` ("Not tested on hardware yet").
+A checklist for calling the ABI and the flash layout final: `TESTING.md` ("Not tested on hardware yet" and the issues list).
