@@ -4,8 +4,8 @@
 #   3. a GitHub release with the images, the .bsu updates and the kit
 #   4. the download page with "Flash" buttons on GitHub Pages (tools/make_site.py)
 # Run it by hand (workflow_dispatch) to rebuild the page without a release.
-# Pages: Settings > Pages > Source: "GitHub Actions" (the repository must be
-# public, or private Pages must be available on the plan).
+# Pages: Settings > Pages > Source: "GitHub Actions". While the repository is
+# private the page is only built (artifact "download-page"), not deployed.
 name: Release
 
 on:
@@ -73,13 +73,21 @@ jobs:
             dist/*/baseline-*.bin
             dist/*/baseline-*.bsu
             dist/kit/*.zip
+      - name: The download page as an artifact (to look at while the repo is private)
+        uses: actions/upload-artifact@v4
+        with:
+          name: download-page
+          path: site_build
       - uses: actions/configure-pages@v5
+        if: ${{ !github.event.repository.private }}
       - uses: actions/upload-pages-artifact@v3
+        if: ${{ !github.event.repository.private }}
         with:
           path: site_build
 
   deploy:
     needs: publish
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

@@ -41,7 +41,8 @@ The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow
 
 - **Pages:** Settings > Pages > Source: **GitHub Actions**.
 - **Visibility:** the page and the release files must be reachable without signing in, so the repository must be **public**. The alternative is private Pages on a GitHub Enterprise plan, but the board's `ota_pull_*` cannot download from a private repository's releases either.
-- **Board list:** the page lists only targets with a `product_url` in their `target.json`, so unreleased boards (the ESP32-P4 board) stay off it until they have one.
+- **Board list:** the page lists every target; `"listed": false` in a `target.json` hides one. A board's name links to its `product_url` when it has one.
+- **While the repository is private:** a release still builds and publishes the GitHub release (visible to people with access). The page is built as the workflow artifact `download-page` but not deployed.
 
 ## Workflows
 

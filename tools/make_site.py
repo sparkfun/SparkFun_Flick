@@ -10,8 +10,8 @@ Reads targets/*/target.json and the built images in dist/<target>/
   firmware/<target>/          baseline-<target>.bin (USB/web flash at 0x0) and .bsu (over the air)
   downloads/                  the sketch kit zip
 
-Only targets with a product_url in target.json are listed (unreleased boards
-stay off the page). The release workflow (.github/workflows/release.yml) runs
+Every target is listed, unless its target.json says "listed": false; the
+board name links to its product_url when it has one. The release workflow (.github/workflows/release.yml) runs
 this and publishes the result.
 """
 import argparse
@@ -56,7 +56,7 @@ def main():
             continue
         t = json.loads(tj.read_text())
         name = tdir.name
-        if not t.get("product_url"):
+        if t.get("listed") is False:
             continue
         bin_ = dist / name / f"baseline-{name}.bin"
         bsu = dist / name / f"baseline-{name}.bsu"
@@ -93,7 +93,7 @@ def main():
         bsu_link = (f' · <a href="firmware/{name}/{bsu.name}" title="Baseline update over WiFi">.bsu</a>'
                     if bsu.exists() else "")
         return f"""      <tr>
-        <td><a href="{html.escape(t['product_url'])}">{html.escape(board)}</a><div class="target">{name}</div></td>
+        <td>{f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>' if t.get("product_url") else html.escape(board)}<div class="target">{name}</div></td>
         <td>{CHIP_FAMILY[t['chip']]}</td>
         <td>{flash_mb} MB<div class="target">OTA {ota}</div></td>
         <td>

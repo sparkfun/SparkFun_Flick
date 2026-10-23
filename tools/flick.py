@@ -1526,7 +1526,7 @@ KIT_FILES = [
     "targets/*/target.json", "targets/*/sdk/**/*",
     "examples/**/*",
     "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md",
-    "secrets.cfg.example", ".vscode/tasks.json",
+    "secrets.cfg.example", ".vscode/tasks.json", "LICENSE", "THIRD_PARTY_NOTICES.md",
 ]
 KIT_DIR = ROOT / "kit"      # AGENTS.md, CLAUDE.md, README.md, ... placed at the kit's root
 
