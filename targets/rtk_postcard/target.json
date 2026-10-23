@@ -1,5 +1,6 @@
 {
     "chip": "esp32",
     "description": "SparkFun RTK Postcard: ESP32-PICO-MINI-02 (8 MB flash, 2 MB PSRAM), LG290P GNSS, CH342",
-    "flash_size": "8MB"
+    "flash_size": "8MB",
+    "product_url": "https://www.sparkfun.com/sparkfun-rtk-postcard.html"
 }

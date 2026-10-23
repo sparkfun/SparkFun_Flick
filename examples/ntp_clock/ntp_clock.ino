@@ -3,8 +3,10 @@
 #include <WiFi.h>
 #include <time.h>
 
-const char *WIFI_SSID = "your-network";
-const char *WIFI_PASSWORD = "your-password";
+#ifndef WIFI_SSID      // secrets.cfg (see secrets.cfg.example) defines these
+#define WIFI_SSID "your-network"
+#define WIFI_PASSWORD "your-password"
+#endif
 const char *TIME_ZONE = "MST7MDT,M3.2.0,M11.1.0";   // Mountain Time (Boulder, CO)
 
 void setup()

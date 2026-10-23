@@ -9,6 +9,9 @@
 extern "C" {
 #endif
 
+/* Confirm a new, not yet confirmed Baseline (call before deliberate restarts). */
+void bl_update_confirm(void);
+
 /* BL_UPDATE_DUAL, BL_UPDATE_STAGED or BL_UPDATE_NONE (baseline_types.h). */
 int bl_update_mode(void);
 const char *bl_update_mode_name(void);

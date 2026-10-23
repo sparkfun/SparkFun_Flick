@@ -10,8 +10,14 @@
   bsk info                          ask Baseline for its version / ABI / chip / target / active slot
   bsk safe                          reboot Baseline into safe mode (sketch not started)
   bsk test                          bring-up test of the plugged-in board (selftest, rollback, watchdog)
+  bsk setup [-t TARGET]             download the compiler sketches need (once)
+  bsk lib search WORDS              search the Arduino Library Manager
+  bsk lib install NAME[@VERSION]    install a library into libraries/ (next to tools/)
+  bsk baseline flash --file F.bin   flash a downloaded Baseline over USB (esptool)
+  bsk baseline update [--host H]    update Baseline over USB or WiFi (--file F.bsu, or build it)
   bsk baseline build -t TARGET      compile a Baseline blob -> dist/<target>/baseline-<target>.bin
-  bsk baseline flash -t TARGET      compile and flash Baseline (rarely needed)
+  bsk baseline flash -t TARGET      compile and flash Baseline (needs ESP-IDF; rarely needed)
+  bsk package                       the sketch kit for users -> dist/baseline-sketcher-kit-<ver>.zip
 
 The build target is taken from -t, else `target = ...` in the sketch's
 sketch.cfg, else thing_plus_esp32s3. `upload` always builds for the chip on the board.
@@ -19,7 +25,8 @@ sketch.cfg, else thing_plus_esp32s3. `upload` always builds for the chip on the 
 Commands that talk to the board find it by its USB ID (any target's
 usb_vids in target.json); pass -p PORT to choose one yourself.
 
-The toolchain is found in this order: $BSK_GCC, the target's gcc on PATH,
+The toolchain is found in this order: $BSK_GCC, the one `bsk setup` installed
+(~/.baseline-sketcher/tools, or $BSK_HOME/tools), the target's gcc on PATH,
 then an Arduino-ESP32 install (%LOCALAPPDATA%/Arduino15 or ~/.arduino15).
 arduino-cli: $BSK_ARDUINO_CLI, PATH, then the copy bundled with Arduino IDE 2.
 """
@@ -45,6 +52,8 @@ SDK = ROOT / "sdk"
 TARGETS = ROOT / "targets"
 CHIPS = ROOT / "chips"
 DIST = ROOT / "dist"
+BSK_HOME = Path(os.environ.get("BSK_HOME") or Path.home() / ".baseline-sketcher")
+TOOLS_HOME = BSK_HOME / "tools"
 DEFAULT_TARGET = "thing_plus_esp32s3"
 # Target names Baselines built before the per-product targets report as chip=.
 LEGACY_TARGETS = {"esp32": "thing_plus_esp32", "esp32s3": "thing_plus_esp32s3"}
@@ -126,10 +135,13 @@ def find_gcc(target):
     if env:
         return env
     gcc_name = target["gcc"]
+    exe = gcc_name + (".exe" if os.name == "nt" else "")
+    hits = sorted(glob.glob(str(TOOLS_HOME / "*" / "*" / "bin" / exe)))     # bsk setup
+    if hits:
+        return hits[-1]
     on_path = shutil.which(gcc_name)
     if on_path:
         return on_path
-    exe = gcc_name + (".exe" if os.name == "nt" else "")
     roots = []
     if os.environ.get("LOCALAPPDATA"):
         roots.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15")
@@ -139,7 +151,7 @@ def find_gcc(target):
         hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-*32" / "*" / "bin" / exe)))  # esp-x32, esp-rv32
         if hits:
             return hits[-1]
-    sys.exit(f"error: {gcc_name} not found. Set BSK_GCC or install ESP-IDF / Arduino-ESP32.")
+    sys.exit(f"error: {gcc_name} not found. Run: python tools/bsk.py setup")
 
 
 def run(cmd, **kw):
@@ -334,7 +346,7 @@ def arduino_user_dirs():
 
 
 def library_roots(proj):
-    roots = [proj / "libraries"]
+    roots = [proj / "libraries", ROOT / "libraries"]       # the sketch's own, then bsk lib install's
     roots += [Path(p) for p in os.environ.get("BSK_LIBRARIES", "").split(os.pathsep) if p]
     roots += [d / "libraries" for d in arduino_user_dirs()]
     seen, out = set(), []
@@ -1356,6 +1368,202 @@ def leave_usb_device_mode(port, fixed_port):
     return new_port
 
 
+# ---------------------------------------------------------------- setup: the compiler
+
+# The compiler sketches are built with: Espressif's GCC, the release ESP-IDF
+# 5.5 and Arduino-ESP32 3.3 use (so sketches and Baseline match).
+TOOLCHAIN_RELEASE = "esp-14.2.0_20260121"
+TOOLCHAIN_URL = "https://github.com/espressif/crosstool-NG/releases/download/{rel}/{name}-14.2.0_20260121-{host}.{ext}"
+
+
+def toolchain_host():
+    import platform
+    m = platform.machine().lower()
+    arm = m in ("arm64", "aarch64")
+    if sys.platform == "win32":
+        return "x86_64-w64-mingw32", "zip"
+    if sys.platform == "darwin":
+        return ("aarch64-apple-darwin" if arm else "x86_64-apple-darwin"), "tar.xz"
+    return ("aarch64-linux-gnu" if arm else "x86_64-linux-gnu"), "tar.xz"
+
+
+def download(url, dest):
+    import urllib.request
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "bsk"}), timeout=60) as r:
+        total = int(r.headers.get("Content-Length") or 0)
+        got, shown = 0, -1
+        with open(tmp, "wb") as f:
+            while True:
+                chunk = r.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                got += len(chunk)
+                if total and got * 20 // total != shown:
+                    shown = got * 20 // total
+                    print(f"\r  {got >> 20} / {total >> 20} MB", end="", flush=True)
+    print()
+    tmp.replace(dest)
+
+
+def cmd_setup(args):
+    """Download the compiler for the targets' chips (Xtensa: ESP32, S3; RISC-V: the rest)."""
+    names = args.target or target_names()
+    needed = sorted({"xtensa-esp-elf" if load_target(t)["gcc"].startswith("xtensa") else "riscv32-esp-elf"
+                     for t in names})
+    host, ext = toolchain_host()
+    dest = TOOLS_HOME / TOOLCHAIN_RELEASE
+    for name in needed:
+        if (dest / name / "bin").is_dir():
+            print(f"{name}: already installed in {dest / name}")
+            continue
+        url = TOOLCHAIN_URL.format(rel=TOOLCHAIN_RELEASE, name=name, host=host, ext=ext)
+        archive = BSK_HOME / "downloads" / url.rsplit("/", 1)[1]
+        if not archive.exists():
+            print(f"downloading {name} ({url.rsplit('/', 1)[1]})")
+            download(url, archive)
+        print(f"unpacking into {dest}")
+        if ext == "zip":
+            import zipfile
+            with zipfile.ZipFile(archive) as z:
+                z.extractall(dest)
+        else:
+            import tarfile
+            with tarfile.open(archive) as t:
+                # "tar" filter: keep the toolchain's symlinks, refuse paths outside dest
+                t.extractall(dest, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
+        archive.unlink()
+    for t in names:
+        target = load_target(t)
+        print(f"  {t}: {find_gcc(target)}")
+    print("done: build a sketch with  python tools/bsk.py build examples/blink -t <target>")
+
+
+# ---------------------------------------------------------------- libraries (Arduino Library Manager)
+
+LIBRARY_INDEX = "https://downloads.arduino.cc/libraries/library_index.json.gz"
+
+
+def library_index():
+    """The Library Manager's index, cached for a day."""
+    import gzip
+    f = BSK_HOME / "library_index.json.gz"
+    if not f.exists() or time.time() - f.stat().st_mtime > 86400:
+        print("downloading the Arduino library index")
+        download(LIBRARY_INDEX, f)
+    return json.loads(gzip.decompress(f.read_bytes()))["libraries"]
+
+
+def version_key(v):
+    return [int(x) if x.isdigit() else 0 for x in re.split(r"[.\-+]", v)]
+
+
+def cmd_lib(args):
+    libs = library_index()
+    if args.action == "search":
+        words = [w.lower() for w in args.names]
+        latest = {}
+        for lib in libs:
+            text = " ".join((lib["name"], lib.get("sentence", ""), lib.get("author", ""))).lower()
+            if all(w in text for w in words):
+                if lib["name"] not in latest or version_key(lib["version"]) > version_key(latest[lib["name"]]["version"]):
+                    latest[lib["name"]] = lib
+        for lib in sorted(latest.values(), key=lambda l: l["name"].lower())[:40]:
+            print(f'{lib["name"]} ({lib["version"]}): {lib.get("sentence", "")[:90]}')
+        if not latest:
+            print("nothing found")
+        return
+    import zipfile
+    dest_root = ROOT / "libraries"
+    for spec in args.names:
+        name, _, want = spec.partition("@")
+        found = [l for l in libs if l["name"].lower() == name.lower() and (not want or l["version"] == want)]
+        if not found:
+            sys.exit(f"error: no library named '{name}'" + (f" with version {want}" if want else "") +
+                     ". Try: python tools/bsk.py lib search <words>")
+        lib = max(found, key=lambda l: version_key(l["version"]))
+        archive = BSK_HOME / "downloads" / lib["archiveFileName"]
+        print(f'installing {lib["name"]} {lib["version"]}')
+        download(lib["url"], archive)
+        folder = dest_root / re.sub(r"[^\w.-]", "_", lib["name"])
+        if folder.exists():
+            shutil.rmtree(folder)
+        with zipfile.ZipFile(archive) as z:
+            top = {n.split("/", 1)[0] for n in z.namelist()}
+            z.extractall(dest_root / ".unpack")
+        unpacked = dest_root / ".unpack" / (top.pop() if len(top) == 1 else "")
+        shutil.move(str(unpacked), str(folder))
+        shutil.rmtree(dest_root / ".unpack", ignore_errors=True)
+        archive.unlink()
+        print(f"  -> {folder.relative_to(ROOT)}")
+        deps = [d["name"] for d in lib.get("dependencies", [])]
+        if deps:
+            print(f"  it depends on: {', '.join(deps)} (install those too if a build asks for them)")
+
+
+# ---------------------------------------------------------------- the sketch kit
+
+KIT_FILES = [
+    "tools/bsk.py", "tools/tests/**/*",
+    "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
+    "chips/*/chip.json", "chips/*/sdk/**/*",
+    "targets/*/target.json", "targets/*/sdk/**/*",
+    "examples/**/*",
+    "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md",
+    "secrets.cfg.example", ".vscode/tasks.json",
+]
+KIT_DIR = ROOT / "kit"      # AGENTS.md, CLAUDE.md, README.md, ... placed at the kit's root
+
+
+def cmd_package(args):
+    """The sketch kit: everything needed to write, build and upload sketches
+    (no Baseline source, no ESP-IDF)."""
+    import zipfile
+    version = header_defines(ROOT / "baseline" / "src" / "bl_main.h")["BASELINE_VERSION"]
+    abi = header_defines(SDK / "include" / "baseline_api.h")
+    out = Path(args.out) if args.out else DIST / f"baseline-sketcher-kit-{version}.zip"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    files = {}
+    for pattern in KIT_FILES:
+        for f in ROOT.glob(pattern):
+            rel = f.relative_to(ROOT)
+            if f.is_file() and not {"build", "__pycache__"}.intersection(rel.parts):
+                files[rel.as_posix()] = f
+    for f in KIT_DIR.rglob("*"):
+        if f.is_file():
+            files[f.relative_to(KIT_DIR).as_posix()] = f
+    top = f"baseline-sketcher-kit-{version}"
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for rel, f in sorted(files.items()):
+            z.write(f, f"{top}/{rel}")
+    print(f"kit: {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} ({len(files)} files, "
+          f"{out.stat().st_size // 1024} KB; Baseline {version}, ABI {abi.get('BL_ABI_MAJOR')}.{abi.get('BL_ABI_MINOR')})")
+
+
+def flash_file(args):
+    """Flash a downloaded Baseline image (baseline-<target>.bin, at 0x0) with esptool."""
+    port = leave_usb_device_mode(find_port(args.port), args.port)
+    image = Path(args.file)
+    try:
+        conn = open_port(port, console_baud(port, None))
+        with conn:
+            r = Link(conn, echo=False).request_status("INFO", timeout=2)
+        board = info_fields(r[1]).get("target") if r and r[0] else None
+    except (SystemExit, OSError):
+        board = None
+    if board and f"baseline-{board}." not in image.name:
+        sys.exit(f"error: the board runs the {board} Baseline; {image.name} looks like it is for another board "
+                 "(flash the matching baseline-<target>.bin)")
+    try:
+        import esptool  # noqa: F401
+    except ImportError:
+        sys.exit("error: flashing needs esptool: pip install -r requirements.txt")
+    print(f"flashing {image.name} to {port}")
+    run([sys.executable, "-m", "esptool", "-p", port, "-b", "921600", "write_flash", "0x0", str(image)])
+
+
 # ---------------------------------------------------------------- Baseline updates over the air
 
 # .bsu: the Baseline update package (baseline/src/bsu/bsu_format.h): a 128-byte
@@ -1448,6 +1656,7 @@ def cmd_baseline_update(args, target):
     if args.file:
         bsu = Path(args.file)
     else:
+        print(f"target {target['name']}: {target['description']}")
         build_baseline_idf(target, newest_esp32_core())
         bsu = DIST / target["name"] / f"baseline-{target['name']}.bsu"
     pkg = bsu.read_bytes()
@@ -1496,11 +1705,17 @@ def cmd_baseline_update(args, target):
 
 
 def cmd_baseline(args):
+    if args.action == "flash" and args.file:
+        return flash_file(args)
+    if args.action == "update" and args.file:
+        return cmd_baseline_update(args, None)
     if args.action == "update" and not args.target:
         _, conn = open_link_port(args)      # the target the board runs
         with conn:
             args.target = info_fields(Link(conn, echo=False).request("INFO")).get("target")
     target = load_target(args.target or DEFAULT_TARGET)
+    if args.action == "update":
+        return cmd_baseline_update(args, target)
     min_core = tuple(int(x) for x in target["min_core"].split("."))
     core = newest_esp32_core()
     if not core or core[0] < min_core:
@@ -1508,8 +1723,6 @@ def cmd_baseline(args):
         sys.exit(f"error: Baseline needs Arduino-ESP32 core >= {target['min_core']} (found {found}). "
                  "Install it with the Arduino IDE Boards Manager.")
     print(f"target {target['name']}: {target['description']}")
-    if args.action == "update":
-        return cmd_baseline_update(args, target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)
         if args.action == "flash":
@@ -1598,9 +1811,23 @@ def main():
     p.add_argument("-p", "--port")
     p.add_argument("--host", help="update: over WiFi to NAME[.local][:port] (the sketch must call ArduinoOTA.begin())")
     p.add_argument("--password", help="update: OTA password (or set BSK_OTA_PASSWORD)")
-    p.add_argument("--file", help="update: a .bsu file (default: build it for --target)")
+    p.add_argument("--file", help="flash: a downloaded baseline-<target>.bin; update: a .bsu file "
+                                  "(default: build it for --target)")
     p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
     p.set_defaults(fn=cmd_baseline)
+
+    p = sub.add_parser("setup", help="download the compiler sketches need (once)")
+    p.add_argument("-t", "--target", action="append", help="only for this target (repeatable); default: all")
+    p.set_defaults(fn=cmd_setup)
+
+    p = sub.add_parser("lib", help="search or install Arduino libraries (Library Manager)")
+    p.add_argument("action", choices=["search", "install"])
+    p.add_argument("names", nargs="+", help="search: words; install: NAME or NAME@VERSION (quote names with spaces)")
+    p.set_defaults(fn=cmd_lib)
+
+    p = sub.add_parser("package", help="make the sketch kit zip for users")
+    p.add_argument("-o", "--out", help="zip file (default dist/baseline-sketcher-kit-<version>.zip)")
+    p.set_defaults(fn=cmd_package)
 
     args = ap.parse_args()
     args.fn(args)

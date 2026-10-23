@@ -2,5 +2,6 @@
     "chip": "esp32c5",
     "description": "SparkFun Thing Plus - ESP32-C5: ESP32-C5, 8 MB flash, 8 MB PSRAM, dual-band WiFi 6, native USB (not yet run on hardware)",
     "flash_size": "8MB",
-    "status": "untested"
+    "status": "untested",
+    "product_url": "https://www.sparkfun.com/sparkfun-thing-plus-esp32-c5.html"
 }

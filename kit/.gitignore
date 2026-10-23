@@ -1,0 +1,5 @@
+# bsk build output, downloaded libraries and secrets
+build/
+libraries/
+secrets.cfg
+__pycache__/

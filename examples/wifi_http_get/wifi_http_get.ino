@@ -4,8 +4,10 @@
 #include <WiFi.h>
 #include <HTTPClient.h>
 
-const char *WIFI_SSID = "your-network";
-const char *WIFI_PASSWORD = "your-password";
+#ifndef WIFI_SSID      // secrets.cfg (see secrets.cfg.example) defines these
+#define WIFI_SSID "your-network"
+#define WIFI_PASSWORD "your-password"
+#endif
 const char *URL = "https://example.com/";
 
 void setup()

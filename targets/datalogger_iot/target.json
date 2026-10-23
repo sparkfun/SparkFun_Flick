@@ -2,5 +2,6 @@
     "chip": "esp32",
     "description": "SparkFun DataLogger IoT (and DataLogger IoT - 9DoF): ESP32-WROOM-32E, 16 MB flash, CH340",
     "flash_size": "16MB",
-    "status": "bring-up"
+    "status": "bring-up",
+    "product_url": "https://www.sparkfun.com/sparkfun-datalogger-iot.html"
 }

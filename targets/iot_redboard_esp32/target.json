@@ -2,5 +2,6 @@
     "chip": "esp32",
     "description": "SparkFun IoT RedBoard - ESP32: Arduino R3 form factor, ESP32-D0WD-V3, 16 MB flash, CH340",
     "flash_size": "16MB",
-    "status": "bring-up"
+    "status": "bring-up",
+    "product_url": "https://www.sparkfun.com/sparkfun-iot-redboard-esp32-development-board.html"
 }

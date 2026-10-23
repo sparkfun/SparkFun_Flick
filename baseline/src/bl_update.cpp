@@ -81,16 +81,23 @@ static uint32_t align_up(uint32_t v, uint32_t a)
     return (v + a - 1) / a * a;
 }
 
-/* A deliberate restart: if this Baseline is new and not yet confirmed, it has
- * worked well enough to get here, so confirm it (a restart while unconfirmed
- * would make the bootloader roll back). */
-static void restart_now(void)
+/* Before a deliberate restart (an upload, a command, an update): if this
+ * Baseline is new and not yet confirmed, it has worked well enough to get
+ * here, so confirm it. A restart while unconfirmed makes the bootloader roll
+ * back to the previous Baseline. */
+extern "C" void bl_update_confirm(void)
 {
     const esp_partition_t *run = esp_ota_get_running_partition();
     esp_ota_img_states_t st;
-    if (esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
-        esp_ota_mark_app_valid_cancel_rollback();
+    if (esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY &&
+        esp_ota_mark_app_valid_cancel_rollback() == ESP_OK) {
+        BLOG_I("update: Baseline %s confirmed", BASELINE_VERSION);
     }
+}
+
+static void restart_now(void)
+{
+    bl_update_confirm();
     bl_console_flush();
     vTaskDelay(pdMS_TO_TICKS(300));
     esp_restart();

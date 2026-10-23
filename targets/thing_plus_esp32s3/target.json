@@ -1,5 +1,6 @@
 {
     "chip": "esp32s3",
     "description": "SparkFun Thing Plus - ESP32-S3: ESP32-S3-MINI-1, 4 MB flash, 2 MB PSRAM, native USB",
-    "flash_size": "4MB"
+    "flash_size": "4MB",
+    "product_url": "https://www.sparkfun.com/sparkfun-thing-plus-esp32-s3.html"
 }

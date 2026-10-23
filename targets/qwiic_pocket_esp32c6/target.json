@@ -2,5 +2,6 @@
     "chip": "esp32c6",
     "description": "SparkFun Qwiic Pocket Development Board - ESP32-C6: ESP32-C6, 4 MB flash, native USB (not yet run on hardware)",
     "flash_size": "4MB",
-    "status": "untested"
+    "status": "untested",
+    "product_url": "https://www.sparkfun.com/sparkfun-qwiic-pocket-development-board-esp32-c6.html"
 }

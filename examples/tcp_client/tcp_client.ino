@@ -2,8 +2,10 @@
 // Set your network name and password below.
 #include <WiFi.h>
 
-const char *WIFI_SSID = "your-network";
-const char *WIFI_PASSWORD = "your-password";
+#ifndef WIFI_SSID      // secrets.cfg (see secrets.cfg.example) defines these
+#define WIFI_SSID "your-network"
+#define WIFI_PASSWORD "your-password"
+#endif
 
 void setup()
 {

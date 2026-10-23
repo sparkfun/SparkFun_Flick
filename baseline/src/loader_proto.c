@@ -97,6 +97,7 @@ static bool parse_sha(const char *hex, uint8_t out[32])
 
 static void restart_soon(void)
 {
+    bl_update_confirm();    // a new Baseline that got this far works: don't let the restart roll it back
     // Let the reply reach the host, even when a chatty sketch has filled the
     // console's queue ahead of it.
     bl_console_flush();

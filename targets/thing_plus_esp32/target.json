@@ -1,5 +1,6 @@
 {
     "chip": "esp32",
     "description": "SparkFun Thing Plus - ESP32 WROOM (USB-C), a.k.a. Thing Plus C: ESP32-WROOM-32E, 16 MB flash, CH340",
-    "flash_size": "16MB"
+    "flash_size": "16MB",
+    "product_url": "https://www.sparkfun.com/sparkfun-thing-plus-esp32-wroom-usb-c.html"
 }
