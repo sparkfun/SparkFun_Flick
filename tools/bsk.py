@@ -607,10 +607,11 @@ def open_port(port, baud):
     return s
 
 
-# Baud rates Baseline's console may use on a USB-serial chip, fastest first:
-# 2000000 (classic ESP32 Baselines now), 921600 (early ABI 1.6 ones) and
-# 115200 (older ones). Native USB ports ignore the baud rate.
-CONSOLE_BAUDS = (2000000, 921600, 115200)
+# Baud rates Baseline's console may use on a USB-serial chip, most likely first:
+# 921600 (classic ESP32 Baselines), 2000000 (ones built while 2 Mbaud was tried)
+# and 115200 (older ones). Native USB ports ignore the baud rate; 115200 must
+# stay last.
+CONSOLE_BAUDS = (921600, 2000000, 115200)
 _baud_cache = {}
 
 
@@ -863,7 +864,11 @@ def cmd_test(args):
     for attempt in range(2):
         upload_dir(port, baud, ROOT / "examples" / "selftest", target)
         text = capture_console(port, baud, "RESULT:", 180)
-        found = [m.groups() for m in re.finditer(r"^[ \t]*(PASS|FAIL|SKIP|LOOK)  (.*?)\s*$", text, re.M)]
+        # Drop anything the previous sketch printed while the upload ran (seen:
+        # a selftest left running from an earlier test, its WiFi scan cut short).
+        start = text.find("--- selftest")
+        text = text[start:] if start >= 0 else text
+        found =[m.groups() for m in re.finditer(r"^[ \t]*(PASS|FAIL|SKIP|LOOK)  (.*?)\s*$", text, re.M)]
         result = re.search(r"RESULT: (\d+) passed, (\d+) failed", text)
         # The selftest's own count covers both phases. Fewer PASS/FAIL lines
         # than that means the capture missed console output (seen once on a
