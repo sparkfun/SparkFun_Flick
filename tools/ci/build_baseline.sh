@@ -8,17 +8,11 @@
 set -euo pipefail
 
 ARDUINO_ESP32_VERSION="${ARDUINO_ESP32_VERSION:-3.3.11}"
-ESP32_INDEX="https://espressif.github.io/arduino-esp32/package_esp32_index.json"
 
-# Arduino-ESP32 as an ESP-IDF component: flick takes the core and its
-# precompiled libraries from ~/.arduino15 (cached between CI runs).
-if [ ! -d "$HOME/.arduino15/packages/esp32/hardware/esp32/$ARDUINO_ESP32_VERSION" ]; then
-    if ! command -v arduino-cli >/dev/null; then
-        curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | BINDIR=/usr/local/bin sh
-    fi
-    arduino-cli core update-index --additional-urls "$ESP32_INDEX"
-    arduino-cli core install "esp32:esp32@$ARDUINO_ESP32_VERSION" --additional-urls "$ESP32_INDEX"
-fi
+# Arduino-ESP32 as an ESP-IDF component: flick takes the core and the chip's
+# precompiled libraries from ~/.arduino15 (cached between CI runs). Only those
+# are installed: the whole platform does not fit a runner's disk next to ESP-IDF.
+python3 tools/ci/fetch_arduino_esp32.py "$ARDUINO_ESP32_VERSION" "$@"
 
 for target in "$@"; do
     echo "::group::Baseline for $target"

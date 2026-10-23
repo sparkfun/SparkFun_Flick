@@ -16,6 +16,7 @@ on:
       - "sdk/include/**"
       - "tools/flick.py"
       - "tools/ci/build_baseline.sh"
+      - "tools/ci/fetch_arduino_esp32.py"
       - ".github/workflows/baseline.yml"
   pull_request:
     paths:
@@ -27,6 +28,7 @@ on:
       - "sdk/include/**"
       - "tools/flick.py"
       - "tools/ci/build_baseline.sh"
+      - "tools/ci/fetch_arduino_esp32.py"
       - ".github/workflows/baseline.yml"
   workflow_dispatch:
   workflow_call:
@@ -52,11 +54,11 @@ jobs:
         target: ${{ fromJson(needs.targets.outputs.list) }}
     steps:
       - uses: actions/checkout@v4
-      - name: Cache Arduino-ESP32 (core and precompiled libraries, ~2 GB)
+      - name: Cache Arduino-ESP32 (the core and this chip's precompiled libraries)
         uses: actions/cache@v4
         with:
           path: ~/.arduino15
-          key: arduino-esp32-3.3.11
+          key: arduino-esp32-3.3.11-${{ matrix.target }}
       - name: Build Baseline for ${{ matrix.target }}
         run: bash tools/ci/build_baseline.sh ${{ matrix.target }}
       - uses: actions/upload-artifact@v4

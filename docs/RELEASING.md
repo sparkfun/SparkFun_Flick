@@ -55,7 +55,7 @@ The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow
 To run a CI build locally (Docker):
 
 ```
-docker run --rm -v "$PWD:/work" -w /work -v flick-arduino15:/root/.arduino15 espressif/idf:v5.5.5 bash tools/ci/build_baseline.sh thing_plus_esp32c6
+docker run --rm -v "$PWD:/work" -w /work espressif/idf:v5.5.5 bash tools/ci/build_baseline.sh thing_plus_esp32c6
 ```
 
 A Linux-built image was flashed to a Thing Plus C6 and passed `flick test` (2026-10-23).
