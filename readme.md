@@ -42,7 +42,7 @@ The Baseline 'blob' includes the following libraries and features. If your code 
 * **Releases:** each release has a download page with a **Flash** button per board, the over-the-air updates, and a sketch kit (with `AGENTS.md` for AI assistants). See [docs/RELEASING.md](docs/RELEASING.md).
 * **Extras:** `String`, `IPAddress`, `printf`/`snprintf`, `random`, `map`, `constrain`, `log_i`/`ESP_LOGI` logging, and `ESP` chip and memory info
 
-Not in the blob yet: USB mass storage, camera, and libraries from the Arduino Library Manager.
+Not in the blob yet: USB mass storage and camera. Libraries from the Arduino Library Manager aren't in the blob either; they're compiled into your sketch instead (see [Add a library](#5-add-a-library)).
 
 ## What's an ABI?
 
@@ -60,6 +60,128 @@ The version number tells you where things stand. In ABI **1.6**:
 * **6** goes up each time a batch of new functions is added. Version 1.6 added microSD, sleep, timers, NTP time, touch, I2S, LED strips, servos, captive portals and USB devices.
 
 Every sketch records the ABI it was built for. If you load a sketch onto a Baseline that's too old for it, Baseline politely refuses to run it instead of crashing. Re-flash Baseline and you're back in business.
+
+## How to use Flick
+
+This walks you from a blank board to your own sketch running, using VS Code. You'll press one key to build and upload, and you won't need to type commands.
+
+### What you need
+
+* **VS Code**
+* **Python 3**, because VS Code's build task runs Flick's tool (`tools/flick.py`) behind the scenes. Install it once, then run this once in VS Code's terminal (**Terminal → New Terminal**):
+
+  ```
+  pip install pyserial
+  ```
+
+* **A compiler.** If you already have the Arduino IDE with the ESP32 boards installed, Flick uses that compiler and you're done. If you don't, see [Without the Arduino IDE](#without-the-arduino-ide) below.
+
+### 1. Put Baseline on the board (once)
+
+Open the release's flasher page in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. That's it. You'll only do this again when you want a newer Baseline.
+
+### 2. Open the folder in VS Code
+
+Download the sketch kit from the release (or clone this repo), unzip it, and use **File → Open Folder...** to open it. The folder comes with the VS Code tasks already set up.
+
+### 3. Try an example
+
+Open `examples/blink/blink.ino` and press **Ctrl+Shift+B**.
+
+The task builds the sketch for whichever board is plugged in, uploads it, and opens the serial output in VS Code's terminal panel. It takes about a second. Press **Ctrl+Shift+B** again whenever you change something; it stops the monitor, re-uploads and starts watching again.
+
+### 4. Make your own sketch
+
+A sketch is a folder with a `.ino` file of the same name inside. In VS Code's Explorer, make a folder called `my_sketch`, and in it a file called `my_sketch.ino`:
+
+```cpp
+void setup()
+{
+    pinMode(STAT_LED, OUTPUT);
+    Serial.begin(115200);
+    Serial.println("Hello from my_sketch!");
+}
+
+void loop()
+{
+    digitalWrite(STAT_LED, HIGH);
+    delay(250);
+    digitalWrite(STAT_LED, LOW);
+    delay(250);
+}
+```
+
+With that file open, press **Ctrl+Shift+B**. This is ordinary Arduino code, and you don't need `#include <Arduino.h>`. Use the board's pin names (`STAT_LED`, `LED_BUILTIN`, `SDA`, `SCL`, ...) rather than numbers, so the sketch works on any board. Extra `.cpp`, `.c` and `.h` files in the folder are built too.
+
+### 5. Add a library
+
+Flick uses the libraries in your Arduino sketchbook. To add one, install it the way you always have: in the Arduino IDE, go to **Tools → Manage Libraries...**, search (for example "SparkFun Qwiic OLED") and press **Install**. Then `#include` it and press **Ctrl+Shift+B**.
+
+Most I2C and SPI sensor and display libraries, ArduinoJson and the like work. A library that calls ESP-IDF directly or uses C++ exceptions won't build. When a build fails with `undefined reference`, the call isn't in Baseline; [docs/ARDUINO_COMPAT.md](docs/ARDUINO_COMPAT.md) lists what is.
+
+### 6. Or ask an AI assistant to do it
+
+Open the folder in Claude Code, Copilot, Cursor or similar. `AGENTS.md` tells the assistant how Flick works, so you can ask for the whole job:
+
+* *"Make a sketch that shows the temperature from the Qwiic TMP117 on the 1.3 inch Qwiic OLED. Install the libraries you need, upload it and check the serial output."*
+* *"Add the SparkFun Qwiic OLED library and change my_sketch to print the uptime on the display."*
+* *"Log the fuel gauge's battery voltage to the microSD card every minute, with the time from NTP."*
+* *"Turn examples/wifi_ota into a web page that shows the board's temperature."*
+
+The assistant finds, installs, builds, uploads and reads the serial output by itself.
+
+### The other VS Code tasks
+
+Press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then pick one:
+
+| Task | What it does |
+|---|---|
+| Sketch: build + upload + monitor | The same as Ctrl+Shift+B |
+| Sketch: build only | Checks that the open sketch compiles, without a board |
+| Serial monitor | Shows the board's serial output without uploading |
+| Baseline: reboot into safe mode | Restarts the board without running the sketch, if a sketch misbehaves |
+
+### WiFi passwords
+
+Copy `secrets.cfg.example` to `secrets.cfg` and fill in your network. Each `WIFI_SSID = MyNetwork` line becomes `#define WIFI_SSID "MyNetwork"` in every sketch, so your password never ends up in your code. `secrets.cfg` is ignored by git.
+
+### When things go wrong
+
+* **Don't upload with the Arduino IDE, esptool or PlatformIO.** They erase Baseline, and you'd have to flash it again (step 1).
+* **A new sketch crashes?** The board puts the previous sketch back. Fix the code and press Ctrl+Shift+B.
+* **The board restarts every few seconds?** `loop()` must return, and nothing may wait for more than 5 seconds without a `delay()`, or the watchdog resets the board.
+* **The upload can't find the board?** Check the USB cable, then flash Baseline again (step 1).
+
+### Without the Arduino IDE
+
+If you don't have Arduino-ESP32 installed, run this once in VS Code's terminal to download Espressif's compiler (170 to 670 MB) into `~/.flick`:
+
+```
+python tools/flick.py setup -t thing_plus_esp32s3
+```
+
+Use your board's name in place of `thing_plus_esp32s3`; `python tools/flick.py targets` lists them. You can install libraries without the Arduino IDE too:
+
+```
+python tools/flick.py lib search qwiic oled
+python tools/flick.py lib install "SparkFun Qwiic OLED Arduino Library"
+```
+
+### From the command line
+
+Everything the tasks do, you can run yourself:
+
+```
+python tools/flick.py new my_sketch          create a sketch folder
+python tools/flick.py upload my_sketch -m    build, upload, then show the serial output (Ctrl+C quits)
+python tools/flick.py build my_sketch -t T   build only, for board T
+python tools/flick.py monitor                serial console
+python tools/flick.py info                   Baseline version, board, running sketch, last crash
+python tools/flick.py baseline flash --file baseline-<board>.bin   flash Baseline without the browser (pip install esptool first)
+python tools/flick.py upload my_sketch --host baseline             upload over WiFi (see docs/OTA.md)
+```
+
+`python tools/flick.py --help` lists the rest.
 
 ## License
 

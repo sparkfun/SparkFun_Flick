@@ -4,15 +4,19 @@ Write Arduino sketches for SparkFun ESP32 boards. They build in about a second a
 
 ## 1. Put Baseline on the board (once)
 
-- **From the browser (easiest):** open the Baseline flasher page, pick your board, and press **Flash** (Chrome or Edge).
-- **From this folder:** download `baseline-<your board>.bin` from the release, then run:
+Open the Baseline flasher page in Chrome or Edge, pick your board, and press **Flash**.
 
-  ```
-  pip install -r requirements.txt
-  python tools/flick.py baseline flash --file baseline-<your board>.bin
-  ```
+<details><summary>Without the browser</summary>
+
+Download `baseline-<your board>.bin` from the release, then run:
+
+```
+pip install esptool
+python tools/flick.py baseline flash --file baseline-<your board>.bin
+```
 
 `python tools/flick.py targets` lists the boards.
+</details>
 
 ## 2. Install the compiler (once)
 

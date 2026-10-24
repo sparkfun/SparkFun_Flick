@@ -1526,9 +1526,9 @@ KIT_FILES = [
     "targets/*/target.json", "targets/*/sdk/**/*",
     "examples/**/*",
     "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md",
-    "secrets.cfg.example", ".vscode/tasks.json", "LICENSE", "THIRD_PARTY_NOTICES.md",
+    "secrets.cfg.example", "LICENSE", "THIRD_PARTY_NOTICES.md",
 ]
-KIT_DIR = ROOT / "kit"      # AGENTS.md, CLAUDE.md, README.md, ... placed at the kit's root
+KIT_DIR = ROOT / "kit"      # AGENTS.md, CLAUDE.md, README.md, .vscode/tasks.json, ... placed at the kit's root
 
 
 def cmd_package(args):
@@ -1573,7 +1573,7 @@ def flash_file(args):
     try:
         import esptool  # noqa: F401
     except ImportError:
-        sys.exit("error: flashing needs esptool: pip install -r requirements.txt")
+        sys.exit("error: flashing needs esptool: pip install esptool (or use the browser flasher page)")
     print(f"flashing {image.name} to {port}")
     run([sys.executable, "-m", "esptool", "-p", port, "-b", "921600", "write_flash", "0x0", str(image)])
 
