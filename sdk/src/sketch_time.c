@@ -431,7 +431,7 @@ static void format(out_t *o, const char *fmt, const struct tm *tm)
 
 size_t strftime(char *buf, size_t size, const char *fmt, const struct tm *tm)
 {
-    if (!buf || !size || !fmt || !tm) return 0;
+    if (!buf || !size || !tm) return 0;     /* fmt is declared nonnull */
     out_t o = { buf, size, 0 };
     format(&o, fmt, tm);
     if (o.n >= size) {      /* didn't fit: C says return 0 */

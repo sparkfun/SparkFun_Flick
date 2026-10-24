@@ -1,4 +1,4 @@
-// hello_world.ino - Serial output over the USB port, Arduino style.
+// hello_world.ino - Serial output over the USB port, Arduino style (the Flick half of the build-time comparison, tools/benchmark.py).
 
 int count = 0;
 

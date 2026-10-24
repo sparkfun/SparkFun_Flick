@@ -1,4 +1,4 @@
-// i2c_scanner.ino - list every device on the Qwiic I2C bus (SDA 8, SCL 9).
+// i2c_scanner.ino - list every device on the Qwiic I2C bus (the board's SDA and SCL).
 
 void setup()
 {

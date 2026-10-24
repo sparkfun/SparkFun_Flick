@@ -1,6 +1,6 @@
 // wifi_ap_webserver.ino - the board makes its own WiFi network and serves a web page.
 // Join "Baseline-AP" (password: sketcher123) and open http://192.168.4.1/
-// The page toggles the blue STAT LED.
+// The page toggles the board's LED.
 #include <WiFi.h>
 #include <WebServer.h>
 

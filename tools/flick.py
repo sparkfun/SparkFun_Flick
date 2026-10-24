@@ -12,7 +12,7 @@
   flick test                          bring-up test of the plugged-in board (selftest, rollback, watchdog)
   flick setup [-t TARGET]             download the compiler sketches need (once)
   flick lib search WORDS              search the Arduino Library Manager
-  flick lib install NAME[@VERSION]    install a library into libraries/ (next to tools/)
+  flick lib install NAME[@VERSION]    install a library into libraries/
   flick baseline flash --file F.bin   flash a downloaded Baseline over USB (esptool)
   flick baseline update [--host H]    update Baseline over USB or WiFi (--file F.bsu, or build it)
   flick baseline build -t TARGET      compile a Baseline blob -> dist/<target>/baseline-<target>.bin
@@ -48,6 +48,12 @@ import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# In the sketch kit, everything flick needs is in flick/ (flick package writes
+# flick/kit.json), and the user's own files sit one level up: secrets.cfg,
+# libraries/, my_sketches/, examples/. In the repository both are the root.
+IN_KIT = (ROOT / "kit.json").exists()
+WORK = ROOT.parent if IN_KIT else ROOT
+FLICK_CMD = "python flick.py" if IN_KIT else "python tools/flick.py"   # for messages
 
 # Flick was called Baseline Sketcher, and the tool bsk: its BSK_* environment
 # variables still work.
@@ -157,7 +163,7 @@ def find_gcc(target):
         hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-*32" / "*" / "bin" / exe)))  # esp-x32, esp-rv32
         if hits:
             return hits[-1]
-    sys.exit(f"error: {gcc_name} not found. Run: python tools/flick.py setup")
+    sys.exit(f"error: {gcc_name} not found. Run: {FLICK_CMD} setup")
 
 
 def run(cmd, **kw):
@@ -191,7 +197,7 @@ void loop()
 def secret_defines():
     """-DKEY="value" for each KEY = value in secrets.cfg (repo root, or $FLICK_SECRETS).
     Keeps WiFi passwords and API keys out of sketches: #ifdef WIFI_SSID ... in code."""
-    f = Path(os.environ.get("FLICK_SECRETS") or ROOT / "secrets.cfg")
+    f = Path(os.environ.get("FLICK_SECRETS") or WORK / "secrets.cfg")
     out = []
     if f.exists():
         for line in f.read_text().splitlines():
@@ -220,8 +226,17 @@ def load_config(proj):
     return cfg
 
 
+def example_dirs(root=None):
+    """Every sketch folder (X/X.ino) under examples/, in order: 01_basics/... first."""
+    root = root or WORK / "examples"
+    return sorted(p.parent for p in root.rglob("*.ino")
+                  if p.stem == p.parent.name and "build" not in p.relative_to(root).parts)
+
+
 def cmd_new(args):
     proj = Path(args.dir)
+    if IN_KIT and len(proj.parts) == 1:
+        proj = WORK / "my_sketches" / proj        # a bare name: the kit's place for your sketches
     if proj.exists() and any(proj.iterdir()):
         sys.exit(f"error: {proj} exists and is not empty")
     proj.mkdir(parents=True, exist_ok=True)
@@ -352,7 +367,7 @@ def arduino_user_dirs():
 
 
 def library_roots(proj):
-    roots = [proj / "libraries", ROOT / "libraries"]       # the sketch's own, then flick lib install's
+    roots = [proj / "libraries", WORK / "libraries"]       # the sketch's own, then flick lib install's
     roots += [Path(p) for p in os.environ.get("FLICK_LIBRARIES", "").split(os.pathsep) if p]
     roots += [d / "libraries" for d in arduino_user_dirs()]
     seen, out = set(), []
@@ -425,7 +440,7 @@ def build(proj, target_name=None):
     if proj == ARDUINO_BENCH or ARDUINO_BENCH in proj.parents:
         sys.exit(f"error: {proj.relative_to(ROOT)} is a plain Arduino sketch, kept only for the build-time "
                  f"comparison (tools/benchmark.py). It does not run on Baseline.\n"
-                 f"Open the Baseline version instead: examples/{proj.name}/{proj.name}.ino")
+                 f"Its Flick version is in benchmarks/flick/{proj.name}/.")
     cfg = load_config(proj)
     inos = sorted(proj.glob("*.ino"))
     user = inos + sorted(proj.glob("*.c")) + sorted(proj.glob("*.cpp"))
@@ -782,7 +797,8 @@ class Link:
         cmd = line.split()[0]
         if cmd == "INFO":
             sys.exit(f"\nerror: no reply from {self.ser.port}. Is Baseline installed? "
-                     "Flash it once with: python tools/flick.py baseline flash")
+                     "Flash it once from the Baseline web page, or with: "
+                     f"{FLICK_CMD} baseline flash --file baseline-<board>.bin")
         sys.exit(f"\nerror: Baseline stopped answering during {cmd} on {self.ser.port}.")
 
 
@@ -912,7 +928,7 @@ def cmd_test(args):
 
     print("1/3 selftest (about a minute, including a 2 s deep sleep)...")
     for attempt in range(2):
-        upload_dir(port, baud, ROOT / "examples" / "selftest", target)
+        upload_dir(port, baud, TESTS / "selftest", target)
         text = capture_console(port, baud, "RESULT:", 180)
         # Drop anything the previous sketch printed while the upload ran (seen:
         # a selftest left running from an earlier test, its WiFi scan cut short).
@@ -1422,9 +1438,36 @@ def download(url, dest):
     tmp.replace(dest)
 
 
+def board_target(port=None):
+    """The target the plugged-in board's Baseline reports, or None (no board, or no Baseline)."""
+    try:
+        port = find_port(port)
+        with open_port(port, console_baud(port, None)) as conn:
+            r = Link(conn, echo=False).request_status("INFO", timeout=2)
+        board = info_fields(r[1]).get("target") if r and r[0] else None
+    except (SystemExit, OSError):
+        return None
+    return LEGACY_TARGETS.get(board, board)
+
+
 def cmd_setup(args):
-    """Download the compiler for the targets' chips (Xtensa: ESP32, S3; RISC-V: the rest)."""
-    names = args.target or target_names()
+    """Download the compiler for the targets' chips (Xtensa: ESP32, S3; RISC-V: the rest).
+    Without -t: for the plugged-in board, else for every chip. Installs pyserial if missing."""
+    try:
+        import serial  # noqa: F401
+    except ImportError:
+        print("installing pyserial (to talk to the board)")
+        run([sys.executable, "-m", "pip", "install", "pyserial>=3.5"])
+    names = args.target
+    if not names:
+        board = board_target()
+        if board in target_names():
+            print(f"board: {board}")
+            names = [board]
+        else:
+            print("no board with Baseline answered, so installing the compilers for every chip "
+                  "(or plug in the board and run setup again)")
+            names = target_names()
     needed = sorted({"xtensa-esp-elf" if load_target(t)["gcc"].startswith("xtensa") else "riscv32-esp-elf"
                      for t in names})
     host, ext = toolchain_host()
@@ -1452,7 +1495,7 @@ def cmd_setup(args):
     for t in names:
         target = load_target(t)
         print(f"  {t}: {find_gcc(target)}")
-    print("done: build a sketch with  python tools/flick.py build examples/blink -t <target>")
+    print(f"done: try  {FLICK_CMD} upload examples/01_basics/hello_flick -m")
 
 
 # ---------------------------------------------------------------- libraries (Arduino Library Manager)
@@ -1490,13 +1533,13 @@ def cmd_lib(args):
             print("nothing found")
         return
     import zipfile
-    dest_root = ROOT / "libraries"
+    dest_root = WORK / "libraries"
     for spec in args.names:
         name, _, want = spec.partition("@")
         found = [l for l in libs if l["name"].lower() == name.lower() and (not want or l["version"] == want)]
         if not found:
             sys.exit(f"error: no library named '{name}'" + (f" with version {want}" if want else "") +
-                     ". Try: python tools/flick.py lib search <words>")
+                     f". Try: {FLICK_CMD} lib search <words>")
         lib = max(found, key=lambda l: version_key(l["version"]))
         archive = FLICK_HOME / "downloads" / lib["archiveFileName"]
         print(f'installing {lib["name"]} {lib["version"]}')
@@ -1511,7 +1554,7 @@ def cmd_lib(args):
         shutil.move(str(unpacked), str(folder))
         shutil.rmtree(dest_root / ".unpack", ignore_errors=True)
         archive.unlink()
-        print(f"  -> {folder.relative_to(ROOT)}")
+        print(f"  -> {folder.relative_to(WORK)}")
         deps = [d["name"] for d in lib.get("dependencies", [])]
         if deps:
             print(f"  it depends on: {', '.join(deps)} (install those too if a build asks for them)")
@@ -1519,16 +1562,18 @@ def cmd_lib(args):
 
 # ---------------------------------------------------------------- the sketch kit
 
-KIT_FILES = [
-    "tools/flick.py", "tools/tests/**/*",
-    "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
-    "chips/*/chip.json", "chips/*/sdk/**/*",
-    "targets/*/target.json", "targets/*/sdk/**/*",
-    "examples/**/*",
-    "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md",
-    "secrets.cfg.example", "LICENSE", "THIRD_PARTY_NOTICES.md",
-]
-KIT_DIR = ROOT / "kit"      # AGENTS.md, CLAUDE.md, README.md, .vscode/tasks.json, ... placed at the kit's root
+# The kit's top level holds only what users work with (README.md, flick.py,
+# examples/, my_sketches/, ...: the files in kit/). Everything flick itself
+# needs goes in flick/.
+KIT_FILES = {
+    "flick/": ["tools/flick.py", "tools/tests/**/*",
+               "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
+               "chips/*/chip.json", "chips/*/sdk/**/*",
+               "targets/*/target.json", "targets/*/sdk/**/*",
+               "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md", "THIRD_PARTY_NOTICES.md"],
+    "": ["examples/**/*", "secrets.cfg.example", "LICENSE"],
+}
+KIT_DIR = ROOT / "kit"      # README.md, flick.py, AGENTS.md, CLAUDE.md, .vscode/, my_sketches/: the kit's root
 
 
 def cmd_package(args):
@@ -1540,18 +1585,21 @@ def cmd_package(args):
     out = Path(args.out) if args.out else DIST / f"flick-kit-{version}.zip"
     out.parent.mkdir(parents=True, exist_ok=True)
     files = {}
-    for pattern in KIT_FILES:
-        for f in ROOT.glob(pattern):
-            rel = f.relative_to(ROOT)
-            if f.is_file() and not {"build", "__pycache__"}.intersection(rel.parts):
-                files[rel.as_posix()] = f
+    for dest, patterns in KIT_FILES.items():
+        for pattern in patterns:
+            for f in ROOT.glob(pattern):
+                rel = f.relative_to(ROOT)
+                if f.is_file() and not {"build", "__pycache__"}.intersection(rel.parts):
+                    files[dest + rel.as_posix()] = f
     for f in KIT_DIR.rglob("*"):
-        if f.is_file():
+        if f.is_file() and "__pycache__" not in f.parts:
             files[f.relative_to(KIT_DIR).as_posix()] = f
     top = f"flick-kit-{version}"
+    marker = json.dumps({"version": version, "abi": f"{abi.get('BL_ABI_MAJOR')}.{abi.get('BL_ABI_MINOR')}"})
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for rel, f in sorted(files.items()):
             z.write(f, f"{top}/{rel}")
+        z.writestr(f"{top}/flick/kit.json", marker + "\n")     # tells flick.py it runs in the kit
     print(f"kit: {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} ({len(files)} files, "
           f"{out.stat().st_size // 1024} KB; Baseline {version}, ABI {abi.get('BL_ABI_MAJOR')}.{abi.get('BL_ABI_MINOR')})")
 
@@ -1560,13 +1608,7 @@ def flash_file(args):
     """Flash a downloaded Baseline image (baseline-<target>.bin, at 0x0) with esptool."""
     port = leave_usb_device_mode(find_port(args.port), args.port)
     image = Path(args.file)
-    try:
-        conn = open_port(port, console_baud(port, None))
-        with conn:
-            r = Link(conn, echo=False).request_status("INFO", timeout=2)
-        board = info_fields(r[1]).get("target") if r and r[0] else None
-    except (SystemExit, OSError):
-        board = None
+    board = board_target(port)
     if board and f"baseline-{board}." not in image.name:
         sys.exit(f"error: the board runs the {board} Baseline; {image.name} looks like it is for another board "
                  "(flash the matching baseline-<target>.bin)")
@@ -1831,7 +1873,8 @@ def main():
     p.set_defaults(fn=cmd_baseline)
 
     p = sub.add_parser("setup", help="download the compiler sketches need (once)")
-    p.add_argument("-t", "--target", action="append", help="only for this target (repeatable); default: all")
+    p.add_argument("-t", "--target", action="append",
+                   help="for this target (repeatable); default: the plugged-in board, else all")
     p.set_defaults(fn=cmd_setup)
 
     p = sub.add_parser("lib", help="search or install Arduino libraries (Library Manager)")

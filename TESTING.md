@@ -9,10 +9,10 @@ Legend: ✅ passed · ❌ failed · ⚠️ passed with a note · 👀 needs a lo
 ```
 python tools/flick.py baseline flash -t <target>     # once per Baseline change
 python tools/flick.py test                          # automatic checks, one PASS/FAIL table (~2 min)
-python tools/flick.py upload examples/led_check     # LEDs, by eye: red, green, blue, white, off (1 s each)
+python tools/flick.py upload tools/tests/led_check     # LEDs, by eye: red, green, blue, white, off (1 s each)
 ```
 
-- `flick test` runs `examples/selftest` (memory, PSRAM, Strings, libm, time, Preferences, LittleFS, microSD, Ticker, the board's I2C devices, WiFi scan, BLE scan, WiFi connect + `WiFi.onEvent` + NTP + HTTP, then a 2 s deep sleep and the checks after waking), then a crash in `setup()` (`tools/tests/crash_test`, must roll back and be recorded in `INFO`), then a `loop()` that never returns (`tools/tests/hang_test`, the watchdog must catch it and roll back).
+- `flick test` runs `tools/tests/selftest` (memory, PSRAM, Strings, libm, time, Preferences, LittleFS, microSD, Ticker, the board's I2C devices, WiFi scan, BLE scan, WiFi connect + `WiFi.onEvent` + NTP + HTTP, then a 2 s deep sleep and the checks after waking), then a crash in `setup()` (`tools/tests/crash_test`, must roll back and be recorded in `INFO`), then a `loop()` that never returns (`tools/tests/hang_test`, the watchdog must catch it and roll back).
 - WiFi checks need `secrets.cfg` (copy `secrets.cfg.example`); without it they are skipped. On a chip without a radio (ESP32-P4) the WiFi and BLE checks are skipped.
 - Before testing a new board, check it with `esptool flash-id`: the chip revision (classic ESP32: 3.0 or later) and the flash size against `flash_size` in its `target.json`.
 

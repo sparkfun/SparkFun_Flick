@@ -23,6 +23,7 @@ import flick  # noqa: E402
 ROOT = flick.ROOT
 EXAMPLES = ROOT / "examples"
 ARDUINO_BENCH = ROOT / "benchmarks" / "arduino"
+FLICK_BENCH = ROOT / "benchmarks" / "flick"
 OUT = ROOT / "docs" / "BUILD_RESULTS.md"
 # Plain Arduino build for the same board. huge_app so WiFi/BLE sketches fit.
 ARDUINO_FQBN = "esp32:esp32:sparkfun_esp32s3_thing_plus:CDCOnBoot=cdc,PartitionScheme=huge_app"
@@ -70,10 +71,11 @@ def main():
     ap.add_argument("--no-arduino", action="store_true")
     args = ap.parse_args()
 
-    sketches = sorted(p for p in EXAMPLES.iterdir() if p.is_dir())
+    # Every example, plus blink and hello_world (benchmarks/flick/), kept for the Arduino comparison.
+    sketches = flick.example_dirs(EXAMPLES) + sorted(p for p in FLICK_BENCH.iterdir() if p.is_dir())
     results = {}
     for p in sketches:
-        results[p.name] = bench_sketch(p)
+        results[p.name] = dict(bench_sketch(p), path=p.relative_to(ROOT).as_posix())
         r = results[p.name]
         print(f"{p.name:18} {r['bytes']:6} bytes  {r['time']:.2f}s")
 
@@ -111,7 +113,7 @@ def main():
              "Image is the `.flick` file that gets uploaded. RAM is the sketch's static data (.data + .bss).\n\n")
     o.append("| Example | Image (bytes) | Static RAM (bytes) | Build time |\n|---|---:|---:|---:|\n")
     for name, r in results.items():
-        o.append(f"| [{name}](../examples/{name}/{name}.ino) | {fmt_bytes(r['bytes'])} | "
+        o.append(f"| [{name}](../{r['path']}/{name}.ino) | {fmt_bytes(r['bytes'])} | "
                  f"{fmt_bytes(r['ram'])} | {r['time']:.2f} s |\n")
 
     if arduino:

@@ -89,7 +89,7 @@ def parse_spec():
             raise SystemExit(f"{SPEC.name}:{lineno}: minor must be an integer")
         if not IDENT.match(field):
             raise SystemExit(f"{SPEC.name}:{lineno}: bad field name '{field}'")
-        if wrapper != "-" and not IDENT.match(wrapper):
+        if wrapper != "-" and not IDENT.match(wrapper.removeprefix("@")):
             raise SystemExit(f"{SPEC.name}:{lineno}: bad wrapper name '{wrapper}'")
         entries.append(Entry(lineno, int(minor), ret, field, params, wrapper, doc))
     if major is None:
@@ -162,7 +162,7 @@ def gen_api_h(major, minor, entries):
              "   sketch's required minor). */\n")
     o.append("#define BL_HAS(field) (offsetof(bl_api_t, field) < BL->struct_size)\n\n")
     for e in entries:
-        if e.wrapper == "-":
+        if e.wrapper == "-" or e.wrapper.startswith("@"):     # @name: written by hand in baseline.h
             continue
         o.append(f"/* {e.doc} */\n")
         if e.variadic:
@@ -248,7 +248,7 @@ def gen_doc(major, minor, entries):
          "Every call goes through the `BL` table pointer.\n\n",
          "| Sketch name | Signature | Since | Description |\n|---|---|---|---|\n"]
     for e in entries:
-        name = e.wrapper if e.wrapper != "-" else f"BL->{e.field}"
+        name = e.wrapper.removeprefix("@") if e.wrapper != "-" else f"BL->{e.field}"
         o.append(f"| `{name}` | `{e.ret} {e.field}({e.params})` | {major}.{e.minor} | {e.doc} |\n")
     return "".join(o)
 

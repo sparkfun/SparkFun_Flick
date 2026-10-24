@@ -12,6 +12,7 @@
 
 #define BL_TARGET_CHIP_NAME     "ESP32-C6"
 #define BL_TARGET_CHIP_ID       13          /* == esp_chip_id_t ESP_CHIP_ID_ESP32C6 */
+#define BL_TARGET_BOOT_PIN      9           /* the BOOT button (a strapping pin) */
 
 /* ---- Flash window ------------------------------------------------------
  * The C6 maps flash for instructions and data at the same addresses

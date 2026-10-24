@@ -29,10 +29,53 @@
 
 #include "baseline_types.h"
 #include "baseline_api.h"
+#include "bl_target.h"          /* the board's pins (targets/<target>/sdk/bl_board.h) */
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* digitalWrite, digitalRead, analogWrite. On a board whose only LED is the
+ * WS2812 (LED_BUILTIN == RGB_BUILTIN), they drive that LED in white, as
+ * Arduino-ESP32 does on such boards, so blink sketches work everywhere. */
+#ifndef RGB_BRIGHTNESS
+#define RGB_BRIGHTNESS 64       /* Arduino-ESP32's brightness for digitalWrite(RGB_BUILTIN, HIGH) */
+#endif
+#if defined(BL_BOARD_RGB_LED) && BL_BOARD_LED_BUILTIN == BL_BOARD_RGB_LED
+#define BL_SDK_RGB_ONLY_LED 1
+extern uint8_t bl_sdk_led_level;   /* sketch_crt.c: the level last written, for digitalRead */
+#endif
+static inline int digitalWrite(int pin, int level)
+{
+#ifdef BL_SDK_RGB_ONLY_LED
+    if (pin == BL_BOARD_RGB_LED) {
+        uint8_t v = level ? RGB_BRIGHTNESS : 0;
+        bl_sdk_led_level = level ? 1 : 0;
+        return BL->rgb_write(pin, v, v, v);
+    }
+#endif
+    return BL->gpio_write(pin, level);
+}
+static inline int digitalRead(int pin)
+{
+#ifdef BL_SDK_RGB_ONLY_LED
+    if (pin == BL_BOARD_RGB_LED) {
+        return bl_sdk_led_level;
+    }
+#endif
+    return BL->gpio_read(pin);
+}
+static inline int analogWrite(int pin, int value)
+{
+#ifdef BL_SDK_RGB_ONLY_LED
+    if (pin == BL_BOARD_RGB_LED) {
+        uint8_t v = (uint8_t)(value < 0 ? 0 : value > 255 ? 255 : value);
+        bl_sdk_led_level = v ? 1 : 0;
+        return BL->rgb_write(pin, v, v, v);
+    }
+#endif
+    return BL->pwm_write(pin, value);
+}
 
 /* Implemented by the sketch. */
 void setup(void);

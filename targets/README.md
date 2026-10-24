@@ -57,8 +57,8 @@ The classic ESP32 targets need chip revision 3.0 or later (`esptool flash-id` sh
 python tools/flick.py targets                                   # list targets
 python tools/flick.py baseline build -t rtk_postcard            # -> dist/rtk_postcard/baseline-rtk_postcard.bin
 python tools/flick.py baseline flash -t rtk_postcard            # build and flash it
-python tools/flick.py build examples/blink -t rtk_postcard      # build a sketch for a target
-python tools/flick.py upload examples/blink                     # the board says which target it is
+python tools/flick.py build examples/01_basics/hello_flick -t rtk_postcard   # build a sketch for a target
+python tools/flick.py upload examples/01_basics/hello_flick      # the board says which target it is
 ```
 
 ## Adding a target

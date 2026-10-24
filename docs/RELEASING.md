@@ -6,8 +6,21 @@
 |---|---|---|
 | `baseline-<target>.bin` | The full image (bootloader, partition table, Baseline), flashed at 0x0 | Release assets; the **Flash** button on the download page |
 | `baseline-<target>.bsu` | The same Baseline as an over-the-air update (docs/OTA.md) | Release assets; the download page |
-| `flick-kit-<version>.zip` | Everything for writing sketches: `flick`, `sdk/`, the chip and target headers, examples, docs, and `AGENTS.md` / `CLAUDE.md` for AI assistants | Release assets; the download page |
-| Download page | One row per board, each with a **Flash** button (ESP Web Tools, Chrome/Edge) and the downloads | GitHub Pages |
+| `flick-kit-<version>.zip` | Everything for writing sketches (layout below) | Release assets; the download page |
+| Download page | 1. one row per board, each with a **Flash** button (ESP Web Tools, Chrome/Edge) and the downloads; 2. the example runner: every example, prebuilt for every board, uploaded over Web Serial (`tools/site/runner.js`); 3. the kit | GitHub Pages |
+
+**The kit's layout.** Its top level holds only what users work with; `flick package` puts everything else in `flick/` and writes `flick/kit.json`, which tells `flick.py` it runs in the kit (`IN_KIT`: secrets, libraries and `my_sketches/` are then one level up).
+
+```
+README.md  flick.py  AGENTS.md  CLAUDE.md  .vscode/  secrets.cfg.example  LICENSE  requirements.txt
+examples/       01_basics/hello_flick ... 07_updates/  (examples/README.md lists them)
+my_sketches/    the user's sketches (flick new NAME puts them here)
+flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/, THIRD_PARTY_NOTICES.md, kit.json
+```
+
+`flick.py` at the top only starts `flick/tools/flick.py`. The files at the top come from `kit/`; the rest from `KIT_FILES` in `tools/flick.py`.
+
+**The example runner** has no WiFi credentials: the release builds the examples without `secrets.cfg` (`build_examples.py --out` always does), and the page lists the ones that need the user's network (`WIFI_SSID` in the source) as "build it from the kit".
 
 **Why both the firmware and a kit:**
 - **Baseline alone** only runs sketches. Sketches are compiled against the kit's headers, which are the API. Kit 1.x works with any Baseline 1.x of the same or a newer minor version.
@@ -32,6 +45,7 @@ The kit contains no Baseline source and needs no ESP-IDF.
 3. **`.github/workflows/release.yml` does the rest:**
    - builds Baseline for every target (`baseline.yml`: ESP-IDF 5.5.5 Docker image + Arduino-ESP32 3.3.11);
    - makes the kit (`flick package`);
+   - builds every example for every board for the example runner (`tools/ci/build_examples.py --out dist/examples`);
    - creates the GitHub release (a pre-release while the version is 0.x);
    - publishes the download page (`tools/make_site.py`).
 

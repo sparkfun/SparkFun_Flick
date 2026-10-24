@@ -1,4 +1,4 @@
-// Plain Arduino-ESP32 equivalent of examples/blink, for build-time comparison.
+// Plain Arduino-ESP32 equivalent of benchmarks/flick/blink, for build-time comparison.
 void setup()
 {
     pinMode(STAT_LED, OUTPUT);

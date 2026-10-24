@@ -1,8 +1,9 @@
 # Release: push a tag vX.Y.Z (matching BASELINE_VERSION in baseline/src/bl_main.h).
 #   1. Baseline for every target (baseline.yml)
 #   2. the sketch kit (flick package)
-#   3. a GitHub release with the images, the .bsu updates and the kit
-#   4. the download page with "Flash" buttons on GitHub Pages (tools/make_site.py)
+#   3. every example for every board, for the page's example runner (tools/ci/build_examples.py --out)
+#   4. a GitHub release with the images, the .bsu updates and the kit
+#   5. the download page with "Flash" buttons and the example runner on GitHub Pages (tools/make_site.py)
 # Run it by hand (workflow_dispatch) to rebuild the page without a release.
 # Pages: Settings > Pages > Source: "GitHub Actions". While the repository is
 # private the page is only built (artifact "download-page"), not deployed.
@@ -42,8 +43,30 @@ jobs:
           path: dist/kit/*.zip
           if-no-files-found: error
 
+  examples:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache the sketch compilers (flick setup)
+        uses: actions/cache@v4
+        with:
+          path: ~/.flick/tools
+          key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
+      - run: pip install -r kit/requirements.txt
+      - run: python tools/flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
+      - name: Every example for every board
+        run: python tools/ci/build_examples.py --out dist/examples
+      - uses: actions/upload-artifact@v4
+        with:
+          name: examples
+          path: dist/examples
+          if-no-files-found: error
+
   publish:
-    needs: [baseline, kit]
+    needs: [baseline, kit, examples]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +83,7 @@ jobs:
           fi
       - uses: actions/download-artifact@v4
         with:
-          path: dist        # dist/<target>/baseline-<target>.bin/.bsu and dist/kit/*.zip
+          path: dist        # dist/<target>/baseline-<target>.bin/.bsu, dist/kit/*.zip, dist/examples/
       - name: Download page
         run: python tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
       - name: GitHub release

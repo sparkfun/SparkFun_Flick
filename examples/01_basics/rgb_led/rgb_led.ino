@@ -1,5 +1,4 @@
-// rgb_led.ino - cycle the board's WS2812 RGB LED through colors
-// (ESP32-S3 Thing Plus: GPIO46, Thing Plus C: GPIO2).
+// rgb_led.ino - cycle the board's WS2812 RGB LED (RGB_BUILTIN) through colors.
 
 #ifndef RGB_BUILTIN
 #error "This board has no built-in RGB LED. Define RGB_BUILTIN as the pin of your WS2812."

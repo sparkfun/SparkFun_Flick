@@ -15,28 +15,28 @@ Build time is the median of 3 runs of `flick build`, including Python start-up. 
 
 | Example | Image (bytes) | Static RAM (bytes) | Build time |
 |---|---:|---:|---:|
-| [analog_read](../examples/analog_read/analog_read.ino) | 1,384 | 96 | 0.44 s |
-| [ble_scan](../examples/ble_scan/ble_scan.ino) | 2,424 | 336 | 0.46 s |
-| [ble_serial](../examples/ble_serial/ble_serial.ino) | 1,520 | 104 | 0.45 s |
-| [ble_server](../examples/ble_server/ble_server.ino) | 3,480 | 348 | 0.50 s |
-| [blink](../examples/blink/blink.ino) | 1,160 | 96 | 0.56 s |
-| [button_interrupt](../examples/button_interrupt/button_interrupt.ino) | 1,624 | 688 | 0.50 s |
-| [espnow_broadcast](../examples/espnow_broadcast/espnow_broadcast.ino) | 4,528 | 512 | 0.50 s |
-| [fade](../examples/fade/fade.ino) | 1,164 | 104 | 0.49 s |
-| [hello_world](../examples/hello_world/hello_world.ino) | 1,464 | 100 | 0.50 s |
-| [i2c_scanner](../examples/i2c_scanner/i2c_scanner.ino) | 1,936 | 376 | 0.50 s |
-| [littlefs_files](../examples/littlefs_files/littlefs_files.ino) | 2,840 | 100 | 0.57 s |
-| [mqtt_basic](../examples/mqtt_basic/mqtt_basic.ino) | 5,252 | 180 | 0.51 s |
-| [preferences_counter](../examples/preferences_counter/preferences_counter.ino) | 1,788 | 100 | 0.49 s |
-| [rgb_led](../examples/rgb_led/rgb_led.ino) | 1,160 | 96 | 0.48 s |
-| [spi_loopback](../examples/spi_loopback/spi_loopback.ino) | 1,536 | 104 | 0.50 s |
-| [tcp_client](../examples/tcp_client/tcp_client.ino) | 2,128 | 104 | 0.53 s |
-| [uart_loopback](../examples/uart_loopback/uart_loopback.ino) | 1,496 | 96 | 0.59 s |
-| [udp_ntp](../examples/udp_ntp/udp_ntp.ino) | 2,420 | 172 | 0.59 s |
-| [wifi_ap_webserver](../examples/wifi_ap_webserver/wifi_ap_webserver.ino) | 3,992 | 108 | 0.52 s |
-| [wifi_http_get](../examples/wifi_http_get/wifi_http_get.ino) | 2,660 | 108 | 0.55 s |
-| [wifi_ota](../examples/wifi_ota/wifi_ota.ino) | 1,712 | 104 | 0.54 s |
-| [wifi_scan](../examples/wifi_scan/wifi_scan.ino) | 1,752 | 100 | 0.58 s |
+| [analog_read](../examples/01_basics/analog_read/analog_read.ino) | 1,384 | 96 | 0.44 s |
+| [ble_scan](../examples/04_bluetooth/ble_scan/ble_scan.ino) | 2,424 | 336 | 0.46 s |
+| [ble_serial](../examples/04_bluetooth/ble_serial/ble_serial.ino) | 1,520 | 104 | 0.45 s |
+| [ble_server](../examples/04_bluetooth/ble_server/ble_server.ino) | 3,480 | 348 | 0.50 s |
+| [blink](../benchmarks/flick/blink/blink.ino) | 1,160 | 96 | 0.56 s |
+| [button_interrupt](../examples/01_basics/button_interrupt/button_interrupt.ino) | 1,624 | 688 | 0.50 s |
+| [espnow_broadcast](../examples/03_wifi/espnow_broadcast/espnow_broadcast.ino) | 4,528 | 512 | 0.50 s |
+| [fade](../examples/01_basics/fade/fade.ino) | 1,164 | 104 | 0.49 s |
+| [hello_world](../benchmarks/flick/hello_world/hello_world.ino) | 1,464 | 100 | 0.50 s |
+| [i2c_scanner](../examples/02_hardware/i2c_scanner/i2c_scanner.ino) | 1,936 | 376 | 0.50 s |
+| [littlefs_files](../examples/05_storage/littlefs_files/littlefs_files.ino) | 2,840 | 100 | 0.57 s |
+| [mqtt_basic](../examples/03_wifi/mqtt_basic/mqtt_basic.ino) | 5,252 | 180 | 0.51 s |
+| [preferences_counter](../examples/05_storage/preferences_counter/preferences_counter.ino) | 1,788 | 100 | 0.49 s |
+| [rgb_led](../examples/01_basics/rgb_led/rgb_led.ino) | 1,160 | 96 | 0.48 s |
+| [spi_loopback](../examples/02_hardware/spi_loopback/spi_loopback.ino) | 1,536 | 104 | 0.50 s |
+| [tcp_client](../examples/03_wifi/tcp_client/tcp_client.ino) | 2,128 | 104 | 0.53 s |
+| [uart_loopback](../examples/02_hardware/uart_loopback/uart_loopback.ino) | 1,496 | 96 | 0.59 s |
+| [udp_ntp](../examples/03_wifi/udp_ntp/udp_ntp.ino) | 2,420 | 172 | 0.59 s |
+| [wifi_ap_webserver](../examples/03_wifi/wifi_ap_webserver/wifi_ap_webserver.ino) | 3,992 | 108 | 0.52 s |
+| [wifi_http_get](../examples/03_wifi/wifi_http_get/wifi_http_get.ino) | 2,660 | 108 | 0.55 s |
+| [wifi_ota](../examples/07_updates/wifi_ota/wifi_ota.ino) | 1,712 | 104 | 0.54 s |
+| [wifi_scan](../examples/03_wifi/wifi_scan/wifi_scan.ino) | 1,752 | 100 | 0.58 s |
 
 ## Compared with a normal Arduino build
 

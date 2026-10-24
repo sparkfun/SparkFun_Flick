@@ -12,6 +12,7 @@
 
 #define BL_TARGET_CHIP_NAME     "ESP32-C3"
 #define BL_TARGET_CHIP_ID       5          /* == esp_chip_id_t ESP_CHIP_ID_ESP32C3 */
+#define BL_TARGET_BOOT_PIN      9           /* the BOOT button (a strapping pin) */
 
 /* ---- Flash window ------------------------------------------------------
  * Separate I-bus (0x42xxxxxx) and D-bus (0x3Cxxxxxx) windows of 8 MB

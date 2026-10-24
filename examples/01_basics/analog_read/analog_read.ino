@@ -1,4 +1,4 @@
-// analog_read.ino - read pin A0 (GPIO10) and print the raw value and voltage.
+// analog_read.ino - read pin A0 and print the raw value and the voltage.
 
 void setup()
 {

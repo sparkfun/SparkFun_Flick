@@ -10,7 +10,7 @@
 // Try it with your PC as the server, on the same network as the board:
 //   1. Set UPDATE_URL below to http://<your PC's IP>:8000 and upload this
 //      sketch over USB. It prints "running version 1".
-//   2. Change SKETCH_VERSION to 2 and build: python tools/flick.py build examples/ota_pull_sketch
+//   2. Change SKETCH_VERSION to 2 and build: python flick.py build examples/07_updates/ota_pull_sketch
 //   3. Put the .flick in a folder with sketch-version.txt containing 2, and serve
 //      that folder: python -m http.server 8000
 // Within a minute the board installs version 2 and prints "running version 2".

@@ -17,6 +17,7 @@
 # Format:  minor | return type | field | params | sketch wrapper | description
 #   field           -> member of bl_api_t, implemented in Baseline as bl_impl_<field>
 #   sketch wrapper  -> name sketches call ("-" for none). Variadic entries become macros.
+#                      "@name": the SDK writes name() by hand (sdk/include/baseline.h).
 
 abi_major = 1
 
@@ -47,8 +48,8 @@ abi_major = 1
 
 # ---- GPIO -------------------------------------------------------------------
 0 | int         | gpio_mode     | int pin, int mode                            | pinMode           | Configure a pin. mode: INPUT, OUTPUT, INPUT_PULLUP, INPUT_PULLDOWN, OUTPUT_OPEN_DRAIN. Returns 0 or BL_ERR_*.
-0 | int         | gpio_write    | int pin, int level                           | digitalWrite      | Drive an output pin HIGH or LOW. Returns 0 or BL_ERR_*.
-0 | int         | gpio_read     | int pin                                      | digitalRead       | Read a pin. Returns HIGH, LOW, or BL_ERR_*.
+0 | int         | gpio_write    | int pin, int level                           | @digitalWrite     | Drive an output pin HIGH or LOW. Returns 0 or BL_ERR_*.
+0 | int         | gpio_read     | int pin                                      | @digitalRead      | Read a pin. Returns HIGH, LOW, or BL_ERR_*.
 
 # ======================= ABI 1.1 ==========================================
 # ---- USB console as a byte stream (backs the C++ Serial object) ----
@@ -59,7 +60,7 @@ abi_major = 1
 # ---- analog, PWM, RGB LED ----
 1 | int         | adc_read      | int pin                                      | analogRead        | Read a pin's ADC value (0-4095), or BL_ERR_*.
 1 | int         | adc_read_mv   | int pin                                      | analogReadMilliVolts | Read a pin's voltage in millivolts, or BL_ERR_*.
-1 | int         | pwm_write     | int pin, int value                           | analogWrite       | PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*.
+1 | int         | pwm_write     | int pin, int value                           | @analogWrite      | PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*.
 1 | int         | rgb_write     | int pin, uint8_t red, uint8_t green, uint8_t blue | rgbLedWrite  | Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*.
 
 # ---- I2C (Qwiic) ----

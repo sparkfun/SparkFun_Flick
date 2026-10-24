@@ -1,4 +1,4 @@
-// Plain Arduino-ESP32 equivalent of examples/ble_serial, for build-time comparison.
+// Plain Arduino-ESP32 equivalent of examples/04_bluetooth/ble_serial, for build-time comparison.
 #include <BLEDevice.h>
 #include <BLEServer.h>
 

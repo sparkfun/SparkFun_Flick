@@ -11,6 +11,7 @@
 
 #define BL_TARGET_CHIP_NAME     "ESP32"
 #define BL_TARGET_CHIP_ID       0           /* == esp_chip_id_t ESP_CHIP_ID_ESP32 */
+#define BL_TARGET_BOOT_PIN      0           /* the BOOT button (a strapping pin) */
 
 /* ---- Flash window ------------------------------------------------------
  * The classic ESP32 has separate MMU entries for instructions and data, and a

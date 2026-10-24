@@ -1,4 +1,4 @@
-// fade.ino - fade the blue STAT LED in and out with PWM (analogWrite).
+// fade.ino - fade the board's LED (LED_BUILTIN) in and out with PWM (analogWrite).
 
 int brightness = 0;
 int step = 5;

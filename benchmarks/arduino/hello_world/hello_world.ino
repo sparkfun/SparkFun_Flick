@@ -1,4 +1,4 @@
-// Plain Arduino-ESP32 equivalent of examples/hello_world, for build-time comparison.
+// Plain Arduino-ESP32 equivalent of benchmarks/flick/hello_world, for build-time comparison.
 int count = 0;
 
 void setup()

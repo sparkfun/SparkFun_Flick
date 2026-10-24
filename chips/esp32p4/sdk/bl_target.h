@@ -11,6 +11,7 @@
 
 #define BL_TARGET_CHIP_NAME     "ESP32-P4"
 #define BL_TARGET_CHIP_ID       18          /* == esp_chip_id_t ESP_CHIP_ID_ESP32P4 */
+#define BL_TARGET_BOOT_PIN      35          /* the BOOT button (a strapping pin) (from Arduino's esp32p4 variant; not yet checked on the board) */
 
 /* ---- Flash window ------------------------------------------------------
  * The P4 maps flash for instructions and data at the same addresses

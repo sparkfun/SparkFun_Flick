@@ -1,4 +1,4 @@
-// blink.ino - a Flick sketch. baseline.h is included automatically.
+// blink.ino - the Flick half of the Arduino build-time comparison (tools/benchmark.py).
 
 void setup()
 {

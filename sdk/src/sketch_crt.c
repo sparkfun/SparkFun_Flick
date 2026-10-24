@@ -19,6 +19,9 @@
 #define PUMP_SLICE  5       /* ms: how often delay() checks for callbacks */
 
 const bl_api_t *BL;
+#ifdef BL_SDK_RGB_ONLY_LED
+uint8_t bl_sdk_led_level;      /* digitalRead(LED_BUILTIN) on a WS2812-only board (baseline.h) */
+#endif
 
 /* Defined in sketch.ld */
 extern const uint8_t _sketch_data_load[], _sketch_data_start[], _sketch_data_end[];

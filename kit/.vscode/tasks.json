@@ -2,13 +2,14 @@
     // Ctrl+Shift+B runs the default build task: build the sketch whose file is
     // open in the editor, upload it to the Baseline already on the board, and
     // show its serial output. Pressing it again stops the monitor and re-uploads.
+    // The other tasks are in Terminal > Run Task.
     "version": "2.0.0",
     "tasks": [
         {
             "label": "Sketch: build + upload + monitor",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/flick.py", "upload", "${fileDirname}", "--monitor"],
+            "args": ["${workspaceFolder}/flick.py", "upload", "${fileDirname}", "--monitor"],
             "group": { "kind": "build", "isDefault": true },
             "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
@@ -18,26 +19,49 @@
             "label": "Sketch: build only",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/flick.py", "build", "${fileDirname}"],
+            "args": ["${workspaceFolder}/flick.py", "build", "${fileDirname}"],
             "group": "build",
             "problemMatcher": { "base": "$gcc", "fileLocation": "absolute" },
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+        {
+            "label": "New sketch",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/flick.py", "new", "${input:sketchName}"],
+            "problemMatcher": [],
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
         },
         {
             "label": "Serial monitor",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/flick.py", "monitor"],
+            "args": ["${workspaceFolder}/flick.py", "monitor"],
             "problemMatcher": [],
             "presentation": { "reveal": "always", "panel": "dedicated" }
+        },
+        {
+            "label": "Setup: install the compiler (once)",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/flick.py", "setup"],
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
         },
         {
             "label": "Baseline: reboot into safe mode",
             "type": "process",
             "command": "python",
-            "args": ["${workspaceFolder}/tools/flick.py", "safe"],
+            "args": ["${workspaceFolder}/flick.py", "safe"],
             "problemMatcher": [],
             "presentation": { "reveal": "always", "panel": "dedicated" }
+        }
+    ],
+    "inputs": [
+        {
+            "id": "sketchName",
+            "type": "promptString",
+            "description": "Name of the new sketch (letters, digits and _); it goes in my_sketches/"
         }
     ]
 }

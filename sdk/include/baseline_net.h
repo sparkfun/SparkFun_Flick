@@ -584,7 +584,7 @@ public:
     int baselineFromUrl(const char *url, const char *sketchUrl = nullptr) { return bl_ota_pull_baseline(url, sketchUrl); }
 };
 
-static BaselineUpdateClass BaselineUpdate;
+static BaselineUpdateClass BaselineUpdate __attribute__((unused));   // no state: unused copies cost nothing
 
 #endif /* __cplusplus */
 #endif /* BASELINE_NET_H */

@@ -333,10 +333,6 @@ static inline void bl_restart(void) { BL->restart(); }
 static inline const char * bl_baseline_version(void) { return BL->baseline_version(); }
 /* Configure a pin. mode: INPUT, OUTPUT, INPUT_PULLUP, INPUT_PULLDOWN, OUTPUT_OPEN_DRAIN. Returns 0 or BL_ERR_*. */
 static inline int pinMode(int pin, int mode) { return BL->gpio_mode(pin, mode); }
-/* Drive an output pin HIGH or LOW. Returns 0 or BL_ERR_*. */
-static inline int digitalWrite(int pin, int level) { return BL->gpio_write(pin, level); }
-/* Read a pin. Returns HIGH, LOW, or BL_ERR_*. */
-static inline int digitalRead(int pin) { return BL->gpio_read(pin); }
 /* Write raw bytes to the USB console. Returns bytes written. */
 static inline int bl_console_write(const uint8_t *data, size_t len) { return BL->console_write(data, len); }
 /* Bytes waiting to be read from the USB console. */
@@ -347,8 +343,6 @@ static inline int bl_console_read(void) { return BL->console_read(); }
 static inline int analogRead(int pin) { return BL->adc_read(pin); }
 /* Read a pin's voltage in millivolts, or BL_ERR_*. */
 static inline int analogReadMilliVolts(int pin) { return BL->adc_read_mv(pin); }
-/* PWM output, value 0-255 (LEDC, 1 kHz). Returns 0 or BL_ERR_*. */
-static inline int analogWrite(int pin, int value) { return BL->pwm_write(pin, value); }
 /* Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. */
 static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL->rgb_write(pin, red, green, blue); }
 /* Start I2C. sda/scl -1 = board Qwiic pins (8/9). freq in Hz (0 = 100 kHz). */

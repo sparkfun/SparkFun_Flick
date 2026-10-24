@@ -11,6 +11,7 @@
 
 #define BL_TARGET_CHIP_NAME     "ESP32-S3"
 #define BL_TARGET_CHIP_ID       9           /* == esp_chip_id_t ESP_CHIP_ID_ESP32S3 */
+#define BL_TARGET_BOOT_PIN      0           /* the BOOT button (a strapping pin) */
 
 /* ---- Flash window ------------------------------------------------------
  * The active sketch slot is mapped by the flash MMU 24 MB into the 32 MB

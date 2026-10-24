@@ -11,7 +11,7 @@ There are two ways to deliver an update:
 |---|---|---|
 | Sketch | `flick upload my_sketch --host baseline` | `BaselineUpdate.sketchFromUrl(url)` |
 | Baseline | `flick baseline update --host baseline` | `BaselineUpdate.baselineFromUrl(url, sketchUrl)` |
-| Example | `examples/wifi_ota` | `examples/ota_pull_sketch`, `examples/ota_pull_baseline` |
+| Example | `examples/07_updates/wifi_ota` | `examples/07_updates/ota_pull_sketch`, `examples/07_updates/ota_pull_baseline` |
 
 The same `flick` commands also work over USB: use `-p COMx` instead of `--host`. `flick baseline update` updates Baseline over USB without esptool.
 
@@ -45,7 +45,7 @@ Both kinds need one USB flash with a Baseline that has these features: `python t
 
 ## A pull, step by step
 
-`examples/ota_pull_baseline` checks a small text file on the server every minute:
+`examples/07_updates/ota_pull_baseline` checks a small text file on the server every minute:
 
 ```
 baseline-version.txt          0.2.0
@@ -65,7 +65,7 @@ On success the board restarts, and the call returns only on failure. `BL_TARGET_
 - **GitHub releases work as the server:** downloads follow GitHub's redirect to its file storage over HTTPS.
 - **Private repositories don't:** their release files need a token, and the board does not send one.
 
-`examples/ota_pull_sketch` does the same for the sketch, with a version number in `sketch-version.txt`. A new sketch that crashes on its first run is rolled back to the previous one, as with USB uploads.
+`examples/07_updates/ota_pull_sketch` does the same for the sketch, with a version number in `sketch-version.txt`. A new sketch that crashes on its first run is rolled back to the previous one, as with USB uploads.
 
 ## Under the hood (for maintainers)
 
