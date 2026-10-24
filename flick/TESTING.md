@@ -93,11 +93,16 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 | Baseline pull from a GitHub release (`ota_pull_baseline`) | ⬜ (run on the C6 instead) | ✅ update mode download, bootloader install, sketch reinstalled from the release | ✅ inflated on the board into `baseline_1` while the sketch ran (17 s), restarted, sketch reinstalled, confirmed | (same code as the C3) |
 | `flick test` with ABI 1.7 | ✅ 29/0/3 | ✅ 29/0/3 | ✅ 30/0/2 | ✅ 31/0/3 |
 
+## Beginner path (2026-10-23)
+
+- **IoT RedBoard (COM3):** Baseline flashed from the downloaded image with `python flick.py baseline flash --file` (esptool); `examples/01_basics/01_hello_flick` and `my_sketches/hello_flick` upload in 0.13 s and print `Hello flick!` every second. The no-Baseline error now points to the web page.
+- **Not yet:** `hello_flick` on a WS2812-only board (C6/C5/P4: `digitalWrite(LED_BUILTIN)` should blink the RGB LED white); the web page's example runner (Web Serial) on a native-USB and a CH340 board.
+
 ## Not tested on hardware yet
 
 - `Wire1` (second I2C bus), `Serial1.setRxBufferSize`, `WiFiMulti`, `dacWrite` (`Serial1` itself: tested on the Postcard with its GNSS)
 - ESP-NOW between two boards, MQTT, WiFi upload (`flick upload --host`), `BLESerial` with a phone, BLE server notify/write, WebServer, TCP/UDP examples
-- Safe mode by holding BOOT at reset
+- Safe mode by holding BOOT at reset (and it reads GPIO0 on every chip: wrong on the C3, C6, C5 and P4)
 - Staged updates on the Thing Plus S3 (built; the C3 and Pocket C6 are tested)
 - Bluetooth Classic SPP pairing with a phone
 - I2S (needs an amplifier), servos, LED strips longer than one LED

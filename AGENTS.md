@@ -24,7 +24,7 @@ python flick.py lib install "NAME"               install a library into librarie
 
 - `upload` asks the board which target it is and builds for it.
 - After a change, run `upload` and read the serial output. That is the test.
-- **Never** flash the board with the Arduino IDE, esptool or PlatformIO: that erases Baseline. If Baseline is missing, see README.md.
+- **Never** flash the board with the Arduino IDE, esptool or PlatformIO: that erases Baseline. If Baseline is missing, the user flashes it from the Flick web page (https://sparkfun.github.io/SparkFun_Flick/, Chrome or Edge).
 
 ## A sketch
 
@@ -54,11 +54,11 @@ A sketch is a folder named like its main file: `my_sketches/plant_monitor/plant_
 
 - **Crashes roll back:** a new sketch that crashes on its first run is replaced by the previous one, and `python flick.py info` shows `crash="..."` with the task and the program counter. Several crashes in a row put the board in safe mode (no sketch runs); upload a fixed sketch.
 - **Missing library header:** `python flick.py lib search <words>`, then `lib install "<exact name>"`.
-- **Upload fails:** run `python flick.py info`. If it doesn't answer, Baseline is not on the board (README.md).
+- **Upload fails:** run `python flick.py info`. If it doesn't answer, Baseline is not on the board: send the user to https://sparkfun.github.io/SparkFun_Flick/.
 
 ## Over the air
 
-- **Push from the PC:** a sketch that calls `ArduinoOTA.begin()` (see `examples/07_updates/wifi_ota`) accepts uploads with `python flick.py upload my_sketches/NAME --host baseline`.
+- **Push from the PC:** a sketch that calls `ArduinoOTA.begin()` (see `examples/07_updates/01_wifi_ota`) accepts uploads with `python flick.py upload my_sketches/NAME --host baseline`.
 - **Pull from a web server:** the board can download its own updates with `BaselineUpdate`.
 - **Baseline too:** both work for Baseline as well. See `flick/docs/OTA.md` and `examples/07_updates/`.
 

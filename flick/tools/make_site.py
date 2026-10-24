@@ -240,7 +240,7 @@ def main():
   <div class="steps">
     <div class="step"><b>Get the kit</b><p>Unzip it and open the folder in VS Code. You also need Python 3.</p></div>
     <div class="step"><b>Install the compiler</b><p>Terminal &gt; Run Task &gt; <i>Setup: install the compiler (once)</i>, with the board plugged in.</p></div>
-    <div class="step"><b>Build and upload</b><p>Open <code>examples/01_basics/hello_flick/hello_flick.ino</code> and press <b>Ctrl+Shift+B</b>. Your own sketches go in <code>my_sketches/</code>.</p></div>
+    <div class="step"><b>Build and upload</b><p>Open <code>examples/01_basics/01_hello_flick/01_hello_flick.ino</code> and press <b>Ctrl+Shift+B</b>. Your own sketches go in <code>my_sketches/</code>.</p></div>
   </div>
   <p style="margin-top:16px">{kit_button}</p>
   <p class="note-small">The kit also has <code>AGENTS.md</code>, which tells AI coding assistants (Claude Code, Copilot, Cursor, ...)

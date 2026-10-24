@@ -1,4 +1,4 @@
-// Plain Arduino-ESP32 equivalent of examples/03_wifi/wifi_http_get, for build-time comparison.
+// Plain Arduino-ESP32 equivalent of examples/03_wifi/02_wifi_http_get, for build-time comparison.
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <NetworkClientSecure.h>

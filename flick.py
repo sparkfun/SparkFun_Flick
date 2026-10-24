@@ -2,7 +2,7 @@
 """flick: build and upload Flick sketches. Run  python flick.py --help
 
 The tool itself is flick/tools/flick.py; this file only starts it, so the
-commands are short:  python flick.py upload examples/01_basics/hello_flick -m
+commands are short:  python flick.py upload examples/01_basics/01_hello_flick -m
 """
 import runpy
 import sys

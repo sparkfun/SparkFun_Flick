@@ -7,6 +7,7 @@ arduino-cli, time both, and write docs/BUILD_RESULTS.md.
 """
 import argparse
 import os
+import re
 import platform
 import statistics
 import struct
@@ -44,7 +45,7 @@ def bench_sketch(proj):
     cmd = [sys.executable, str(ROOT / "tools" / "flick.py"), "build", str(proj), "-t", TARGET]
     timed(cmd)                                  # warm-up (fills the shared SDK object cache)
     times = [timed(cmd) for _ in range(RUNS)]
-    image = (proj / "build" / TARGET / (proj.name + ".flick")).read_bytes()
+    image = (flick.sketch_build_dir(proj, TARGET) / (proj.name + ".flick")).read_bytes()
     f = struct.unpack_from("<IHHHHIIIIIIII", image, 0)
     data_start, data_end, bss_start, bss_end = f[9], f[10], f[11], f[12]
     ram = (data_end - data_start) + (bss_end - bss_start)
@@ -75,8 +76,9 @@ def main():
     sketches = flick.example_dirs(EXAMPLES) + sorted(p for p in FLICK_BENCH.iterdir() if p.is_dir())
     results = {}
     for p in sketches:
-        results[p.name] = dict(bench_sketch(p), path=Path(os.path.relpath(p, OUT.parent)).as_posix())
-        r = results[p.name]
+        name = re.sub(r"^\d+_", "", p.name)        # 01_ble_serial pairs with benchmarks/arduino/ble_serial
+        results[name] = dict(bench_sketch(p), path=Path(os.path.relpath(p, OUT.parent)).as_posix(), dir=p.name)
+        r = results[name]
         print(f"{p.name:18} {r['bytes']:6} bytes  {r['time']:.2f}s")
 
     arduino = {}
@@ -113,7 +115,7 @@ def main():
              "Image is the `.flick` file that gets uploaded. RAM is the sketch's static data (.data + .bss).\n\n")
     o.append("| Example | Image (bytes) | Static RAM (bytes) | Build time |\n|---|---:|---:|---:|\n")
     for name, r in results.items():
-        o.append(f"| [{name}]({r['path']}/{name}.ino) | {fmt_bytes(r['bytes'])} | "
+        o.append(f"| [{r['dir']}]({r['path']}/{r['dir']}.ino) | {fmt_bytes(r['bytes'])} | "
                  f"{fmt_bytes(r['ram'])} | {r['time']:.2f} s |\n")
 
     if arduino:

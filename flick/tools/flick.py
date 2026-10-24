@@ -3,7 +3,7 @@
 
   flick targets                       list the targets (one per product) in targets/
   flick new <dir>                     create a sketch project
-  flick build [dir] [-t TARGET]       compile + link + package -> <dir>/build/<target>/<name>.flick
+  flick build [dir] [-t TARGET] [-o OUT]   compile + link + package -> <name>.flick (in Flick's cache; -o copies it)
   flick upload [dir] [-m]             ask the board which target it is, build for it, upload, run
   flick upload [dir] --host NAME      same, over WiFi (the running sketch called ArduinoOTA.begin())
   flick monitor                       serial console (Ctrl+C to quit)
@@ -52,6 +52,9 @@ ROOT = Path(__file__).resolve().parent.parent      # flick/: the tool, SDK, boar
 # same): flick.py, examples/, my_sketches/, libraries/, secrets.cfg.
 WORK = ROOT.parent
 FLICK_CMD = "python flick.py"      # how messages tell the user to run flick
+# The download page: Baseline for every board (a Flash button each), the examples, the kit.
+# GitHub Pages of the repository (release.yml); flick/tools/make_site.py builds it.
+WEB_PAGE = "https://sparkfun.github.io/SparkFun_Flick/"
 
 # Flick was called Baseline Sketcher, and the tool bsk: its BSK_* environment
 # variables still work.
@@ -433,6 +436,14 @@ def resolve_libraries(proj, sources, include_dirs):
     return libs
 
 
+def sketch_build_dir(proj, target_name):
+    """Where a sketch's build output goes: Flick's cache folder, not the sketch
+    folder (which stays as the user wrote it). One folder per sketch path."""
+    proj = Path(proj).resolve()
+    tag = hashlib.sha256(str(proj).lower().encode()).hexdigest()[:8]
+    return BUILD_ROOT / "sketches" / f"{proj.name}-{tag}" / target_name
+
+
 def build(proj, target_name=None):
     proj = Path(proj).resolve()
     if proj == ARDUINO_BENCH or ARDUINO_BENCH in proj.parents:
@@ -448,7 +459,7 @@ def build(proj, target_name=None):
         print(f"warning: expected {proj.name}.ino (Arduino names the main file after its folder)")
     cxx = any(s.suffix in (".ino", ".cpp") for s in user)
     target = load_target(target_name or cfg.get("target") or DEFAULT_TARGET)
-    out = proj / "build" / target["name"]
+    out = sketch_build_dir(proj, target["name"])
     out.mkdir(parents=True, exist_ok=True)
     gcc = find_gcc(target)
     t0 = time.time()
@@ -499,8 +510,8 @@ def build(proj, target_name=None):
     if libs:
         print("libraries: " + ", ".join(lib.name for lib in libs))
     # The C library shim, C++ runtime and Arduino-style objects are the same for
-    # every sketch: compile them once per target into sdk/build/<target> and reuse them.
-    cache = SDK / "build" / target["name"]
+    # every sketch: compile them once per target and reuse them (one cache per SDK folder).
+    cache = BUILD_ROOT / "sdk" / f"{hashlib.sha256(str(SDK).lower().encode()).hexdigest()[:8]}" / target["name"]
     cache.mkdir(parents=True, exist_ok=True)
     newest_dep = max(p.stat().st_mtime for p in [*(SDK / "include").glob("*.h"),
                                                  *(f for d in target["sdk_dirs"] for f in d.glob("*")),
@@ -535,7 +546,7 @@ def build(proj, target_name=None):
     flick = out / (cfg["name"] + ".flick")
     flick.write_bytes(image)
     sha = image[HDR_OFF_SHA256:HDR_OFF_SHA256 + 32].hex()
-    print(f"built {flick.relative_to(proj.parent)}: {len(image)} bytes, sha256 {sha[:16]}..., "
+    print(f"built {cfg['name']}.flick for {target['name']}: {len(image)} bytes, sha256 {sha[:16]}..., "
           f"{time.time() - t0:.2f}s")
     return flick
 
@@ -579,7 +590,16 @@ def make_image(elf, target):
 
 
 def cmd_build(args):
-    build(args.dir, args.target)
+    flick = build(args.dir, args.target)
+    if args.out:
+        dest = Path(args.out)
+        if dest.is_dir() or args.out.endswith(("/", "\\")):
+            dest = dest / flick.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(flick, dest)
+        print(f"copied to {dest}")
+    else:
+        print(f"  {flick}")
 
 
 # ---------------------------------------------------------------- serial
@@ -794,8 +814,10 @@ class Link:
                 print(r)
         cmd = line.split()[0]
         if cmd == "INFO":
-            sys.exit(f"\nerror: no reply from {self.ser.port}. Is Baseline installed? "
-                     "Flash it once from the Baseline web page, or with: "
+            sys.exit(f"\nerror: no reply from {self.ser.port}. Is Baseline on the board?\n"
+                     f"Put it on once from the Flick web page (Chrome or Edge): pick your board and press Flash.\n"
+                     f"  {WEB_PAGE}\n"
+                     f"Or download baseline-<board>.bin there and run: "
                      f"{FLICK_CMD} baseline flash --file baseline-<board>.bin")
         sys.exit(f"\nerror: Baseline stopped answering during {cmd} on {self.ser.port}.")
 
@@ -1493,7 +1515,7 @@ def cmd_setup(args):
     for t in names:
         target = load_target(t)
         print(f"  {t}: {find_gcc(target)}")
-    print(f"done: try  {FLICK_CMD} upload examples/01_basics/hello_flick -m")
+    print(f"done: try  {FLICK_CMD} upload examples/01_basics/01_hello_flick -m")
 
 
 # ---------------------------------------------------------------- libraries (Arduino Library Manager)
@@ -1564,7 +1586,7 @@ def cmd_lib(args):
 # the top level as it is, and the part of flick/ that builds and uploads sketches.
 KIT_FILES = {
     "": ["README.md", "flick.py", "AGENTS.md", "CLAUDE.md", "LICENSE", "secrets.cfg.example",
-         "requirements.txt", ".vscode/tasks.json", "examples/**/*", "my_sketches/README.md"],
+         "requirements.txt", ".vscode/tasks.json", "examples/**/*", "my_sketches/**/*"],
     "flick/": ["tools/flick.py", "tools/tests/**/*",
                "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
                "chips/*/chip.json", "chips/*/sdk/**/*",
@@ -1615,7 +1637,7 @@ def flash_file(args):
     try:
         import esptool  # noqa: F401
     except ImportError:
-        sys.exit("error: flashing needs esptool: pip install esptool (or use the browser flasher page)")
+        sys.exit(f"error: flashing needs esptool: pip install esptool (or flash it from the web page: {WEB_PAGE})")
     print(f"flashing {image.name} to {port}")
     run([sys.executable, "-m", "esptool", "-p", port, "-b", "921600", "write_flash", "0x0", str(image)])
 
@@ -1838,6 +1860,8 @@ def main():
     p = sub.add_parser("build", help="build a sketch")
     p.add_argument("dir", nargs="?", default=".")
     p.add_argument("-t", "--target", help=targets_help + "; default: sketch.cfg, else " + DEFAULT_TARGET)
+    p.add_argument("-o", "--out", help="also copy the .flick image here (a file or a folder), "
+                   "for example to put on a web server for BaselineUpdate")
     p.set_defaults(fn=cmd_build)
 
     for name, fn, hlp in (("upload", cmd_upload, "build and upload a sketch"),

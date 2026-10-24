@@ -341,7 +341,7 @@ async function init() {
     return;
   }
   render();
-  const first = state.examples.find((x) => x.name === "hello_flick") || state.examples[0];
+  const first = state.examples.find((x) => x.name.endsWith("hello_flick")) || state.examples[0];
   if (first) show(first);
   if (!("serial" in navigator)) {
     setStatus("Running examples needs Chrome or Edge on a computer (Web Serial).", "bad");

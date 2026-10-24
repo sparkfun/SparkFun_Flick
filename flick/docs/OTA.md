@@ -11,13 +11,13 @@ There are two ways to deliver an update:
 |---|---|---|
 | Sketch | `flick upload my_sketch --host baseline` | `BaselineUpdate.sketchFromUrl(url)` |
 | Baseline | `flick baseline update --host baseline` | `BaselineUpdate.baselineFromUrl(url, sketchUrl)` |
-| Example | `examples/07_updates/wifi_ota` | `examples/07_updates/ota_pull_sketch`, `examples/07_updates/ota_pull_baseline` |
+| Example | `examples/07_updates/01_wifi_ota` | `examples/07_updates/02_ota_pull_sketch`, `examples/07_updates/03_ota_pull_baseline` |
 
 The same `flick` commands also work over USB: use `-p COMx` instead of `--host`. `flick baseline update` updates Baseline over USB without esptool.
 
 ## What gets downloaded
 
-- **Sketches** are the `.flick` files `flick build` writes to `build/<target>/<sketch>.flick`.
+- **Sketches** are the `.flick` files `flick build` writes into Flick's cache folder; `flick build <sketch> -o <folder>/` copies one where you want it.
 - **Baseline** updates are `.bsu` files. `flick baseline build -t <target>` writes `dist/<target>/baseline-<target>.bsu` next to the USB image. A `.bsu` holds the Baseline app compressed (about 60% of its size), with the chip, the board (target) and the version in its header.
   - A board refuses a `.bsu` made for another board.
   - Every board takes the same kind of file.
@@ -45,19 +45,19 @@ Both kinds need one USB flash with a Baseline that has these features: `python f
 
 ## A pull, step by step
 
-`examples/07_updates/ota_pull_baseline` checks a small text file on the server every minute:
+`examples/07_updates/03_ota_pull_baseline` checks a small text file on the server every minute:
 
 ```
 baseline-version.txt          0.2.0
-baseline-<target>.bsu         one per kind of board (from dist/<target>/)
-ota_pull_baseline.flick         the sketch, for 4 MB boards to reinstall
+baseline-<target>.bsu         one per kind of board (from flick/dist/<target>/)
+03_ota_pull_baseline.flick    the sketch, for 4 MB boards to reinstall
 ```
 
 When the server's version is newer than `BaselineUpdate.baselineVersion()`, the sketch calls:
 
 ```cpp
 BaselineUpdate.baselineFromUrl(UPDATE_URL "/baseline-" BL_TARGET_NAME ".bsu",
-                               UPDATE_URL "/ota_pull_baseline.flick");
+                               UPDATE_URL "/03_ota_pull_baseline.flick");
 ```
 
 On success the board restarts, and the call returns only on failure. `BL_TARGET_NAME` is the board's target name, so one sketch serves every kind of board.
@@ -65,7 +65,7 @@ On success the board restarts, and the call returns only on failure. `BL_TARGET_
 - **GitHub releases work as the server:** downloads follow GitHub's redirect to its file storage over HTTPS.
 - **Private repositories don't:** their release files need a token, and the board does not send one.
 
-`examples/07_updates/ota_pull_sketch` does the same for the sketch, with a version number in `sketch-version.txt`. A new sketch that crashes on its first run is rolled back to the previous one, as with USB uploads.
+`examples/07_updates/02_ota_pull_sketch` does the same for the sketch, with a version number in `sketch-version.txt`. A new sketch that crashes on its first run is rolled back to the previous one, as with USB uploads.
 
 ## Under the hood (for maintainers)
 

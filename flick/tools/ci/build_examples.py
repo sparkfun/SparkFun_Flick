@@ -24,6 +24,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]       # flick/
+sys.path.insert(0, str(ROOT / "tools"))
+import flick  # noqa: E402  (sketch_build_dir: where flick build puts the images)
 EXAMPLES = ROOT.parent / "examples"
 NOT_FOR_BOARD = re.compile(r'#error "This (chip|board) has no')
 
@@ -85,7 +87,7 @@ def main():
                 if out:
                     rel = ex.relative_to(EXAMPLES)
                     (out / rel).mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(ex / "build" / target / f"{ex.name}.flick", out / rel / f"{target}.flick")
+                    shutil.copy2(flick.sketch_build_dir(ex, target) / f"{ex.name}.flick", out / rel / f"{target}.flick")
             elif NOT_FOR_BOARD.search(r.stdout + r.stderr):
                 skipped.append(ex.name)
                 found.setdefault(ex, [])

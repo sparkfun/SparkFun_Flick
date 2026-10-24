@@ -13,7 +13,7 @@
 
 ```
 README.md  flick.py  AGENTS.md  CLAUDE.md  .vscode/  secrets.cfg.example  LICENSE  requirements.txt
-examples/       01_basics/hello_flick ... 07_updates/  (examples/README.md lists them)
+examples/       01_basics/01_hello_flick ... 07_updates/  (examples/README.md lists them)
 my_sketches/    the user's sketches (flick new NAME puts them here)
 flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/ (3 files), THIRD_PARTY_NOTICES.md
 ```

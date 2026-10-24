@@ -1,6 +1,9 @@
-Flick is a pre-compiled blob of stuff that gets loaded onto your ESP32 and allows you to *very* quickly load new code. You're messing about with WiFi or Bluetooth. You shouldn't have to compile and upload the same stuff over and over again! Life is too short.
+SparkFun Flick
+=====================
 
-The goal of Baseline is to reduce the time it takes to compile and upload sketches. Have a look at the comparison table below: Baseline makes compiling and uploading incredibly fast. In short, Baseline is a precompiled blob of nearly all the functionality of a given processor. Since the user is just adding the if-this-then-that on top, we can leave the vast majority of the code living on the chip and update only the connecting code.
+Flick is a pre-compiled blob of stuff that gets loaded onto your ESP32 and allows you to *very* quickly (one second) load new code. Let's say you're messing about with WiFi or Bluetooth. You shouldn't have to compile and upload the same stuff over and over again! Life is too short.
+
+The goal of Flick is to reduce the time it takes to compile and upload sketches. Have a look at the comparison table below: Flick (once Baseline is loaded) makes compiling and uploading incredibly fast. In short, Baseline is a precompiled blob of nearly all the functionality of a given processor. Since the user is just adding the if-this-then-that on top, we can leave the vast majority of the code living on the chip and update only the connecting code.
 
 | Sketch | Arduino first compile | Arduino compile | Arduino upload | **Arduino total** | **Baseline total** (compile + upload) | Faster by | Arduino upload size | Baseline upload size |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -8,8 +11,6 @@ The goal of Baseline is to reduce the time it takes to compile and upload sketch
 | hello_world | 51.1 s | 12.2 s | 7.2 s | **19.4 s** | **0.50 s** | 39x | 275,296 bytes | 1,464 bytes |
 | ble_serial | 140.2 s | 13.1 s | 7.8 s | **20.9 s** | **0.51 s** | 41x | 563,648 bytes | 1,520 bytes |
 | wifi_http_get | 126.1 s | 15.0 s | 8.6 s | **23.6 s** | **0.59 s** | 40x | 979,008 bytes | 2,660 bytes |
-
-Measured on a SparkFun ESP32-S3 Thing Plus over USB, Arduino-ESP32 3.3.11, Windows 11. *Arduino first compile* is a clean build with nothing cached. *Arduino compile* is the everyday case where only your sketch changed. *Arduino total* is that compile plus the upload. On the Baseline side, the upload itself takes about 0.03 s; nearly all of the half second is the compiler. Full build numbers for every example are in [docs/BUILD_RESULTS.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/BUILD_RESULTS.md).
 
 Baseline is not an interpreted language; it's fast machine code all the way down. You just tell the chatbot what you want, it writes the code, compiles it (specifically for Baseline) and loads only the bits that need changing.
 
@@ -48,11 +49,11 @@ Not in the blob yet: USB mass storage and camera. Libraries from the Arduino Lib
 
 This walks you from a blank board to your own sketch running, using VS Code. You'll press one key to build and upload, and you won't need to type commands.
 
-This folder is all you need, whether you downloaded this repository or the smaller **sketch kit** zip from the web page: both look the same. You'll work in `examples/` and `my_sketches/`; `flick/` holds the tool, the SDK and the board files, and you don't need to open it.
+This folder is all you need, whether you downloaded this repository or the smaller **sketch kit** zip from [the Flick web page](https://sparkfun.github.io/SparkFun_Flick/): both look the same. You'll work in `examples/` and `my_sketches/`; `flick/` holds the tool, the SDK and the board files, and you don't need to open it.
 
 ### 1. Put Baseline on the board, and try it (once)
 
-Open the Flick web page in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. You'll only do this again when you want a newer Baseline. The same page runs the examples on your board with nothing installed: start with **hello_flick**.
+Open **[the Flick web page](https://sparkfun.github.io/SparkFun_Flick/)** in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. You'll only do this again when you want a newer Baseline. The same page runs the examples on your board with nothing installed: start with **01_hello_flick**.
 
 ### 2. Open this folder in VS Code
 
@@ -71,7 +72,7 @@ With the board plugged in, press **Ctrl+Shift+P**, choose **Tasks: Run Task**, t
 
 ### 4. Try an example
 
-Open `examples/01_basics/hello_flick/hello_flick.ino` and press **Ctrl+Shift+B**. The LED blinks, and `Hello flick!` scrolls past.
+Open `examples/01_basics/01_hello_flick/01_hello_flick.ino` and press **Ctrl+Shift+B**. The LED blinks, and `Hello flick!` scrolls past.
 
 The task builds the sketch for whichever board is plugged in, uploads it, and opens the serial output in VS Code's terminal panel. It takes about a second. Change the message and press **Ctrl+Shift+B** again: it stops the monitor, re-uploads and starts watching again.
 
@@ -115,7 +116,7 @@ Open this folder in Claude Code, Copilot, Cursor or similar. `AGENTS.md` tells t
 * *"Make a sketch that shows the temperature from the Qwiic TMP117 on the 1.3 inch Qwiic OLED. Install the libraries you need, upload it and check the serial output."*
 * *"Add the SparkFun Qwiic OLED library and change plant_monitor to print the uptime on the display."*
 * *"Log the fuel gauge's battery voltage to the microSD card every minute, with the time from NTP."*
-* *"Turn examples/07_updates/wifi_ota into a web page that shows the board's temperature."*
+* *"Turn examples/07_updates/01_wifi_ota into a web page that shows the board's temperature."*
 
 The assistant finds, installs, builds, uploads and reads the serial output by itself.
 
@@ -149,7 +150,7 @@ Everything the tasks do, you can run yourself from this folder:
 
 ```
 python flick.py setup                                     install the compiler (once)
-python flick.py upload examples/01_basics/hello_flick -m  build, upload, then show the serial output (Ctrl+C quits)
+python flick.py upload examples/01_basics/01_hello_flick -m  build, upload, then show the serial output (Ctrl+C quits)
 python flick.py new plant_monitor                         create my_sketches/plant_monitor
 python flick.py build my_sketches/plant_monitor -t T      build only, for board T
 python flick.py monitor                                   serial console
