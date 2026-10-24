@@ -4,6 +4,6 @@ import runpy
 import sys
 from pathlib import Path
 
-print("note: bsk is now flick: python tools/flick.py ...", file=sys.stderr)
+print("note: bsk is now flick: python flick.py ...", file=sys.stderr)
 sys.argv[0] = str(Path(__file__).with_name("flick.py"))
 runpy.run_path(sys.argv[0], run_name="__main__")

@@ -7,9 +7,9 @@ Legend: ✅ passed · ❌ failed · ⚠️ passed with a note · 👀 needs a lo
 ## How to test a board
 
 ```
-python tools/flick.py baseline flash -t <target>     # once per Baseline change
-python tools/flick.py test                          # automatic checks, one PASS/FAIL table (~2 min)
-python tools/flick.py upload tools/tests/led_check     # LEDs, by eye: red, green, blue, white, off (1 s each)
+python flick.py baseline flash -t <target>     # once per Baseline change
+python flick.py test                          # automatic checks, one PASS/FAIL table (~2 min)
+python flick.py upload tools/tests/led_check     # LEDs, by eye: red, green, blue, white, off (1 s each)
 ```
 
 - `flick test` runs `tools/tests/selftest` (memory, PSRAM, Strings, libm, time, Preferences, LittleFS, microSD, Ticker, the board's I2C devices, WiFi scan, BLE scan, WiFi connect + `WiFi.onEvent` + NTP + HTTP, then a 2 s deep sleep and the checks after waking), then a crash in `setup()` (`tools/tests/crash_test`, must roll back and be recorded in `INFO`), then a `loop()` that never returns (`tools/tests/hang_test`, the watchdog must catch it and roll back).

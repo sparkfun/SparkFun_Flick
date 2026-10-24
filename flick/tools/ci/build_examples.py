@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build every example (and test sketch) for the given targets (CI check of the SDK and flick).
 
-  python tools/ci/build_examples.py TARGET [TARGET ...]
-  python tools/ci/build_examples.py --out DIR [TARGET ...]    also keep the images, for the web page
+  python flick/tools/ci/build_examples.py TARGET [TARGET ...]
+  python flick/tools/ci/build_examples.py --out DIR [TARGET ...]    also keep the images, for the web page
 
 An example that stops on purpose with `#error "This chip has no ..."` or
 `#error "This board has no ..."` counts as "not for this board", not a failure.
@@ -23,8 +23,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-EXAMPLES = ROOT / "examples"
+ROOT = Path(__file__).resolve().parents[2]       # flick/
+EXAMPLES = ROOT.parent / "examples"
 NOT_FOR_BOARD = re.compile(r'#error "This (chip|board) has no')
 
 

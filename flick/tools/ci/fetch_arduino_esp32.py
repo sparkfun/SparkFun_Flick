@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Install just what a Baseline build needs from Arduino-ESP32 (CI):
 
-  python3 tools/ci/fetch_arduino_esp32.py VERSION TARGET [TARGET ...]
+  python3 flick/tools/ci/fetch_arduino_esp32.py VERSION TARGET [TARGET ...]
 
 the core's sources and each target chip's precompiled libraries, into
 ~/.arduino15/packages/esp32/{hardware/esp32,tools/<chip>-libs}/VERSION, where

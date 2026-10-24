@@ -1,5 +1,5 @@
 # Build Baseline for every target with ESP-IDF 5.5.5 and Arduino-ESP32 3.3.11
-# (tools/ci/build_baseline.sh). Runs when the firmware's sources change, and
+# (flick/tools/ci/build_baseline.sh). Runs when the firmware's sources change, and
 # is called by release.yml. Each target's images become an artifact named
 # after the target: baseline-<target>.bin (flash at 0x0) and .bsu (OTA).
 name: Baseline
@@ -8,27 +8,27 @@ on:
   push:
     branches: [main]
     paths:
-      - "baseline/**"
-      - "chips/**"
-      - "targets/**"
-      - "idf/**"
-      - "api/**"
-      - "sdk/include/**"
-      - "tools/flick.py"
-      - "tools/ci/build_baseline.sh"
-      - "tools/ci/fetch_arduino_esp32.py"
+      - "flick/baseline/**"
+      - "flick/chips/**"
+      - "flick/targets/**"
+      - "flick/idf/**"
+      - "flick/api/**"
+      - "flick/sdk/include/**"
+      - "flick/tools/flick.py"
+      - "flick/tools/ci/build_baseline.sh"
+      - "flick/tools/ci/fetch_arduino_esp32.py"
       - ".github/workflows/baseline.yml"
   pull_request:
     paths:
-      - "baseline/**"
-      - "chips/**"
-      - "targets/**"
-      - "idf/**"
-      - "api/**"
-      - "sdk/include/**"
-      - "tools/flick.py"
-      - "tools/ci/build_baseline.sh"
-      - "tools/ci/fetch_arduino_esp32.py"
+      - "flick/baseline/**"
+      - "flick/chips/**"
+      - "flick/targets/**"
+      - "flick/idf/**"
+      - "flick/api/**"
+      - "flick/sdk/include/**"
+      - "flick/tools/flick.py"
+      - "flick/tools/ci/build_baseline.sh"
+      - "flick/tools/ci/fetch_arduino_esp32.py"
       - ".github/workflows/baseline.yml"
   workflow_dispatch:
   workflow_call:
@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: list
         run: |
-          echo "list=$(python3 -c 'import json, pathlib; print(json.dumps(sorted(p.parent.name for p in pathlib.Path("targets").glob("*/target.json"))))')" >> "$GITHUB_OUTPUT"
+          echo "list=$(python3 -c 'import json, pathlib; print(json.dumps(sorted(p.parent.name for p in pathlib.Path("flick/targets").glob("*/target.json"))))')" >> "$GITHUB_OUTPUT"
 
   build:
     needs: targets
@@ -60,11 +60,11 @@ jobs:
           path: ~/.arduino15
           key: arduino-esp32-3.3.11-${{ matrix.target }}
       - name: Build Baseline for ${{ matrix.target }}
-        run: bash tools/ci/build_baseline.sh ${{ matrix.target }}
+        run: bash flick/tools/ci/build_baseline.sh ${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: |
-            dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bin
-            dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bsu
+            flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bin
+            flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bsu
           if-no-files-found: error

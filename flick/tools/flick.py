@@ -47,13 +47,11 @@ import time
 import zlib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-# In the sketch kit, everything flick needs is in flick/ (flick package writes
-# flick/kit.json), and the user's own files sit one level up: secrets.cfg,
-# libraries/, my_sketches/, examples/. In the repository both are the root.
-IN_KIT = (ROOT / "kit.json").exists()
-WORK = ROOT.parent if IN_KIT else ROOT
-FLICK_CMD = "python flick.py" if IN_KIT else "python tools/flick.py"   # for messages
+ROOT = Path(__file__).resolve().parent.parent      # flick/: the tool, SDK, boards, Baseline source
+# The folder above flick/ is the user's (the repository and the kit look the
+# same): flick.py, examples/, my_sketches/, libraries/, secrets.cfg.
+WORK = ROOT.parent
+FLICK_CMD = "python flick.py"      # how messages tell the user to run flick
 
 # Flick was called Baseline Sketcher, and the tool bsk: its BSK_* environment
 # variables still work.
@@ -235,8 +233,8 @@ def example_dirs(root=None):
 
 def cmd_new(args):
     proj = Path(args.dir)
-    if IN_KIT and len(proj.parts) == 1:
-        proj = WORK / "my_sketches" / proj        # a bare name: the kit's place for your sketches
+    if len(proj.parts) == 1:
+        proj = WORK / "my_sketches" / proj        # a bare name: the place for your own sketches
     if proj.exists() and any(proj.iterdir()):
         sys.exit(f"error: {proj} exists and is not empty")
     proj.mkdir(parents=True, exist_ok=True)
@@ -438,7 +436,7 @@ def resolve_libraries(proj, sources, include_dirs):
 def build(proj, target_name=None):
     proj = Path(proj).resolve()
     if proj == ARDUINO_BENCH or ARDUINO_BENCH in proj.parents:
-        sys.exit(f"error: {proj.relative_to(ROOT)} is a plain Arduino sketch, kept only for the build-time "
+        sys.exit(f"error: {proj.relative_to(WORK)} is a plain Arduino sketch, kept only for the build-time "
                  f"comparison (tools/benchmark.py). It does not run on Baseline.\n"
                  f"Its Flick version is in benchmarks/flick/{proj.name}/.")
     cfg = load_config(proj)
@@ -1312,9 +1310,9 @@ def build_baseline_idf(target, core):
     for off, f in sorted(args["flash_files"].items(), key=lambda kv: int(kv[0], 16)):
         parts += [off, str(b / f)]
     run([str(py), "-m", "esptool", "--chip", target["idf_target"], "merge_bin", "-o", str(out)] + parts, env=env)
-    print(f"Baseline blob: {out.relative_to(ROOT)} ({out.stat().st_size:,} bytes; flash at 0x0)")
+    print(f"Baseline blob: {out.relative_to(WORK)} ({out.stat().st_size:,} bytes; flash at 0x0)")
     bsu = make_bsu(target, b / args["app"]["file"], DIST / target["name"] / f"baseline-{target['name']}.bsu")
-    print(f"Baseline update: {bsu.relative_to(ROOT)} ({bsu.stat().st_size:,} bytes; flick baseline update, "
+    print(f"Baseline update: {bsu.relative_to(WORK)} ({bsu.stat().st_size:,} bytes; flick baseline update, "
           "or ota_pull_baseline)")
     return proj, env, py, args
 
@@ -1562,18 +1560,23 @@ def cmd_lib(args):
 
 # ---------------------------------------------------------------- the sketch kit
 
-# The kit's top level holds only what users work with (README.md, flick.py,
-# examples/, my_sketches/, ...: the files in kit/). Everything flick itself
-# needs goes in flick/.
+# The kit is this repository without what only Baseline's developers need:
+# the top level as it is, and the part of flick/ that builds and uploads sketches.
 KIT_FILES = {
+    "": ["README.md", "flick.py", "AGENTS.md", "CLAUDE.md", "LICENSE", "secrets.cfg.example",
+         "requirements.txt", ".vscode/tasks.json", "examples/**/*", "my_sketches/README.md"],
     "flick/": ["tools/flick.py", "tools/tests/**/*",
                "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
                "chips/*/chip.json", "chips/*/sdk/**/*",
                "targets/*/target.json", "targets/*/sdk/**/*",
                "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md", "THIRD_PARTY_NOTICES.md"],
-    "": ["examples/**/*", "secrets.cfg.example", "LICENSE"],
 }
-KIT_DIR = ROOT / "kit"      # README.md, flick.py, AGENTS.md, CLAUDE.md, .vscode/, my_sketches/: the kit's root
+KIT_GITIGNORE = """# flick build output, downloaded libraries and secrets
+build/
+libraries/
+secrets.cfg
+__pycache__/
+"""
 
 
 def cmd_package(args):
@@ -1586,21 +1589,18 @@ def cmd_package(args):
     out.parent.mkdir(parents=True, exist_ok=True)
     files = {}
     for dest, patterns in KIT_FILES.items():
+        base = WORK / dest
         for pattern in patterns:
-            for f in ROOT.glob(pattern):
-                rel = f.relative_to(ROOT)
+            for f in base.glob(pattern):
+                rel = f.relative_to(base)
                 if f.is_file() and not {"build", "__pycache__"}.intersection(rel.parts):
                     files[dest + rel.as_posix()] = f
-    for f in KIT_DIR.rglob("*"):
-        if f.is_file() and "__pycache__" not in f.parts:
-            files[f.relative_to(KIT_DIR).as_posix()] = f
     top = f"flick-kit-{version}"
-    marker = json.dumps({"version": version, "abi": f"{abi.get('BL_ABI_MAJOR')}.{abi.get('BL_ABI_MINOR')}"})
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for rel, f in sorted(files.items()):
             z.write(f, f"{top}/{rel}")
-        z.writestr(f"{top}/flick/kit.json", marker + "\n")     # tells flick.py it runs in the kit
-    print(f"kit: {out.relative_to(ROOT) if out.is_relative_to(ROOT) else out} ({len(files)} files, "
+        z.writestr(f"{top}/.gitignore", KIT_GITIGNORE)
+    print(f"kit: {out.relative_to(WORK) if out.is_relative_to(WORK) else out} ({len(files) + 1} files, "
           f"{out.stat().st_size // 1024} KB; Baseline {version}, ABI {abi.get('BL_ABI_MAJOR')}.{abi.get('BL_ABI_MINOR')})")
 
 
@@ -1811,7 +1811,7 @@ def cmd_baseline(args):
         out = DIST / target["name"] / f"baseline-{target['name']}.bin"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(blob)
-        print(f"Baseline blob: {out.relative_to(ROOT)} ({len(blob):,} bytes; flash at 0x0)")
+        print(f"Baseline blob: {out.relative_to(WORK)} ({len(blob):,} bytes; flash at 0x0)")
 
 
 # ---------------------------------------------------------------- main

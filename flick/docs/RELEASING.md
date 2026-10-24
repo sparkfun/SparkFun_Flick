@@ -9,16 +9,16 @@
 | `flick-kit-<version>.zip` | Everything for writing sketches (layout below) | Release assets; the download page |
 | Download page | 1. one row per board, each with a **Flash** button (ESP Web Tools, Chrome/Edge) and the downloads; 2. the example runner: every example, prebuilt for every board, uploaded over Web Serial (`tools/site/runner.js`); 3. the kit | GitHub Pages |
 
-**The kit's layout.** Its top level holds only what users work with; `flick package` puts everything else in `flick/` and writes `flick/kit.json`, which tells `flick.py` it runs in the kit (`IN_KIT`: secrets, libraries and `my_sketches/` are then one level up).
+**The kit's layout** is the repository's: `flick package` (`KIT_FILES` in `tools/flick.py`) takes the top level as it is and the part of `flick/` that builds and uploads sketches, and leaves out Baseline's source, the ESP-IDF project, the API table, the benchmarks, CI and the developer notes.
 
 ```
 README.md  flick.py  AGENTS.md  CLAUDE.md  .vscode/  secrets.cfg.example  LICENSE  requirements.txt
 examples/       01_basics/hello_flick ... 07_updates/  (examples/README.md lists them)
 my_sketches/    the user's sketches (flick new NAME puts them here)
-flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/, THIRD_PARTY_NOTICES.md, kit.json
+flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/ (3 files), THIRD_PARTY_NOTICES.md
 ```
 
-`flick.py` at the top only starts `flick/tools/flick.py`. The files at the top come from `kit/`; the rest from `KIT_FILES` in `tools/flick.py`.
+`flick.py` at the top only starts `flick/tools/flick.py`, which takes the folder above `flick/` as the user's (secrets, libraries, `my_sketches/`).
 
 **The example runner** has no WiFi credentials: the release builds the examples without `secrets.cfg` (`build_examples.py --out` always does), and the page lists the ones that need the user's network (`WIFI_SSID` in the source) as "build it from the kit".
 
@@ -34,7 +34,7 @@ The kit contains no Baseline source and needs no ESP-IDF.
 
 1. **Set the version:** `BASELINE_VERSION` in `baseline/src/bl_main.h`.
    - Bump the minor or major version for user-visible changes.
-   - The ABI version is separate: `api/baseline_api.txt`, locked with `python tools/gen_api.py --lock`.
+   - The ABI version is separate: `api/baseline_api.txt`, locked with `python flick/tools/gen_api.py --lock`.
 2. **Commit, tag and push:**
 
    ```

@@ -13,9 +13,9 @@ still be present, in the same position, with the same signature. New entries
 may only be appended, with a minor above every locked minor.
 
 Usage:
-  python tools/gen_api.py            generate + check against abi.lock
-  python tools/gen_api.py --check    check only, write nothing (for CI)
-  python tools/gen_api.py --lock     generate, then record the current table as released
+  python flick/tools/gen_api.py            generate + check against abi.lock
+  python flick/tools/gen_api.py --check    check only, write nothing (for CI)
+  python flick/tools/gen_api.py --lock     generate, then record the current table as released
 """
 import argparse
 import re

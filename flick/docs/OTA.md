@@ -41,7 +41,7 @@ The same `flick` commands also work over USB: use `-p COMx` instead of `--host`.
   - With a pull, give `baselineFromUrl` a sketch URL as well. Baseline then reconnects to WiFi and installs that sketch after the update.
   - With a push, upload a sketch over USB afterwards, since the board is no longer on WiFi.
 
-Both kinds need one USB flash with a Baseline that has these features: `python tools/flick.py baseline flash -t <target>`. On 8/16 MB boards this flash changes the partition table, which erases LittleFS once.
+Both kinds need one USB flash with a Baseline that has these features: `python flick.py baseline flash -t <target>`. On 8/16 MB boards this flash changes the partition table, which erases LittleFS once.
 
 ## A pull, step by step
 

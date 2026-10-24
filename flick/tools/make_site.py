@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the Flick download page (GitHub Pages).
 
-  python tools/make_site.py [--out site_build] [--kit dist/flick-kit-<ver>.zip] [--examples DIR]
+  python flick/tools/make_site.py [--out site_build] [--kit dist/flick-kit-<ver>.zip] [--examples DIR]
 
 Reads targets/*/target.json and the built images in dist/<target>/
 (flick baseline build), and writes a static site:

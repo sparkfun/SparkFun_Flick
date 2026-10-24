@@ -9,11 +9,11 @@ The goal of Baseline is to reduce the time it takes to compile and upload sketch
 | ble_serial | 140.2 s | 13.1 s | 7.8 s | **20.9 s** | **0.51 s** | 41x | 563,648 bytes | 1,520 bytes |
 | wifi_http_get | 126.1 s | 15.0 s | 8.6 s | **23.6 s** | **0.59 s** | 40x | 979,008 bytes | 2,660 bytes |
 
-Measured on a SparkFun ESP32-S3 Thing Plus over USB, Arduino-ESP32 3.3.11, Windows 11. *Arduino first compile* is a clean build with nothing cached. *Arduino compile* is the everyday case where only your sketch changed. *Arduino total* is that compile plus the upload. On the Baseline side, the upload itself takes about 0.03 s; nearly all of the half second is the compiler. Full build numbers for every example are in [docs/BUILD_RESULTS.md](docs/BUILD_RESULTS.md).
+Measured on a SparkFun ESP32-S3 Thing Plus over USB, Arduino-ESP32 3.3.11, Windows 11. *Arduino first compile* is a clean build with nothing cached. *Arduino compile* is the everyday case where only your sketch changed. *Arduino total* is that compile plus the upload. On the Baseline side, the upload itself takes about 0.03 s; nearly all of the half second is the compiler. Full build numbers for every example are in [docs/BUILD_RESULTS.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/BUILD_RESULTS.md).
 
 Baseline is not an interpreted language; it's fast machine code all the way down. You just tell the chatbot what you want, it writes the code, compiles it (specifically for Baseline) and loads only the bits that need changing.
 
-Baseline is intended for folks who are just past the beginner's phase of programming a microcontroller. There are a few limitations and quirks to Baseline that users should know about. Generally speaking, everything works transparently but there are a few exceptions listed in [docs/ARDUINO_COMPAT.md](docs/ARDUINO_COMPAT.md).
+Baseline is intended for folks who are just past the beginner's phase of programming a microcontroller. There are a few limitations and quirks to Baseline that users should know about. Generally speaking, everything works transparently but there are a few exceptions listed in [docs/ARDUINO_COMPAT.md](flick/docs/ARDUINO_COMPAT.md).
 
 The Baseline 'blob' includes the following libraries and features. If your code needs something more, ask the chatbot to update Baseline with the new bits and re-flash the target. Your future compilations and uploads will then skip any redundant compilation or uploading of bytes.
 
@@ -38,47 +38,31 @@ The Baseline 'blob' includes the following libraries and features. If your code 
 * **USB device** (ESP32-S3): the board becomes a USB keyboard, mouse, gamepad, media remote or MIDI instrument
 * **Storage:** `Preferences` (settings that survive power cycles), `LittleFS` (on-board files) and microSD cards (`SD`, `SD_MMC`)
 * **Battery:** the LiPo fuel gauge (`SFE_MAX1704X`): voltage, percent charged, charge rate
-* **Over-the-air updates:** sketches *and Baseline itself*, pushed from the PC (`ArduinoOTA`, `flick ... --host`) or pulled by the board from a web server such as a GitHub release (`BaselineUpdate`). See [docs/OTA.md](docs/OTA.md).
-* **Releases:** each release has a download page with a **Flash** button per board, the over-the-air updates, and a sketch kit (with `AGENTS.md` for AI assistants). See [docs/RELEASING.md](docs/RELEASING.md).
+* **Over-the-air updates:** sketches *and Baseline itself*, pushed from the PC (`ArduinoOTA`, `flick ... --host`) or pulled by the board from a web server such as a GitHub release (`BaselineUpdate`). See [docs/OTA.md](flick/docs/OTA.md).
+* **Releases:** each release has a download page with a **Flash** button per board, the over-the-air updates, and a sketch kit (with `AGENTS.md` for AI assistants). See [docs/RELEASING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/RELEASING.md).
 * **Extras:** `String`, `IPAddress`, `printf`/`snprintf`, `random`, `map`, `constrain`, `log_i`/`ESP_LOGI` logging, and `ESP` chip and memory info
 
-Not in the blob yet: USB mass storage and camera. Libraries from the Arduino Library Manager aren't in the blob either; they're compiled into your sketch instead (see [Add a library](#5-add-a-library)).
-
-## What's an ABI?
-
-An ABI (Application Binary Interface) is like an API, but for code that's already been compiled.
-
-An API is the promise you code against: "there's a function called `digitalWrite`, and it takes a pin and a level." An ABI is the same promise once everything is machine code: exactly where to find that function, and how to hand it its arguments.
-
-That matters here because your sketch and Baseline are compiled separately. Your sketch never knows where `digitalWrite` actually lives inside Baseline. Instead, when your sketch starts, Baseline hands it a table of function pointers, and your sketch is compiled to say "call the 19th entry in the table." That table is the ABI.
-
-The rule that keeps it all working is simple: **the table only ever grows.** New functions get added to the end, and existing entries never move or change. That way a sketch you compiled months ago still runs on a newer Baseline.
-
-The version number tells you where things stand. In ABI **1.6**:
-
-* **1** only changes if an existing entry ever has to change. Every sketch would need recompiling, so we try hard never to do that.
-* **6** goes up each time a batch of new functions is added. Version 1.6 added microSD, sleep, timers, NTP time, touch, I2S, LED strips, servos, captive portals and USB devices.
-
-Every sketch records the ABI it was built for. If you load a sketch onto a Baseline that's too old for it, Baseline politely refuses to run it instead of crashing. Re-flash Baseline and you're back in business.
+Not in the blob yet: USB mass storage and camera. Libraries from the Arduino Library Manager aren't in the blob either; they're compiled into your sketch instead (see [Add a library](#6-add-a-library)).
 
 ## How to use Flick
 
 This walks you from a blank board to your own sketch running, using VS Code. You'll press one key to build and upload, and you won't need to type commands.
 
-You don't need this repository to use Flick: it's where Flick itself is built. Everything a user needs is on the Flick web page and in the **sketch kit**, a small zip with the examples and the tool.
+This folder is all you need, whether you downloaded this repository or the smaller **sketch kit** zip from the web page: both look the same. You'll work in `examples/` and `my_sketches/`; `flick/` holds the tool, the SDK and the board files, and you don't need to open it.
 
 ### 1. Put Baseline on the board, and try it (once)
 
 Open the Flick web page in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. You'll only do this again when you want a newer Baseline. The same page runs the examples on your board with nothing installed: start with **hello_flick**.
 
-### 2. Get the kit and open it in VS Code
+### 2. Open this folder in VS Code
 
-Install **[Python 3](https://www.python.org/downloads/)** (on Windows, tick "Add python.exe to PATH") and **[VS Code](https://code.visualstudio.com/)**. Download the sketch kit from the web page, unzip it, and use **File → Open Folder...** to open it. The VS Code tasks are already set up.
+Install **[Python 3](https://www.python.org/downloads/)** (on Windows, tick "Add python.exe to PATH") and **[VS Code](https://code.visualstudio.com/)**. Unzip the kit (or this repository), and use **File → Open Folder...** to open it. The VS Code tasks are already set up.
 
-| In the kit | |
+| Folder | |
 |---|---|
-| `examples/` | Working sketches, from `01_basics` to `07_updates` |
+| `examples/` | Working sketches, from `01_basics` to `07_updates` ([the list](examples/README.md)) |
 | `my_sketches/` | Your sketches |
+| `libraries/` | Arduino libraries you install with `flick.py lib install` (made the first time) |
 | `flick/` | The tool, the SDK and the board files. You don't need to open it. |
 
 ### 3. Install the compiler (once)
@@ -122,11 +106,11 @@ python flick.py lib search qwiic oled
 python flick.py lib install "SparkFun Qwiic OLED Arduino Library"
 ```
 
-Most I2C and SPI sensor and display libraries, ArduinoJson and the like work. A library that calls ESP-IDF directly or uses C++ exceptions won't build. When a build fails with `undefined reference`, the call isn't in Baseline; [docs/ARDUINO_COMPAT.md](docs/ARDUINO_COMPAT.md) lists what is.
+Most I2C and SPI sensor and display libraries, ArduinoJson and the like work. A library that calls ESP-IDF directly or uses C++ exceptions won't build. When a build fails with `undefined reference`, the call isn't in Baseline; [docs/ARDUINO_COMPAT.md](flick/docs/ARDUINO_COMPAT.md) lists what is.
 
 ### 7. Or ask an AI assistant to do it
 
-Open the kit in Claude Code, Copilot, Cursor or similar. `AGENTS.md` tells the assistant how Flick works, so you can ask for the whole job:
+Open this folder in Claude Code, Copilot, Cursor or similar. `AGENTS.md` tells the assistant how Flick works, so you can ask for the whole job:
 
 * *"Make a sketch that shows the temperature from the Qwiic TMP117 on the 1.3 inch Qwiic OLED. Install the libraries you need, upload it and check the serial output."*
 * *"Add the SparkFun Qwiic OLED library and change plant_monitor to print the uptime on the display."*
@@ -161,7 +145,7 @@ Copy `secrets.cfg.example` to `secrets.cfg` and fill in your network. Each `WIFI
 
 ### From the command line
 
-Everything the tasks do, you can run yourself from the kit's folder:
+Everything the tasks do, you can run yourself from this folder:
 
 ```
 python flick.py setup                                     install the compiler (once)
@@ -171,11 +155,32 @@ python flick.py build my_sketches/plant_monitor -t T      build only, for board 
 python flick.py monitor                                   serial console
 python flick.py info                                      Baseline version, board, running sketch, last crash
 python flick.py baseline flash --file baseline-<board>.bin   flash Baseline without the browser (pip install esptool first)
-python flick.py upload my_sketches/plant_monitor --host baseline   upload over WiFi (see docs/OTA.md)
+python flick.py upload my_sketches/plant_monitor --host baseline   upload over WiFi (see flick/docs/OTA.md)
 ```
 
-`python flick.py --help` lists the rest. In this repository, the same commands are `python tools/flick.py ...`.
+`python flick.py --help` lists the rest.
+
+## What's an ABI?
+
+An ABI (Application Binary Interface) is like an API, but for code that's already been compiled.
+
+An API is the promise you code against: "there's a function called `digitalWrite`, and it takes a pin and a level." An ABI is the same promise once everything is machine code: exactly where to find that function, and how to hand it its arguments.
+
+That matters here because your sketch and Baseline are compiled separately. Your sketch never knows where `digitalWrite` actually lives inside Baseline. Instead, when your sketch starts, Baseline hands it a table of function pointers, and your sketch is compiled to say "call the 19th entry in the table." That table is the ABI.
+
+The rule that keeps it all working is simple: **the table only ever grows.** New functions get added to the end, and existing entries never move or change. That way a sketch you compiled months ago still runs on a newer Baseline.
+
+The version number tells you where things stand. In ABI **1.6**:
+
+* **1** only changes if an existing entry ever has to change. Every sketch would need recompiling, so we try hard never to do that.
+* **6** goes up each time a batch of new functions is added. Version 1.6 added microSD, sleep, timers, NTP time, touch, I2S, LED strips, servos, captive portals and USB devices.
+
+Every sketch records the ABI it was built for. If you load a sketch onto a Baseline that's too old for it, Baseline politely refuses to run it instead of crashing. Re-flash Baseline and you're back in business.
 
 ## License
 
-Flick's own code is in the public domain ([the Unlicense](LICENSE)). The Baseline firmware images also contain ESP-IDF, Arduino-ESP32 and other projects under their own licenses: see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Flick's own code is in the public domain ([the Unlicense](LICENSE)). The Baseline firmware images also contain ESP-IDF, Arduino-ESP32 and other projects under their own licenses: see [THIRD_PARTY_NOTICES.md](flick/THIRD_PARTY_NOTICES.md).
+
+## Working on Flick itself
+
+Baseline's source, the ESP-IDF project, the API table and the build scripts are in `flick/` in [the repository](https://github.com/sparkfun/SparkFun_Flick) (the kit leaves them out). Start with [flick/TESTING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/TESTING.md); releases are described in [flick/docs/RELEASING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/RELEASING.md).

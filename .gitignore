@@ -258,3 +258,6 @@ pip-log.txt
 # flick sketch secrets (WiFi passwords, keys)
 secrets.cfg
 
+# Arduino libraries installed by flick lib install, and the built download page
+libraries/
+site_build/

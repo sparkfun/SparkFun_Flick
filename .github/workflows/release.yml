@@ -1,9 +1,9 @@
-# Release: push a tag vX.Y.Z (matching BASELINE_VERSION in baseline/src/bl_main.h).
+# Release: push a tag vX.Y.Z (matching BASELINE_VERSION in flick/baseline/src/bl_main.h).
 #   1. Baseline for every target (baseline.yml)
 #   2. the sketch kit (flick package)
-#   3. every example for every board, for the page's example runner (tools/ci/build_examples.py --out)
+#   3. every example for every board, for the page's example runner (flick/tools/ci/build_examples.py --out)
 #   4. a GitHub release with the images, the .bsu updates and the kit
-#   5. the download page with "Flash" buttons and the example runner on GitHub Pages (tools/make_site.py)
+#   5. the download page with "Flash" buttons and the example runner on GitHub Pages (flick/tools/make_site.py)
 # Run it by hand (workflow_dispatch) to rebuild the page without a release.
 # Pages: Settings > Pages > Source: "GitHub Actions". While the repository is
 # private the page is only built (artifact "download-page"), not deployed.
@@ -35,8 +35,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: |
-          python tools/flick.py package
-          mkdir -p dist/kit && mv dist/flick-kit-*.zip dist/kit/
+          python flick.py package
+          mkdir -p dist/kit && mv flick/dist/flick-kit-*.zip dist/kit/
       - uses: actions/upload-artifact@v4
         with:
           name: kit
@@ -55,10 +55,10 @@ jobs:
         with:
           path: ~/.flick/tools
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
-      - run: pip install -r kit/requirements.txt
-      - run: python tools/flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
+      - run: pip install -r requirements.txt
+      - run: python flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
       - name: Every example for every board
-        run: python tools/ci/build_examples.py --out dist/examples
+        run: python flick/tools/ci/build_examples.py --out dist/examples
       - uses: actions/upload-artifact@v4
         with:
           name: examples
@@ -76,7 +76,7 @@ jobs:
       - name: The tag matches BASELINE_VERSION
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          version=$(python3 -c 'import re; print(re.search(r"BASELINE_VERSION \"([^\"]+)\"", open("baseline/src/bl_main.h").read()).group(1))')
+          version=$(python3 -c 'import re; print(re.search(r"BASELINE_VERSION \"([^\"]+)\"", open("flick/baseline/src/bl_main.h").read()).group(1))')
           if [ "v$version" != "${{ github.ref_name }}" ]; then
             echo "::error::tag ${{ github.ref_name }} does not match BASELINE_VERSION $version"
             exit 1
@@ -85,7 +85,7 @@ jobs:
         with:
           path: dist        # dist/<target>/baseline-<target>.bin/.bsu, dist/kit/*.zip, dist/examples/
       - name: Download page
-        run: python tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
+        run: python flick/tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
       - name: GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2

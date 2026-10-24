@@ -12,10 +12,10 @@ ARDUINO_ESP32_VERSION="${ARDUINO_ESP32_VERSION:-3.3.11}"
 # Arduino-ESP32 as an ESP-IDF component: flick takes the core and the chip's
 # precompiled libraries from ~/.arduino15 (cached between CI runs). Only those
 # are installed: the whole platform does not fit a runner's disk next to ESP-IDF.
-python3 tools/ci/fetch_arduino_esp32.py "$ARDUINO_ESP32_VERSION" "$@"
+python3 flick/tools/ci/fetch_arduino_esp32.py "$ARDUINO_ESP32_VERSION" "$@"
 
 for target in "$@"; do
     echo "::group::Baseline for $target"
-    python3 tools/flick.py baseline build -t "$target"
+    python3 flick/tools/flick.py baseline build -t "$target"
     echo "::endgroup::"
 done
