@@ -7,7 +7,8 @@ extern "C" {
 
 #define BL_CRASH_LIMIT          3       /* consecutive sketch crashes before safe mode */
 #define BL_STABLE_AFTER_MS      10000   /* sketch counts as good after running this long */
-#define BL_SAFE_MODE_PIN        0       /* BOOT button: hold at reset for safe mode */
+#include "bl_target.h"                  /* the chip's BL_TARGET_BOOT_PIN */
+#define BL_SAFE_MODE_PIN        BL_TARGET_BOOT_PIN  /* BOOT button: hold at reset for safe mode */
 
 void        bl_state_init(void);
 const char *bl_state_safe_mode_reason(void);    /* NULL when not in safe mode */

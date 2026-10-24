@@ -102,7 +102,7 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 
 - `Wire1` (second I2C bus), `Serial1.setRxBufferSize`, `WiFiMulti`, `dacWrite` (`Serial1` itself: tested on the Postcard with its GNSS)
 - ESP-NOW between two boards, MQTT, WiFi upload (`flick upload --host`), `BLESerial` with a phone, BLE server notify/write, WebServer, TCP/UDP examples
-- Safe mode by holding BOOT at reset (and it reads GPIO0 on every chip: wrong on the C3, C6, C5 and P4)
+- Safe mode by holding BOOT at reset: Baseline 0.3.0 reads the chip's BOOT pin (`BL_TARGET_BOOT_PIN`: 9 on the C3/C6, 28 on the C5, 35 on the P4); before, GPIO0 on every chip. Test on a C6 first.
 - Staged updates on the Thing Plus S3 (built; the C3 and Pocket C6 are tested)
 - Bluetooth Classic SPP pairing with a phone
 - I2S (needs an amplifier), servos, LED strips longer than one LED

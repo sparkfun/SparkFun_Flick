@@ -38,8 +38,8 @@ The kit contains no Baseline source and needs no ESP-IDF.
 2. **Commit, tag and push:**
 
    ```
-   git tag v0.2.0
-   git push origin main v0.2.0
+   git tag v0.3.0
+   git push origin main v0.3.0
    ```
 
 3. **`.github/workflows/release.yml` does the rest:**
@@ -57,6 +57,15 @@ The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow
 - **Visibility:** the page and the release files must be reachable without signing in, so the repository must be **public**. The alternative is private Pages on a GitHub Enterprise plan, but the board's `ota_pull_*` cannot download from a private repository's releases either.
 - **Board list:** the page lists every target; `"listed": false` in a `target.json` hides one. A board's name links to its `product_url` when it has one.
 - **While the repository is private:** a release still builds and publishes the GitHub release (visible to people with access). The page is built as the workflow artifact `download-page` but not deployed.
+
+## Going public (once)
+
+1. **Push `main` and let CI pass:** `ci.yml` (examples, kit) and `baseline.yml` (every Baseline, in the ESP-IDF Docker image).
+2. **Look at the page before anyone else does:** Actions > Release > Run workflow on `main`, then download the `download-page` artifact, serve it with `python -m http.server -d <folder>` and try Flash and Run on `localhost` (Web Serial works there).
+3. **Make the repository public:** Settings > General > Danger Zone > Change visibility. Everything in the history becomes public.
+4. **Turn on Pages:** Settings > Pages > Source: **GitHub Actions**.
+5. **Release:** raise `BASELINE_VERSION` (`baseline/src/bl_main.h`), commit, tag `v<version>` and push the tag. The workflow builds everything, makes the GitHub release and deploys https://sparkfun.github.io/SparkFun_Flick/ (`WEB_PAGE` in `tools/flick.py`; flick's error messages point there).
+6. **Check the live page:** Flash a board, Run `01_hello_flick` on a native-USB board and on a CH340 board, download the kit and build from it.
 
 ## Workflows
 

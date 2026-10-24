@@ -1,6 +1,6 @@
 #pragma once
 
-#define BASELINE_VERSION "0.2.0"
+#define BASELINE_VERSION "0.3.0"
 
 #ifdef __cplusplus
 extern "C" {
