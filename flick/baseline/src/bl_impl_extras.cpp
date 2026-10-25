@@ -117,3 +117,9 @@ extern "C" void bl_last_crash_clear(void)
     esp_core_dump_image_erase();
 #endif
 }
+
+/* ---- Teensy-only entries (ABI 1.8): sketch interrupt handlers, DMA channels
+ * and the Audio library are i.MX RT1062 features; on the ESP32 family they
+ * answer BL_ERR_UNSUPPORTED, and attachInterrupt stays deferred. ---- */
+#define BL_STUB_TEENSY 1
+#include "gen/bl_impl_stubs.inc"

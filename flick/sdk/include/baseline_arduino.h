@@ -378,6 +378,10 @@ extern EspClass ESP;
 /* MAX17048 LiPo fuel gauge */
 #include "baseline_fuelgauge.h"
 #include "baseline_extras.h"
+/* Teensy 4.x: IntervalTimer, elapsedMillis, the Audio library's helpers */
+#ifdef BL_TARGET_TEENSY
+#include "baseline_teensy.h"
+#endif
 
 #endif /* __cplusplus */
 #endif /* BASELINE_ARDUINO_H */

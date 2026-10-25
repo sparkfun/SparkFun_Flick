@@ -1,5 +1,5 @@
 /*
- * Sketch linker script for Xtensa ESP32 targets (ESP32, ESP32-S3). Passed
+ * Sketch linker script for every chip (Xtensa, RISC-V, Arm). Passed
  * through the C preprocessor (gcc -E -P -x c -DBL_LINKER_SCRIPT) so the
  * addresses come from sketch_abi.h and the target's bl_target.h.
  *
@@ -61,7 +61,8 @@ SECTIONS
     _sketch_image_size = _sketch_data_load + SIZEOF(.data) - BL_SKETCH_DBUS_BASE;
 
     /* No exceptions in sketches: unwind and exception tables are dropped. */
-    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .gcc_except_table .gcc_except_table.* .fini_array* .dtors* .comment .note.*) }
+    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .gcc_except_table .gcc_except_table.* .fini_array* .dtors* .comment .note.*
+                  .ARM.exidx* .ARM.extab* .ARM.attributes) }
 }
 
 ASSERT(SIZEOF(.sketch_header) == BL_SKETCH_HEADER_SIZE, "sketch header must be exactly BL_SKETCH_HEADER_SIZE bytes")

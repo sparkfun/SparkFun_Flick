@@ -33,6 +33,7 @@ A sketch is a folder named like its main file: `my_sketches/plant_monitor/plant_
 - **Libraries:** a `libraries/` subfolder works like an Arduino sketchbook's.
 - **`sketch.cfg` (optional):** `name = ...`, `stack = 8192` (bytes, for `setup()`/`loop()`) and `target = ...` (for `build`).
 - **Includes:** `baseline.h` is included automatically. `#include <Arduino.h>`, `<WiFi.h>`, `<Wire.h>`, `<HTTPClient.h>`, `<Preferences.h>`, `<LittleFS.h>`, `<BLEDevice.h>`, `<esp_now.h>` and the like all work.
+- **Teensy 4.x boards** (`teensy40`, `teensy41`): `#include <Audio.h>` gives the Teensy Audio library (code exported by PJRC's Audio System Design Tool compiles as it is), `IntervalTimer`, `elapsedMillis` and `Serial1`-`Serial8` work, and `<imxrt.h>` (Teensy's register definitions) may be included. There is no WiFi or BLE.
 - **Secrets:** WiFi credentials and keys live in `~/.flick/secrets.cfg`, outside this folder. The user sets the WiFi network once with `python flick.py wifi "network" "password"` (or the VS Code task **Set WiFi network**); other keys with `python flick.py secrets --set KEY=value`. Each `KEY = value` becomes `#define KEY "value"`. Write `#ifdef WIFI_SSID` fallbacks, never put credentials in the sketch, and never print or read out the secrets file.
 - **Board pins:** `LED_BUILTIN`, `RGB_BUILTIN`, `SDA`, `SCL`, `A0`... and `BL_BOARD_*` / `BL_TARGET_NAME` come from `flick/targets/<target>/sdk/bl_board.h`. Use those names rather than raw pin numbers.
 
@@ -43,11 +44,11 @@ A sketch is a folder named like its main file: `my_sketches/plant_monitor/plant_
    - `flick/docs/API.md`: the raw `bl_*` API;
    - `flick/sdk/include/`: the headers.
 
-   If a build fails with an undefined reference, the call is not in Baseline. Use a supported alternative and say so; do not try to add it.
+   If a build fails with an undefined reference, the call is not in Baseline. Use a supported alternative and say so; do not try to add it. (On Teensy 4.x, `<imxrt.h>` register access is allowed.)
 2. **No C++ exceptions or RTTI** (`try`/`throw`, `dynamic_cast`, `typeid`).
 3. **Global and static data is limited to 32 KB** (64 KB on the ESP32-S3); the code to 512 KB (256 KB on 4 MB boards). Allocate big buffers with `malloc`/`new` in `setup()`. On boards with PSRAM, `ps_malloc` allocates there.
 4. **`loop()` must return, and nothing may block for 5 s without a `delay()`:** the watchdog restarts the board. Calls such as WiFi connects and HTTP requests handle this themselves.
-5. **Callbacks run on the sketch task** (interrupts, timers, WiFi/BLE events, `Ticker`): they arrive between `loop()` calls, not in interrupt context. Keep them short; don't busy-wait for them inside `loop()` without `delay()`.
+5. **Callbacks run on the sketch task** (interrupts, timers, WiFi/BLE events, `Ticker`): they arrive between `loop()` calls, not in interrupt context. Keep them short; don't busy-wait for them inside `loop()` without `delay()`. **Except on Teensy 4.x:** `attachInterrupt()` and `IntervalTimer` handlers run in interrupt context, as on a plain Teensy; keep them short, make shared variables `volatile`, and use `noInterrupts()`/`interrupts()` around reads of several of them. `Ticker` still runs on the sketch task there.
 6. **Library compatibility:** Arduino libraries that use only Arduino APIs (most I2C/SPI sensor and display libraries, ArduinoJson, ...) work. Libraries that call ESP-IDF directly or need exceptions do not.
 
 ## When things go wrong

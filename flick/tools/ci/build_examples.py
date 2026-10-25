@@ -58,7 +58,11 @@ def readme_order():
 
 
 def all_targets():
-    return sorted(p.parent.name for p in (ROOT / "targets").glob("*/target.json"))
+    """Every target CI can build (a chip with "ci": false needs a toolchain CI doesn't have)."""
+    def ci(tj):
+        chip = json.loads(tj.read_text())["chip"]
+        return json.loads((ROOT / "chips" / chip / "chip.json").read_text()).get("ci", True)
+    return sorted(p.parent.name for p in (ROOT / "targets").glob("*/target.json") if ci(p))
 
 
 def main():

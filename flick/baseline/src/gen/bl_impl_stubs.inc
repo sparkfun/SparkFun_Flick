@@ -76,3 +76,22 @@ extern "C" int bl_impl_espnow_send(const uint8_t *mac, const uint8_t *data, size
 extern "C" int bl_impl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return 0; }
 extern "C" int bl_impl_espnow_send_status(uint8_t *mac) { return -1; }
 #endif /* BL_STUB_ESPNOW */
+
+#if defined(BL_STUB_TEENSY) && BL_STUB_TEENSY
+extern "C" int bl_impl_isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_isr_detach_pin(int pin) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_isr_timer_begin(bl_callback_t fn, void *arg, float period_us) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_isr_timer_update(int h, float period_us) { return BL_ERR_UNSUPPORTED; }
+extern "C" void bl_impl_isr_timer_end(int h) {}
+extern "C" int bl_impl_isr_timer_priority(int h, int priority) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_dma_channel_alloc(void) { return BL_ERR_UNSUPPORTED; }
+extern "C" void bl_impl_dma_channel_free(int channel) {}
+extern "C" int bl_impl_audio_memory(int blocks) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_audio_create(int type, const bl_audio_arg_t *args, int nargs) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_audio_connect(int src, int src_port, int dst, int dst_port) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_audio_disconnect(int connection) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_audio_reconnect(int connection) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret) { return BL_ERR_UNSUPPORTED; }
+extern "C" float bl_impl_audio_stat(int what) { return 0; }
+extern "C" void bl_impl_audio_interrupts(int enable) {}
+#endif /* BL_STUB_TEENSY */

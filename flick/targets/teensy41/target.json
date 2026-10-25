@@ -1,0 +1,7 @@
+{
+    "chip": "imxrt1062",
+    "description": "PJRC Teensy 4.1: i.MX RT1062 at 600 MHz, 8 MB flash, 1 MB RAM, PSRAM pads, microSD (SDIO), Ethernet PHY, USB host",
+    "flash_size": "8MB",
+    "fqbn": "teensy:avr:teensy41:usb=serialmidiaudio,speed=600,opt=o2std",
+    "status": "untested"
+}

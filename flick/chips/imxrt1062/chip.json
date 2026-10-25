@@ -1,0 +1,34 @@
+{
+    "description": "NXP i.MX RT1062 (Cortex-M7 600 MHz, double-precision FPU; no radio)",
+    "baseline_source": "chips/imxrt1062/baseline",
+    "builder": "teensy",
+    "teensy_core": "1.62",
+    "gcc": "arm-none-eabi-gcc",
+    "cflags": [
+        "-mthumb",
+        "-mcpu=cortex-m7",
+        "-mfloat-abi=hard",
+        "-mfpu=fpv5-d16"
+    ],
+    "cflags_note": "The same CPU and float ABI as Teensyduino's build of Baseline.",
+    "ldflags": [
+        "-mthumb",
+        "-mcpu=cortex-m7",
+        "-mfloat-abi=hard",
+        "-mfpu=fpv5-d16",
+        "-Wl,--no-warn-rwx-segments"
+    ],
+    "ldflags_note": "Code and rodata share one address window, so the sketch's one flash segment is RWX by design.",
+    "libs": ["-lc"],
+    "libs_note": "No ROM C library on this chip: newlib supplies memcpy, strlen, ... (the SDK's malloc/printf come first).",
+    "defines": ["-DARDUINO=10812", "-DFLICK_ARCH_IMXRT", "-D__IMXRT1062__"],
+    "defines_note": "Not ARDUINO_ARCH_ESP32 or TEENSYDUINO: libraries would pick code paths for a core the SDK does not have. __IMXRT1062__ for imxrt.h, which sketches may include (Teensy's core folder is last on the include path).",
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": ["sketch_teensy.cpp"],
+    "usb_vids": [
+        "16C0"
+    ],
+    "ci": false,
+    "ci_note": "CI builds in Espressif's ESP-IDF image, which has no Teensyduino: baseline.yml and build_examples.py --out leave these targets out until a job installs it.",
+    "status": "bring-up"
+}

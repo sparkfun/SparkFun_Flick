@@ -12,6 +12,8 @@ The goal of Flick is to reduce the time it takes to compile and upload sketches.
 | ble_serial | 140.2 s | 13.1 s | 7.8 s | **20.9 s** | **0.51 s** | 41x | 563,648 bytes | 1,520 bytes |
 | wifi_http_get | 126.1 s | 15.0 s | 8.6 s | **23.6 s** | **0.59 s** | 40x | 979,008 bytes | 2,660 bytes |
 
+Measured on a SparkFun Thing Plus ESP32-S3 (native USB). On a board with a USB-serial chip, such as the IoT RedBoard - ESP32, Flick's build plus upload takes 0.66–0.71 s for the same four sketches.
+
 How the boards compare (upload speeds, flash left, and what each one can't do): [flick/docs/BOARD_COMPARISON.md](flick/docs/BOARD_COMPARISON.md).
 
 Baseline is not an interpreted language; it's fast machine code all the way down. You just tell the chatbot what you want, it writes the code, compiles it (specifically for Baseline) and loads only the bits that need changing.
@@ -187,4 +189,4 @@ Flick's own code is in the public domain ([the Unlicense](LICENSE)). The Baselin
 
 ## Working on Flick itself
 
-Baseline's source, the ESP-IDF project, the API table and the build scripts are in `flick/` in [the repository](https://github.com/sparkfun/SparkFun_Flick) (the kit leaves them out). Start with [flick/TESTING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/TESTING.md); releases are described in [flick/docs/RELEASING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/RELEASING.md).
+Baseline's source, the ESP-IDF project, the API table and the build scripts are in `flick/` in [the repository](https://github.com/sparkfun/SparkFun_Flick) (the kit leaves them out). Start with [flick/targets/README.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/targets/README.md) (chips and boards), [flick/docs/API.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/API.md) (the API table) and [flick/TESTING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/TESTING.md); releases are described in [flick/docs/RELEASING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/RELEASING.md).

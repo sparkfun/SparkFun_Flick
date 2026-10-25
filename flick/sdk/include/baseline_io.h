@@ -8,6 +8,11 @@
  * but latency is a few milliseconds rather than microseconds. IRAM_ATTR is
  * accepted and ignored. noInterrupts()/interrupts() are not needed (handlers
  * never preempt sketch code) and do nothing.
+ *
+ * On chips with BL_TARGET_SKETCH_ISR (Teensy 4.x) handlers run in interrupt
+ * context instead, as on a plain Teensy: microsecond latency, but keep them
+ * short, mark shared variables volatile, and use noInterrupts()/interrupts()
+ * around code that reads several of them.
  */
 #ifndef BASELINE_IO_H
 #define BASELINE_IO_H
@@ -31,8 +36,13 @@
 void attachInterrupt(uint8_t pin, void (*handler)(void), int mode);
 void attachInterruptArg(uint8_t pin, void (*handler)(void *), void *arg, int mode);
 void detachInterrupt(uint8_t pin);
+#ifdef BL_TARGET_SKETCH_ISR
+static inline void noInterrupts() { __asm__ volatile("cpsid i" ::: "memory"); }
+static inline void interrupts() { __asm__ volatile("cpsie i" ::: "memory"); }
+#else
 static inline void noInterrupts() {}
 static inline void interrupts() {}
+#endif
 
 /* ---------------- SPI ---------------- */
 
@@ -126,7 +136,7 @@ extern SPIClass SPI;
 
 class HardwareSerial : public Stream {
 public:
-    explicit HardwareSerial(int port) : port_(port) {}
+    constexpr explicit HardwareSerial(int port) : port_(port) {}
     /* Extra Arduino arguments (invert, timeout, rx threshold) are accepted and ignored. */
     void begin(unsigned long baud, uint32_t config = SERIAL_8N1, int8_t rxPin = -1, int8_t txPin = -1,
                bool invert = false, unsigned long timeout_ms = 20000UL, uint8_t rxfifo_full_thrhd = 120)

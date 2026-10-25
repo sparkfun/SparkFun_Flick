@@ -7,6 +7,8 @@
 # Output: dist/<target>/baseline-<target>.bin and .bsu
 set -euo pipefail
 
+# Keep in step with "core_version" in chips/*/chip.json (and the image tag with
+# "idf_version"): flick warns when a build uses other versions.
 ARDUINO_ESP32_VERSION="${ARDUINO_ESP32_VERSION:-3.3.11}"
 
 # Arduino-ESP32 as an ESP-IDF component: flick takes the core and the chip's

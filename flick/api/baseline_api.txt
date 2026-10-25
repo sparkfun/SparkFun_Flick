@@ -385,3 +385,24 @@ abi_major = 1
 7 | int         | baseline_update_mode | void                                 | bl_baseline_update_mode | How Baseline updates over the air: BL_UPDATE_DUAL (two Baseline slots; sketch and files kept), BL_UPDATE_STAGED (4 MB flash; each update erases the sketch and LittleFS) or BL_UPDATE_NONE.
 7 | int         | ota_pull_sketch   | const char *url                            | bl_ota_pull_sketch | Download a sketch (.flick) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure.
 7 | int         | ota_pull_baseline | const char *url, const char *sketch_url    | bl_ota_pull_baseline | Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure.
+
+# ======================= ABI 1.8 ==========================================
+# ---- Interrupt handlers in the sketch (chips with BL_TARGET_SKETCH_ISR: i.MX RT1062).
+# fn runs in interrupt context, so keep it short. Elsewhere BL_ERR_UNSUPPORTED (attachInterrupt stays deferred there).
+8 | int         | isr_attach_pin    | int pin, int mode, bl_callback_t fn, void *arg | bl_isr_attach_pin | Call fn(arg) from the pin's interrupt. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH.
+8 | int         | isr_detach_pin    | int pin                                    | bl_isr_detach_pin    | Stop calling it.
+8 | int         | isr_timer_begin   | bl_callback_t fn, void *arg, float period_us | bl_isr_timer_begin | Periodic timer (IntervalTimer): call fn(arg) every period_us from its interrupt. Returns a handle or BL_ERR_* (BL_ERR_NO_MEM: all timers in use).
+8 | int         | isr_timer_update  | int h, float period_us                     | bl_isr_timer_update  | New period, from the next interval on.
+8 | void        | isr_timer_end     | int h                                      | bl_isr_timer_end     | Stop the timer and free it.
+8 | int         | isr_timer_priority | int h, int priority                       | bl_isr_timer_priority | Interrupt priority, 0 (highest) to 255; the default is 128.
+8 | int         | dma_channel_alloc | void                                       | bl_dma_channel_alloc | Reserve a DMA channel for the sketch (i.MX RT eDMA, 0-31) and turn the DMA engine on. Returns the channel or BL_ERR_NO_MEM.
+8 | void        | dma_channel_free  | int channel                                | bl_dma_channel_free  | Give the channel back.
+# ---- Teensy Audio library (sdk/include/baseline_audio.h, generated from api/audio_api.txt). The objects live in Baseline; sketches hold handles.
+8 | int         | audio_memory      | int blocks                                 | bl_audio_memory      | AudioMemory(): blocks of 128 samples for the audio graph. The first call allocates; later calls return BL_OK if no more are asked for, else BL_ERR_STATE.
+8 | int         | audio_create      | int type, const bl_audio_arg_t *args, int nargs | bl_audio_create | New audio object of type BL_AUDIO_T_* (constructor arguments in args). Returns a handle or BL_ERR_*.
+8 | int         | audio_connect     | int src, int src_port, int dst, int dst_port | bl_audio_connect   | AudioConnection from output src_port of src to input dst_port of dst. Returns a connection handle or BL_ERR_*.
+8 | int         | audio_disconnect  | int connection                             | bl_audio_disconnect  | Remove a connection (it can be made again with audio_reconnect).
+8 | int         | audio_reconnect   | int connection                             | bl_audio_reconnect   | Make a removed connection again.
+8 | int         | audio_call        | int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret | bl_audio_call | Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*.
+8 | float       | audio_stat        | int what                                   | bl_audio_stat        | BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0.
+8 | void        | audio_interrupts  | int enable                                 | bl_audio_interrupts  | AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates.

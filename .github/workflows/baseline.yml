@@ -42,7 +42,7 @@ jobs:
       - uses: actions/checkout@v4
       - id: list
         run: |
-          echo "list=$(python3 -c 'import json, pathlib; print(json.dumps(sorted(p.parent.name for p in pathlib.Path("flick/targets").glob("*/target.json"))))')" >> "$GITHUB_OUTPUT"
+          echo "list=$(python3 -c 'import json, pathlib; c=lambda t: json.loads(pathlib.Path("flick/chips", json.loads(t.read_text())["chip"], "chip.json").read_text()).get("ci", True); print(json.dumps(sorted(p.parent.name for p in pathlib.Path("flick/targets").glob("*/target.json") if c(p))))')" >> "$GITHUB_OUTPUT"
 
   build:
     needs: targets

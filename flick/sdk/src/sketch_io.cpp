@@ -22,6 +22,22 @@ struct PinHandler {
 };
 static PinHandler s_handlers[MAX_PINS];
 
+#ifdef BL_TARGET_SKETCH_ISR
+/* Handlers run in interrupt context: Baseline calls fn(arg) straight from the pin's ISR. */
+static void call_plain(void *fn)
+{
+    ((void (*)(void))fn)();
+}
+
+static void attach(uint8_t pin, PinHandler h, int mode)
+{
+    if (h.plain) {
+        bl_isr_attach_pin(pin, mode, call_plain, (void *)h.plain);
+    } else {
+        bl_isr_attach_pin(pin, mode, h.with_arg, h.arg);
+    }
+}
+#else
 /* Runs on the sketch task: call the handler for every pin that fired. */
 static void interrupt_pump()
 {
@@ -48,6 +64,7 @@ static void attach(uint8_t pin, PinHandler h, int mode)
     bl_sketch_add_pump(interrupt_pump);
     bl_gpio_attach_interrupt(pin, mode);
 }
+#endif
 
 void attachInterrupt(uint8_t pin, void (*handler)(void), int mode)
 {
@@ -61,6 +78,10 @@ void attachInterruptArg(uint8_t pin, void (*handler)(void *), void *arg, int mod
 
 void detachInterrupt(uint8_t pin)
 {
+#ifdef BL_TARGET_SKETCH_ISR
+    bl_isr_detach_pin(pin);
+    return;
+#endif
     bl_gpio_detach_interrupt(pin);
     if (pin < MAX_PINS) {
         s_handlers[pin] = PinHandler{};

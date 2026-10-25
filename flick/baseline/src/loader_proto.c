@@ -4,6 +4,8 @@
 #include <string.h>
 #include "sdkconfig.h"
 #include "esp_system.h"
+#include "esp_idf_version.h"
+#include "esp_arduino_version.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -114,11 +116,12 @@ static void cmd_info(void)
         strcpy(crash, "-");
     }
     OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d update=%s "
-       "bpart=%s crash=\"%s\"",
+       "bpart=%s core=%s idf=%d.%d.%d crash=\"%s\"",
        BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
        (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), bl_update_mode_name(),
-       esp_ota_get_running_partition()->label, crash);
+       esp_ota_get_running_partition()->label, ESP_ARDUINO_VERSION_STR,
+       ESP_IDF_VERSION_MAJOR, ESP_IDF_VERSION_MINOR, ESP_IDF_VERSION_PATCH, crash);
 }
 
 static void cmd_begin(char *args)

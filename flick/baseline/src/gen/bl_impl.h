@@ -272,6 +272,22 @@ int bl_impl_wifi_event_take(void);
 int bl_impl_baseline_update_mode(void);
 int bl_impl_ota_pull_sketch(const char *url);
 int bl_impl_ota_pull_baseline(const char *url, const char *sketch_url);
+int bl_impl_isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg);
+int bl_impl_isr_detach_pin(int pin);
+int bl_impl_isr_timer_begin(bl_callback_t fn, void *arg, float period_us);
+int bl_impl_isr_timer_update(int h, float period_us);
+void bl_impl_isr_timer_end(int h);
+int bl_impl_isr_timer_priority(int h, int priority);
+int bl_impl_dma_channel_alloc(void);
+void bl_impl_dma_channel_free(int channel);
+int bl_impl_audio_memory(int blocks);
+int bl_impl_audio_create(int type, const bl_audio_arg_t *args, int nargs);
+int bl_impl_audio_connect(int src, int src_port, int dst, int dst_port);
+int bl_impl_audio_disconnect(int connection);
+int bl_impl_audio_reconnect(int connection);
+int bl_impl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret);
+float bl_impl_audio_stat(int what);
+void bl_impl_audio_interrupts(int enable);
 
 #ifdef __cplusplus
 }

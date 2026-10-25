@@ -22,8 +22,12 @@ jobs:
         run: |
           python flick/tools/gen_api.py
           git diff --exit-code -- flick/sdk/include/baseline_api.h flick/baseline/src/gen flick/docs/API.md
+      - name: Generated Audio files match api/audio_api.txt
+        run: |
+          python flick/tools/gen_audio.py
+          git diff --exit-code -- flick/sdk/include/baseline_audio.h flick/chips/imxrt1062/baseline/bl_audio_dispatch.inc
       - name: Python tools compile
-        run: python -m py_compile flick.py flick/tools/flick.py flick/tools/gen_api.py flick/tools/make_site.py flick/tools/ci/build_examples.py
+        run: python -m py_compile flick.py flick/tools/flick.py flick/tools/gen_api.py flick/tools/gen_audio.py flick/tools/make_site.py flick/tools/ci/build_examples.py
 
   examples:
     runs-on: ubuntu-latest

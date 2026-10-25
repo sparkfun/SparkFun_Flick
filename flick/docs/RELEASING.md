@@ -43,7 +43,7 @@ The kit contains no Baseline source and needs no ESP-IDF.
    ```
 
 3. **`.github/workflows/release.yml` does the rest:**
-   - builds Baseline for every target (`baseline.yml`: ESP-IDF 5.5.5 Docker image + Arduino-ESP32 3.3.11);
+   - builds Baseline for every target (`baseline.yml`: ESP-IDF 5.5.5 Docker image + Arduino-ESP32 3.3.11). To move to a new core or ESP-IDF, change `core_version`/`idf_version` in every `chips/*/chip.json`, `ARDUINO_ESP32_VERSION` in `tools/ci/build_baseline.sh` and the `espressif/idf` image tag in the workflows together, and bump `BASELINE_VERSION`: the board reports both versions in `INFO` (`core=`, `idf=`);
    - makes the kit (`flick package`);
    - builds every example for every board for the example runner (`tools/ci/build_examples.py --out dist/examples`);
    - creates the GitHub release (a pre-release while the version is 0.x);
@@ -62,7 +62,7 @@ The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow
 
 1. **Push `main` and let CI pass:** `ci.yml` (examples, kit) and `baseline.yml` (every Baseline, in the ESP-IDF Docker image).
 2. **Look at the page before anyone else does:** Actions > Release > Run workflow on `main`, then download the `download-page` artifact, serve it with `python -m http.server -d <folder>` and try Flash and Run on `localhost` (Web Serial works there).
-3. **Make the repository public:** Settings > General > Danger Zone > Change visibility. Everything in the history becomes public.
+3. **Make the repository public:** Settings > General > Danger Zone > Change visibility. Everything in the history becomes public, so check it first: no secrets, private paths or private network addresses.
 4. **Turn on Pages:** Settings > Pages > Source: **GitHub Actions**.
 5. **Release:** raise `BASELINE_VERSION` (`baseline/src/bl_main.h`), commit, tag `v<version>` and push the tag. The workflow builds everything, makes the GitHub release and deploys https://sparkfun.github.io/SparkFun_Flick/ (`WEB_PAGE` in `tools/flick.py`; flick's error messages point there).
 6. **Check the live page:** Flash a board, Run `01_hello_flick` on a native-USB board and on a CH340 board, download the kit and build from it.

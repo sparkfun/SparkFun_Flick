@@ -129,7 +129,11 @@ static void check_storage()
     CHECK("LittleFS mount (format if needed)", mounted);
     if (mounted) {
         Serial.printf("LittleFS total %u used %u\n", (unsigned)LittleFS.totalBytes(), (unsigned)LittleFS.usedBytes());
+#ifdef BL_BOARD_FS_SIZE     // a board that sets its LittleFS size (Teensy 4.x)
+        CHECK("LittleFS has the board's size", LittleFS.totalBytes() >= BL_BOARD_FS_SIZE * 9 / 10);
+#else
         CHECK("LittleFS has over 1 MB", LittleFS.totalBytes() > 1000000);
+#endif
         File f = LittleFS.open("/t.txt", FILE_WRITE);
         f.print("baseline selftest");
         f.close();

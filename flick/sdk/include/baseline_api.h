@@ -5,7 +5,7 @@
 #include "baseline_types.h"
 
 #define BL_ABI_MAJOR 1
-#define BL_ABI_MINOR 7
+#define BL_ABI_MINOR 8
 
 typedef struct bl_api {
     uint16_t abi_major;
@@ -289,6 +289,24 @@ typedef struct bl_api {
     int (*baseline_update_mode)(void);
     int (*ota_pull_sketch)(const char *url);
     int (*ota_pull_baseline)(const char *url, const char *sketch_url);
+
+    /* ---- added in 1.8 ---- */
+    int (*isr_attach_pin)(int pin, int mode, bl_callback_t fn, void *arg);
+    int (*isr_detach_pin)(int pin);
+    int (*isr_timer_begin)(bl_callback_t fn, void *arg, float period_us);
+    int (*isr_timer_update)(int h, float period_us);
+    void (*isr_timer_end)(int h);
+    int (*isr_timer_priority)(int h, int priority);
+    int (*dma_channel_alloc)(void);
+    void (*dma_channel_free)(int channel);
+    int (*audio_memory)(int blocks);
+    int (*audio_create)(int type, const bl_audio_arg_t *args, int nargs);
+    int (*audio_connect)(int src, int src_port, int dst, int dst_port);
+    int (*audio_disconnect)(int connection);
+    int (*audio_reconnect)(int connection);
+    int (*audio_call)(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret);
+    float (*audio_stat)(int what);
+    void (*audio_interrupts)(int enable);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -815,6 +833,38 @@ static inline int bl_baseline_update_mode(void) { return BL->baseline_update_mod
 static inline int bl_ota_pull_sketch(const char *url) { return BL->ota_pull_sketch(url); }
 /* Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure. */
 static inline int bl_ota_pull_baseline(const char *url, const char *sketch_url) { return BL->ota_pull_baseline(url, sketch_url); }
+/* Call fn(arg) from the pin's interrupt. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH. */
+static inline int bl_isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg) { return BL->isr_attach_pin(pin, mode, fn, arg); }
+/* Stop calling it. */
+static inline int bl_isr_detach_pin(int pin) { return BL->isr_detach_pin(pin); }
+/* Periodic timer (IntervalTimer): call fn(arg) every period_us from its interrupt. Returns a handle or BL_ERR_* (BL_ERR_NO_MEM: all timers in use). */
+static inline int bl_isr_timer_begin(bl_callback_t fn, void *arg, float period_us) { return BL->isr_timer_begin(fn, arg, period_us); }
+/* New period, from the next interval on. */
+static inline int bl_isr_timer_update(int h, float period_us) { return BL->isr_timer_update(h, period_us); }
+/* Stop the timer and free it. */
+static inline void bl_isr_timer_end(int h) { BL->isr_timer_end(h); }
+/* Interrupt priority, 0 (highest) to 255; the default is 128. */
+static inline int bl_isr_timer_priority(int h, int priority) { return BL->isr_timer_priority(h, priority); }
+/* Reserve a DMA channel for the sketch (i.MX RT eDMA, 0-31) and turn the DMA engine on. Returns the channel or BL_ERR_NO_MEM. */
+static inline int bl_dma_channel_alloc(void) { return BL->dma_channel_alloc(); }
+/* Give the channel back. */
+static inline void bl_dma_channel_free(int channel) { BL->dma_channel_free(channel); }
+/* AudioMemory(): blocks of 128 samples for the audio graph. The first call allocates; later calls return BL_OK if no more are asked for, else BL_ERR_STATE. */
+static inline int bl_audio_memory(int blocks) { return BL->audio_memory(blocks); }
+/* New audio object of type BL_AUDIO_T_* (constructor arguments in args). Returns a handle or BL_ERR_*. */
+static inline int bl_audio_create(int type, const bl_audio_arg_t *args, int nargs) { return BL->audio_create(type, args, nargs); }
+/* AudioConnection from output src_port of src to input dst_port of dst. Returns a connection handle or BL_ERR_*. */
+static inline int bl_audio_connect(int src, int src_port, int dst, int dst_port) { return BL->audio_connect(src, src_port, dst, dst_port); }
+/* Remove a connection (it can be made again with audio_reconnect). */
+static inline int bl_audio_disconnect(int connection) { return BL->audio_disconnect(connection); }
+/* Make a removed connection again. */
+static inline int bl_audio_reconnect(int connection) { return BL->audio_reconnect(connection); }
+/* Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*. */
+static inline int bl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret) { return BL->audio_call(h, method, args, nargs, ret); }
+/* BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0. */
+static inline float bl_audio_stat(int what) { return BL->audio_stat(what); }
+/* AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates. */
+static inline void bl_audio_interrupts(int enable) { BL->audio_interrupts(enable); }
 #endif /* BASELINE_FIRMWARE */
 
 #endif /* BASELINE_API_H */

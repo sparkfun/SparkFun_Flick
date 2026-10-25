@@ -1,0 +1,298 @@
+# Teensy Audio library objects in Baseline (ABI 1.8, i.MX RT1062 only).
+#
+# Run `python flick/tools/gen_audio.py` after editing. It regenerates:
+#   sdk/include/baseline_audio.h                   sketch-side proxy classes (same names and
+#                                                  methods as the Audio library, so code from
+#                                                  the Audio System Design Tool compiles)
+#   chips/imxrt1062/baseline/bl_audio_dispatch.inc Baseline's constructor and method switch
+#
+# The numbers are part of the ABI, like api/baseline_api.txt:
+#   * never renumber or remove a class or a method, never change a signature;
+#   * new classes get a new type number; new methods go at the end of their class.
+#
+# Format:
+#   class <Name> | <type number> | stream|control | <constructor params or -> | <#if condition or ->
+#   <method number> | <return type> | <name> | <params>
+# Params use the Audio library's C++ types. "enum:T" is an int the Baseline casts
+# to T; defaults ("float q = 0.7071f") are applied in the sketch.
+# Every stream object also answers processorUsage(), processorUsageMax() and
+# processorUsageMaxReset() (methods 1000-1002, handled by Baseline).
+
+# ---- inputs and outputs ----
+class AudioOutputI2S | 1 | stream | - | -
+class AudioInputI2S | 2 | stream | - | -
+class AudioOutputMQS | 3 | stream | - | -
+class AudioInputAnalog | 4 | stream | uint8_t pin = 16 | -
+class AudioOutputUSB | 5 | stream | - | AUDIO_INTERFACE
+class AudioInputUSB | 6 | stream | - | AUDIO_INTERFACE
+1 | float | volume | void
+
+# ---- synthesis ----
+class AudioSynthWaveform | 10 | stream | - | -
+1 | void | frequency | float freq
+2 | void | phase | float angle
+3 | void | amplitude | float n
+4 | void | offset | float n
+5 | void | pulseWidth | float n
+6 | void | begin | short t_type
+7 | void | begin | float t_amp, float t_freq, short t_type
+8 | void | arbitraryWaveform | const int16_t *data, float maxFreq
+
+class AudioSynthWaveformModulated | 11 | stream | - | -
+1 | void | frequency | float freq
+2 | void | amplitude | float n
+3 | void | offset | float n
+4 | void | begin | short t_type
+5 | void | begin | float t_amp, float t_freq, short t_type
+6 | void | arbitraryWaveform | const int16_t *data, float maxFreq
+7 | void | frequencyModulation | float octaves
+8 | void | phaseModulation | float degrees
+
+class AudioSynthWaveformSine | 12 | stream | - | -
+1 | void | frequency | float freq
+2 | void | phase | float angle
+3 | void | amplitude | float n
+
+class AudioSynthWaveformSineHires | 13 | stream | - | -
+1 | void | frequency | float freq
+2 | void | phase | float angle
+3 | void | amplitude | float n
+
+class AudioSynthWaveformSineModulated | 14 | stream | - | -
+1 | void | frequency | float freq
+2 | void | phase | float angle
+3 | void | amplitude | float n
+
+class AudioSynthWaveformDc | 15 | stream | - | -
+1 | void | amplitude | float n
+2 | void | amplitude | float n, float milliseconds
+3 | float | read | void
+
+class AudioSynthNoiseWhite | 16 | stream | - | -
+1 | void | amplitude | float n
+
+class AudioSynthNoisePink | 17 | stream | - | -
+1 | void | amplitude | float n
+
+class AudioSynthSimpleDrum | 18 | stream | - | -
+1 | void | noteOn | void
+2 | void | frequency | float freq
+3 | void | length | int32_t milliseconds
+4 | void | secondMix | float level
+5 | void | pitchMod | float depth
+
+class AudioSynthKarplusStrong | 19 | stream | - | -
+1 | void | noteOn | float frequency, float velocity
+2 | void | noteOff | float velocity
+
+class AudioSynthToneSweep | 20 | stream | - | -
+1 | bool | play | float t_amp, int t_lo, int t_hi, float t_time
+2 | bool | isPlaying | void
+3 | float | read | void
+
+# ---- effects ----
+class AudioEffectEnvelope | 30 | stream | - | -
+1 | void | noteOn | void
+2 | void | noteOff | void
+3 | void | delay | float milliseconds
+4 | void | attack | float milliseconds
+5 | void | hold | float milliseconds
+6 | void | decay | float milliseconds
+7 | void | sustain | float level
+8 | void | release | float milliseconds
+9 | void | releaseNoteOn | float milliseconds
+10 | bool | isActive | void
+11 | bool | isSustain | void
+
+class AudioEffectDelay | 31 | stream | - | -
+1 | void | delay | uint8_t channel, float milliseconds
+2 | void | disable | uint8_t channel
+
+class AudioEffectFreeverb | 32 | stream | - | -
+1 | void | roomsize | float n
+2 | void | damping | float n
+
+class AudioEffectFreeverbStereo | 33 | stream | - | -
+1 | void | roomsize | float n
+2 | void | damping | float n
+
+class AudioEffectBitcrusher | 34 | stream | - | -
+1 | void | bits | uint8_t b
+2 | void | sampleRate | float hz
+
+class AudioEffectFade | 35 | stream | - | -
+1 | void | fadeIn | uint32_t milliseconds
+2 | void | fadeOut | uint32_t milliseconds
+
+class AudioEffectMultiply | 36 | stream | - | -
+
+class AudioEffectChorus | 37 | stream | - | -
+1 | bool | begin | short *delayline, int delay_length, int n_chorus
+2 | void | voices | int n_chorus
+
+class AudioEffectFlange | 38 | stream | - | -
+1 | bool | begin | short *delayline, int d_length, int delay_offset, int d_depth, float delay_rate
+2 | bool | voices | int delay_offset, int d_depth, float delay_rate
+
+class AudioEffectGranular | 39 | stream | - | -
+1 | void | begin | int16_t *sample_bank_def, int16_t max_len_def
+2 | void | setSpeed | float ratio
+3 | void | beginFreeze | float grain_length
+4 | void | beginPitchShift | float grain_length
+5 | void | stop | void
+
+# ---- mixing ----
+class AudioMixer4 | 50 | stream | - | -
+1 | void | gain | unsigned int channel, float gain
+
+class AudioAmplifier | 51 | stream | - | -
+1 | void | gain | float n
+
+# ---- filters ----
+class AudioFilterBiquad | 60 | stream | - | -
+1 | void | setCoefficients | uint32_t stage, const int *coefficients
+2 | void | setCoefficients | uint32_t stage, const double *coefficients
+3 | void | setLowpass | uint32_t stage, float frequency, float q = 0.7071f
+4 | void | setHighpass | uint32_t stage, float frequency, float q = 0.7071f
+5 | void | setBandpass | uint32_t stage, float frequency, float q = 1.0f
+6 | void | setNotch | uint32_t stage, float frequency, float q = 1.0f
+7 | void | setLowShelf | uint32_t stage, float frequency, float gain, float slope = 1.0f
+8 | void | setHighShelf | uint32_t stage, float frequency, float gain, float slope = 1.0f
+
+class AudioFilterStateVariable | 61 | stream | - | -
+1 | void | frequency | float freq
+2 | void | resonance | float q
+3 | void | octaveControl | float n
+
+class AudioFilterLadder | 62 | stream | - | -
+1 | void | frequency | float FC
+2 | void | resonance | float reson
+3 | void | octaveControl | float octaves
+4 | void | passbandGain | float passbandgain
+5 | void | inputDrive | float drv
+6 | void | interpolationMethod | enum:AudioFilterLadderInterpolation im
+
+class AudioFilterFIR | 63 | stream | - | -
+1 | void | begin | const short *cp, int n_coeffs
+2 | void | end | void
+
+# ---- analysis ----
+class AudioAnalyzePeak | 70 | stream | - | -
+1 | bool | available | void
+2 | float | read | void
+3 | float | readPeakToPeak | void
+
+class AudioAnalyzeRMS | 71 | stream | - | -
+1 | bool | available | void
+2 | float | read | void
+
+class AudioAnalyzeFFT256 | 72 | stream | - | -
+1 | bool | available | void
+2 | float | read | unsigned int binNumber
+3 | float | read | unsigned int binFirst, unsigned int binLast
+4 | void | averageTogether | uint8_t n
+
+class AudioAnalyzeFFT1024 | 73 | stream | - | -
+1 | bool | available | void
+2 | float | read | unsigned int binNumber
+3 | float | read | unsigned int binFirst, unsigned int binLast
+4 | void | averageTogether | uint8_t n
+
+class AudioAnalyzeToneDetect | 74 | stream | - | -
+1 | void | frequency | float freq, uint16_t cycles = 10
+2 | bool | available | void
+3 | float | read | void
+4 | void | threshold | float level
+
+class AudioAnalyzeNoteFrequency | 75 | stream | - | -
+1 | void | begin | float threshold
+2 | void | threshold | float p
+3 | bool | available | void
+4 | float | read | void
+5 | float | probability | void
+
+# ---- playing and recording ----
+class AudioPlaySdWav | 80 | stream | - | -
+1 | bool | play | const char *filename
+2 | void | togglePlayPause | void
+3 | void | stop | void
+4 | bool | isPlaying | void
+5 | bool | isPaused | void
+6 | bool | isStopped | void
+7 | uint32_t | positionMillis | void
+8 | uint32_t | lengthMillis | void
+
+class AudioPlaySdRaw | 81 | stream | - | -
+1 | bool | play | const char *filename
+2 | void | stop | void
+3 | bool | isPlaying | void
+4 | uint32_t | positionMillis | void
+5 | uint32_t | lengthMillis | void
+
+class AudioPlayMemory | 82 | stream | - | -
+1 | void | play | const unsigned int *data
+2 | void | stop | void
+3 | bool | isPlaying | void
+4 | uint32_t | positionMillis | void
+5 | uint32_t | lengthMillis | void
+
+class AudioPlayQueue | 83 | stream | - | -
+1 | uint32_t | play | int16_t data
+2 | uint32_t | play | const int16_t *data, uint32_t len
+3 | bool | available | void
+4 | int16_t * | getBuffer | void
+5 | uint32_t | playBuffer | void
+6 | void | setMaxBuffers | uint8_t n
+7 | void | setBehaviour | enum:AudioPlayQueue::behaviour_e behave
+
+class AudioRecordQueue | 84 | stream | - | -
+1 | void | begin | void
+2 | int | available | void
+3 | void | clear | void
+4 | int16_t * | readBuffer | void
+5 | void | freeBuffer | void
+6 | void | end | void
+
+# ---- control ----
+class AudioControlSGTL5000 | 100 | control | - | -
+1 | void | setAddress | uint8_t level
+2 | bool | enable | void
+3 | bool | disable | void
+4 | bool | volume | float n
+5 | bool | volume | float left, float right
+6 | bool | inputLevel | float n
+7 | bool | muteHeadphone | void
+8 | bool | unmuteHeadphone | void
+9 | bool | muteLineout | void
+10 | bool | unmuteLineout | void
+11 | bool | inputSelect | int n
+12 | bool | headphoneSelect | int n
+13 | bool | micGain | unsigned int dB
+14 | bool | lineInLevel | uint8_t n
+15 | bool | lineInLevel | uint8_t left, uint8_t right
+16 | unsigned short | lineOutLevel | uint8_t n
+17 | unsigned short | lineOutLevel | uint8_t left, uint8_t right
+18 | unsigned short | dacVolume | float n
+19 | unsigned short | dacVolume | float left, float right
+20 | bool | dacVolumeRamp | void
+21 | bool | dacVolumeRampLinear | void
+22 | bool | dacVolumeRampDisable | void
+23 | unsigned short | adcHighPassFilterEnable | void
+24 | unsigned short | adcHighPassFilterFreeze | void
+25 | unsigned short | adcHighPassFilterDisable | void
+26 | unsigned short | audioPreProcessorEnable | void
+27 | unsigned short | audioPostProcessorEnable | void
+28 | unsigned short | audioProcessorDisable | void
+29 | unsigned short | eqSelect | uint8_t n
+30 | unsigned short | eqBand | uint8_t bandNum, float n
+31 | void | eqBands | float bass, float mid_bass, float midrange, float mid_treble, float treble
+32 | void | eqBands | float bass, float treble
+33 | unsigned short | autoVolumeControl | uint8_t maxGain, uint8_t lbiResponse, uint8_t hardLimit, float threshold, float attack, float decay
+34 | unsigned short | autoVolumeEnable | void
+35 | unsigned short | autoVolumeDisable | void
+36 | unsigned short | enhanceBass | float lr_lev, float bass_lev
+37 | unsigned short | enhanceBassEnable | void
+38 | unsigned short | enhanceBassDisable | void
+39 | unsigned short | surroundSound | uint8_t width
+40 | unsigned short | surroundSoundEnable | void
+41 | unsigned short | surroundSoundDisable | void

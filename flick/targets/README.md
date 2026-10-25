@@ -41,6 +41,8 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `qwiic_pocket_esp32c6` | esp32c6 | SparkFun Qwiic Pocket Development Board - ESP32-C6 | not run on hardware |
 | `thing_plus_esp32c6` | esp32c6 | SparkFun Thing Plus - ESP32-C6 (16 MB flash) | tested: `flick test` 31/31 (with WiFi, microSD), RGB LED by eye |
 | `thing_plus_esp32c5` | esp32c5 | SparkFun Thing Plus - ESP32-C5 | not run on hardware |
+| `teensy40` | imxrt1062 | PJRC Teensy 4.0 (Baseline built with Teensyduino, `chips/imxrt1062/baseline`) | tested: `flick test` 24/0/5, sketch interrupts 7/7, Audio 8/8 (2026-10-24) |
+| `teensy41` | imxrt1062 | PJRC Teensy 4.1 (8 MB flash, PSRAM pads, SDIO microSD) | builds; not run on hardware |
 
 The classic ESP32 targets need chip revision 3.0 or later (`esptool flash-id` shows it).
 

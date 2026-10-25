@@ -29,6 +29,8 @@ python flick.py upload tools/tests/led_check     # LEDs, by eye: red, green, blu
 | `qwiic_pocket_esp32c6` | [Qwiic Pocket - ESP32-C6](https://www.sparkfun.com/sparkfun-qwiic-pocket-development-board-esp32-c6.html) | ESP32-C6FH4 (0.1), 4 MB embedded, none | 2026-10-22 | ✅ 30 passed, 0 failed, 3 skipped | ✅ blue (GPIO 23) | **Fully tested** |
 | `thing_plus_esp32s3` | [Thing Plus - ESP32-S3](https://www.sparkfun.com/sparkfun-thing-plus-esp32-s3.html) | ESP32-S3, 4 MB, 2 MB | 2026-10-21 | ⬜ (earlier selftest 21/21, before `flick test` existed) | ⬜ | Needs `flick test` on ABI 1.6 |
 | `thing_plus_esp32` | [Thing Plus - ESP32 WROOM (USB-C)](https://www.sparkfun.com/sparkfun-thing-plus-esp32-wroom-usb-c.html) ("Thing Plus C") | ESP32-D0WD-V3 (3.0), 16 MB, none | 2026-10-21 | ⬜ (earlier checks with the Arduino-built Baseline) | ⬜ | Needs `flick test` on ABI 1.6 |
+| `teensy40` | [Teensy 4.0](https://www.pjrc.com/store/teensy40.html) (PJRC) | i.MX RT1062, 2 MB, none | 2026-10-24 | ✅ 24 passed, 0 failed, 5 skipped; `tools/tests/teensy_isr` 7/7 (sketch interrupt handlers), `tools/tests/teensy_audio` 8/8 (Audio library, no shield) | ✅ LED (pin 13) | **Tested**: first non-ESP chip; USB Serial+MIDI+Audio |
+| `teensy41` | [Teensy 4.1](https://www.pjrc.com/store/teensy41.html) (PJRC) | i.MX RT1062, 8 MB, PSRAM pads | - | ⬜ Baseline and test sketches build | ⬜ | Not run on hardware |
 | `rtk_postcard` | [RTK Postcard](https://www.sparkfun.com/sparkfun-rtk-postcard.html) | ESP32-PICO-V3-02 (3.1), 8 MB, 2 MB | 2026-10-23 | ✅ 34 passed, 0 failed, 3 skipped (2 of 3 runs; one NTP time-out); 2 MB PSRAM; LG290P GNSS on `Serial1` | 👀 STAT (GPIO 0) | **Tested**; LED pending; pins corrected (issue 18) |
 
 ## Features by board
@@ -84,7 +86,7 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 
 | Test | IoT RedBoard (dual, 16 MB) | Pro Micro C3 (staged, 4 MB) | Thing Plus C6 (dual, 16 MB) | Qwiic Pocket C6 (staged, 4 MB) |
 |---|---|---|---|---|
-| Baseline push over USB (`flick baseline update -p`) | ✅ 2.1 MB in 120 s; sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased | ✅ 2.1 MB in 23 s (native USB) | ✅ 1.28 MB in 15 s |
+| Baseline push over USB (`flick baseline update -p`) | ✅ 2.1 MB in 35 s with Baseline 0.3.0 (120 s with 0.2); sketch kept, slot switched | ✅ 1.26 MB in 14 s; restarts into update mode first; sketch and LittleFS erased | ✅ 2.1 MB in 23 s (native USB) | ✅ 1.28 MB in 15 s |
 | Baseline push over WiFi (`--host`) | ✅ 45 s (16 lines in flight; 141 s one at a time) | ✅ 23 s; update mode reconnects to WiFi and reopens the OTA port | ⬜ | ✅ 30 s, after the fix in issue 16 |
 | A different Baseline really installed | (same version; the slot switch shows it) | ✅ `0.1.0-otatest`, then `0.1.1-test` reported by `INFO` | ✅ `0.1.1-test` in `baseline_1` | ✅ `0.1.1-test`, then back to 0.1.0 |
 | Rollback: reset before the new Baseline confirms itself | ✅ 3 of 3 back to the old slot | (one slot: n/a) | ⬜ | (one slot: n/a) |

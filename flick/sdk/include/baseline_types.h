@@ -64,6 +64,22 @@
 /* ---- Callbacks run synchronously on the sketch task ---- */
 typedef void (*bl_callback_t)(void *arg);
 
+/* An argument or result of bl_audio_create()/bl_audio_call() (ABI 1.8):
+ * which member is used is fixed by the method (baseline_audio.h). */
+typedef union {
+    int32_t i;
+    float f;
+    const void *p;
+} bl_audio_arg_t;
+
+/* bl_audio_stat() */
+#define BL_AUDIO_STAT_CPU               1   /* AudioProcessorUsage(), % */
+#define BL_AUDIO_STAT_CPU_MAX           2   /* AudioProcessorUsageMax() */
+#define BL_AUDIO_STAT_CPU_MAX_RESET     3   /* AudioProcessorUsageMaxReset() */
+#define BL_AUDIO_STAT_MEMORY            4   /* AudioMemoryUsage(), blocks */
+#define BL_AUDIO_STAT_MEMORY_MAX        5   /* AudioMemoryUsageMax() */
+#define BL_AUDIO_STAT_MEMORY_MAX_RESET  6   /* AudioMemoryUsageMaxReset() */
+
 /* ---- GPIO interrupt modes (same values as Arduino-ESP32) ---- */
 #define BL_RISING   0x01
 #define BL_FALLING  0x02

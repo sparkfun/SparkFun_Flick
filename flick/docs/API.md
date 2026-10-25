@@ -1,4 +1,4 @@
-# Baseline API reference (ABI 1.7)
+# Baseline API reference (ABI 1.8)
 
 Generated from `api/baseline_api.txt` by `tools/gen_api.py`. Do not edit.
 
@@ -268,3 +268,19 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_baseline_update_mode` | `int baseline_update_mode(void)` | 1.7 | How Baseline updates over the air: BL_UPDATE_DUAL (two Baseline slots; sketch and files kept), BL_UPDATE_STAGED (4 MB flash; each update erases the sketch and LittleFS) or BL_UPDATE_NONE. |
 | `bl_ota_pull_sketch` | `int ota_pull_sketch(const char *url)` | 1.7 | Download a sketch (.flick) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure. |
 | `bl_ota_pull_baseline` | `int ota_pull_baseline(const char *url, const char *sketch_url)` | 1.7 | Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure. |
+| `bl_isr_attach_pin` | `int isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg)` | 1.8 | Call fn(arg) from the pin's interrupt. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH. |
+| `bl_isr_detach_pin` | `int isr_detach_pin(int pin)` | 1.8 | Stop calling it. |
+| `bl_isr_timer_begin` | `int isr_timer_begin(bl_callback_t fn, void *arg, float period_us)` | 1.8 | Periodic timer (IntervalTimer): call fn(arg) every period_us from its interrupt. Returns a handle or BL_ERR_* (BL_ERR_NO_MEM: all timers in use). |
+| `bl_isr_timer_update` | `int isr_timer_update(int h, float period_us)` | 1.8 | New period, from the next interval on. |
+| `bl_isr_timer_end` | `void isr_timer_end(int h)` | 1.8 | Stop the timer and free it. |
+| `bl_isr_timer_priority` | `int isr_timer_priority(int h, int priority)` | 1.8 | Interrupt priority, 0 (highest) to 255; the default is 128. |
+| `bl_dma_channel_alloc` | `int dma_channel_alloc(void)` | 1.8 | Reserve a DMA channel for the sketch (i.MX RT eDMA, 0-31) and turn the DMA engine on. Returns the channel or BL_ERR_NO_MEM. |
+| `bl_dma_channel_free` | `void dma_channel_free(int channel)` | 1.8 | Give the channel back. |
+| `bl_audio_memory` | `int audio_memory(int blocks)` | 1.8 | AudioMemory(): blocks of 128 samples for the audio graph. The first call allocates; later calls return BL_OK if no more are asked for, else BL_ERR_STATE. |
+| `bl_audio_create` | `int audio_create(int type, const bl_audio_arg_t *args, int nargs)` | 1.8 | New audio object of type BL_AUDIO_T_* (constructor arguments in args). Returns a handle or BL_ERR_*. |
+| `bl_audio_connect` | `int audio_connect(int src, int src_port, int dst, int dst_port)` | 1.8 | AudioConnection from output src_port of src to input dst_port of dst. Returns a connection handle or BL_ERR_*. |
+| `bl_audio_disconnect` | `int audio_disconnect(int connection)` | 1.8 | Remove a connection (it can be made again with audio_reconnect). |
+| `bl_audio_reconnect` | `int audio_reconnect(int connection)` | 1.8 | Make a removed connection again. |
+| `bl_audio_call` | `int audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret)` | 1.8 | Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*. |
+| `bl_audio_stat` | `float audio_stat(int what)` | 1.8 | BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0. |
+| `bl_audio_interrupts` | `void audio_interrupts(int enable)` | 1.8 | AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates. |

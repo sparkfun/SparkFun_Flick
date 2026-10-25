@@ -2,9 +2,10 @@
     "description": "Classic ESP32, chip revision 3.0 or later",
     "baseline_source": "baseline",
     "builder": "idf",
-    "idf_version": "5.5",
+    "idf_version": "5.5.5",
     "idf_target": "esp32",
-    "min_core": "3.3.0",
+    "core_version": "3.3.11",
+    "versions_note": "What release Baselines are built with (CI pins the same). flick builds with other installed versions too, but warns.",
     "gcc": "xtensa-esp32-elf-gcc",
     "cflags": [
         "-mlongcalls",

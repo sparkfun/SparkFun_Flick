@@ -1,0 +1,149 @@
+/*
+ * imxrt1062_flick.ld.in - Baseline's linker script on the i.MX RT1062: Teensyduino's
+ * imxrt1062.ld / imxrt1062_t41.ld (cores/teensy4, 1.62) with room kept for sketches.
+ * flick passes it through the C preprocessor with the target's sdk folders on the
+ * include path (like sdk/ld/sketch_esp.ld.in), then hands it to Teensyduino.
+ *
+ *   FLASH   Baseline ends where sketch slot A starts (BL_BOARD_SLOT_A).
+ *   ITCM    Teensy's core (core.a) and FASTRUN functions only: whatever runs while
+ *           flash is written, interrupt entry, USB. Everything else (Baseline,
+ *           libraries, Audio) runs from flash through the 32 KB cache, so the
+ *           stack and the sketch RAM window keep their DTCM.
+ *   DTCM    Baseline's .data/.bss end below the sketch RAM window; the stack runs
+ *           down from the top of DTCM and must leave the window alone.
+ *   RAM     (OCRAM) the heap ends at BL_TEENSY_KEEP_BASE: the top 2 KB survive a
+ *           reset (the sketch's RTC memory, Baseline's state, Teensy's CrashReport).
+ */
+#include "sketch_abi.h"
+
+MEMORY
+{
+	ITCM (rx):  ORIGIN = 0x00000000, LENGTH = 512K
+	DTCM (rw):  ORIGIN = 0x20000000, LENGTH = 512K
+	RAM (rw):   ORIGIN = 0x20200000, LENGTH = BL_TEENSY_KEEP_BASE - 0x20200000
+	FLASH (rx): ORIGIN = 0x60000000, LENGTH = BL_BOARD_SLOT_A - 0x60000000
+#ifdef BL_BOARD_EXTMEM
+	ERAM (rw):  ORIGIN = 0x70000000, LENGTH = 32768K
+#endif
+}
+
+ENTRY(ImageVectorTable)
+
+SECTIONS
+{
+	.text.headers : {
+		KEEP(*(.flashconfig))
+		FILL(0xFF)
+		. = ORIGIN(FLASH) + 0x1000;
+		KEEP(*(.ivt))
+		KEEP(*(.bootdata))
+		. = ALIGN(1024);
+	} > FLASH
+
+	.text.code : {
+		KEEP(*(.startup))
+		*(.flashmem*)
+		*(EXCLUDE_FILE(*core.a:*) .text*)
+		. = ALIGN(4);
+		KEEP(*(.init))
+		__preinit_array_start = .;
+		KEEP (*(.preinit_array))
+		__preinit_array_end = .;
+		__init_array_start = .;
+		KEEP (*(.init_array))
+		__init_array_end = .;
+		. = ALIGN(4);
+	} > FLASH
+
+	.text.progmem : {
+		*(.progmem*)
+		. = ALIGN(4);
+	} > FLASH
+
+	.text.itcm : {
+		. = . + 32; /* MPU to trap NULL pointer deref */
+		*(.fastrun)
+		*(.text*)
+		. = ALIGN(16);
+	} > ITCM  AT> FLASH
+
+	/* No exceptions: unwind tables go. (Teensy keeps them in ITCM, but there they
+	 * can't reach code in flash: R_ARM_PREL31 spans +-1 GB.) */
+	/DISCARD/ : {
+		*(.ARM.exidx* .ARM.extab* .gnu.linkonce.armexidx.*)
+	}
+	__exidx_start = 0;
+	__exidx_end = 0;
+
+	.data : {
+		KEEP(*(.vectorsram))	/* first, at BL_TEENSY_VECTORS: sketches write it (attachInterruptVector) */
+		*(.endpoint_queue)
+		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.rodata*)))
+		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.data*)))
+	} > DTCM  AT> FLASH
+
+	.bss ALIGN(4) : {
+		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.bss*)))
+		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(COMMON)))
+		. = ALIGN(32);
+		. = . + 32; /* MPU to trap stack overflow */
+	} > DTCM
+
+	.bss.dma (NOLOAD) : {
+		*(.hab_log)
+		*(.dmabuffers)
+		. = ALIGN(32);
+	} > RAM
+
+#ifdef BL_BOARD_EXTMEM
+	.bss.extram (NOLOAD) : {
+		*(SORT_BY_ALIGNMENT(SORT_BY_NAME(.externalram)))
+		. = ALIGN(32);
+	} > ERAM
+#endif
+
+	.text.csf : {
+		FILL(0xFF)
+		. = ALIGN(1024);
+		KEEP(*(.csf))
+		__text_csf_end = .;
+	} > FLASH
+
+	_stext = ADDR(.text.itcm);
+	_etext = ADDR(.text.itcm) + SIZEOF(.text.itcm);
+	_stextload = LOADADDR(.text.itcm);
+
+	_sdata = ADDR(.data);
+	_edata = ADDR(.data) + SIZEOF(.data);
+	_sdataload = LOADADDR(.data);
+
+	_sbss = ADDR(.bss);
+	_ebss = ADDR(.bss) + SIZEOF(.bss);
+
+	_heap_start = ADDR(.bss.dma) + SIZEOF(.bss.dma);
+	_heap_end = ORIGIN(RAM) + LENGTH(RAM);
+
+#ifdef BL_BOARD_EXTMEM
+	_extram_start = ADDR(.bss.extram);
+	_extram_end = ADDR(.bss.extram) + SIZEOF(.bss.extram);
+#endif
+
+	_itcm_block_count = (SIZEOF(.text.itcm) + 0x7FFF) >> 15;
+	_flexram_bank_config = 0xAAAAAAAA | ((1 << (_itcm_block_count * 2)) - 1);
+	_estack = ORIGIN(DTCM) + ((16 - _itcm_block_count) << 15);
+
+	_flashimagelen = __text_csf_end - ORIGIN(FLASH);
+	_teensy_model_identifier = BL_BOARD_TEENSY_MODEL;
+
+	.debug_info     0 : { *(.debug_info) }
+	.debug_abbrev   0 : { *(.debug_abbrev) }
+	.debug_line     0 : { *(.debug_line) }
+	.debug_frame    0 : { *(.debug_frame) }
+	.debug_str      0 : { *(.debug_str) }
+	.debug_loc      0 : { *(.debug_loc) }
+
+}
+
+ASSERT(_VectorsRam == BL_TEENSY_VECTORS, "Teensy's RAM vector table must sit at BL_TEENSY_VECTORS (part of the ABI)")
+ASSERT(_ebss <= BL_SKETCH_RAM_BASE, "Baseline's .data/.bss reach the sketch RAM window (BL_SKETCH_RAM_BASE)")
+ASSERT(_estack >= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE + 0x10000, "too much code in ITCM: less than 64 KB of stack above the sketch RAM window")

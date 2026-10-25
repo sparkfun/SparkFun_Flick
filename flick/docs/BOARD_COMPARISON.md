@@ -27,7 +27,15 @@ All numbers come from Baseline images built on 2026-10-22 and 23 (versions 0.1.x
 
 ### Building a sketch
 
-Every board uses the same compiler setup. A rebuild takes about **0.5 s** (measured on the Thing Plus S3, 0.44–0.57 s per example, [BUILD_RESULTS.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/BUILD_RESULTS.md)).
+Every board uses the same compiler setup, and a rebuild takes about **0.5 s**, the same on every chip:
+
+| Chip | `01_hello_flick` | `02_wifi_http_get` | `01_ble_serial` | `06_mqtt_basic` |
+|---|---|---|---|---|
+| ESP32-S3 | 0.51 s | 0.52 s | 0.52 s | 0.52 s |
+| ESP32 | 0.50 s | 0.52 s | 0.51 s | 0.52 s |
+| ESP32-C6 | 0.50 s | 0.51 s | 0.50 s | 0.53 s |
+
+These are medians of 3 `flick build` runs, Python's start-up included, measured on 2026-10-24. Earlier measurements on the Thing Plus S3 gave 0.44–0.57 s per example ([BUILD_RESULTS.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/docs/BUILD_RESULTS.md)). Before 0.3.0, build output went into the sketch folder, and a sketch in a cloud-synced folder could take about 4 s to build; output now goes to Flick's cache folder, so that no longer happens.
 
 The first build after installing Flick, or after an SDK change, also compiles the SDK once per board, which adds a few seconds.
 
@@ -47,6 +55,15 @@ These are **estimates** for bigger sketches, worked out from the rates above. Ea
 | 5 KB (most examples) | under 0.1 s | about 0.2 s (measured: `06_mqtt_basic`, 5.3 KB, 0.19 s) |
 | 64 KB | about 0.7 s | about 1.1 s |
 | 256 KB (largest on 4 MB boards) | about 2.8 s | about 4.3 s |
+
+Build and upload together, as `flick upload` runs them (asking the board, building, uploading), measured on the IoT RedBoard over its CH340:
+
+| Sketch | Build + upload |
+|---|---|
+| `blink` (benchmark) | 0.66 s |
+| `hello_world` (benchmark) | 0.66 s |
+| `01_ble_serial` | 0.69 s |
+| `02_wifi_http_get` | 0.71 s |
 
 For comparison, a plain Arduino build and upload of a small sketch on the Thing Plus S3 takes about 20 s: 12–15 s to compile, then 7–9 s to upload a 275–980 KB image. Flick takes about 0.5 s for the same sketches ([the readme's table](../../README.md)).
 
@@ -161,6 +178,6 @@ RISC-V sketches are 5–25 % larger, partly because they're built without linker
 
 - Flashing Baseline from the web page, on any board, and with esptool on native-USB boards.
 - The time from the end of an upload until the sketch runs (the board restarts).
-- Sketch build times on each board's compiler. Only the S3's were measured; the RISC-V compiler is expected to be similar.
+- Build times on the C3, C5 and P4 compilers (the C6's RISC-V compiler measured the same as the S3's and ESP32's).
 - Uploads of large sketches; the table above is an estimate.
 - Baseline WiFi pushes on the Thing Plus C6, and anything on the Thing Plus C5, S3 and Thing Plus C beyond `flick test` (see [TESTING.md](https://github.com/sparkfun/SparkFun_Flick/blob/main/flick/TESTING.md)).

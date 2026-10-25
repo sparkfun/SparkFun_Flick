@@ -93,6 +93,41 @@ latency: an interrupt handler runs within a few milliseconds, not
 microseconds. A `loop()` that never calls `delay()` or returns holds callbacks
 back until it does.
 
+**Teensy 4.x is different:** `attachInterrupt()` and `IntervalTimer` handlers
+run in interrupt context, as on a plain Teensy (microsecond latency; keep them
+short, make shared variables `volatile`, guard multi-variable reads with
+`noInterrupts()`/`interrupts()`). `Ticker` callbacks still run on the sketch's
+own context.
+
+## Teensy 4.x (`teensy40`, `teensy41`)
+
+- **Audio library:** `#include <Audio.h>`. The objects live in Baseline and the
+  sketch's classes forward to them, with the Audio library's names, so code
+  from the Audio System Design Tool compiles unchanged. 45 objects: I2S, MQS,
+  USB audio, ADC input; waveform, sine, DC, noise, drum, Karplus-Strong, tone
+  sweep; envelope, delay, freeverb, bitcrusher, fade, multiply, chorus, flange,
+  granular; mixer, amplifier; biquad, state-variable, ladder and FIR filters;
+  peak, RMS, FFT256/1024, tone detect, note frequency; SD WAV/RAW, memory and
+  queue players, record queue; the SGTL5000 audio shield. Not yet: your own
+  `AudioStream` subclasses, wavetable synth, SerialFlash players.
+- **USB:** Baseline's USB type is Serial + MIDI + Audio (Teensy's "Serial + MIDI
+  + Audio"); keyboard/mouse need a different Baseline.
+- **Timing:** `IntervalTimer` (4 PIT channels, shared with `tone()`),
+  `elapsedMillis`/`elapsedMicros`. `digitalWriteFast()` works but is a normal
+  `digitalWrite()` for now.
+- **Registers:** `#include <imxrt.h>` works; `attachInterruptVector()`,
+  `NVIC_*`, `ARM_DWT_CYCCNT` and direct register access too. Baseline's vector
+  table is at a fixed address for that.
+- **Ports:** `Serial1`-`Serial7` (`Serial8` on the 4.1), `Wire`/`Wire1`/`Wire2`,
+  `SPI`. LittleFS is 576 KB on the 4.0 and 3.75 MB on the 4.1; Preferences are
+  files in it. microSD: the 4.1's built-in slot (`SD_MMC.begin()`), or SPI.
+- **Memory:** sketch globals up to 128 KB (in DTCM; eDMA reaches it), code up to
+  384 KB (4.0) or 1 MB (4.1); `malloc` gives the 512 KB OCRAM heap,
+  `ps_malloc` the 4.1's PSRAM. `FASTRUN`, `DMAMEM`, `FLASHMEM`, `EXTMEM` are
+  accepted and ignored.
+- **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
+- **No WiFi, BLE or ESP-NOW:** those calls return errors.
+
 ## Differences from plain Arduino
 
 - **BLE `onRead()`** fires after the read has been answered, so set the value ahead of time.

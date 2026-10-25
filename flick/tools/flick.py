@@ -129,6 +129,7 @@ def load_target(name):
     t["dirs"] = [chip_dir, d]
     t["sdk_dirs"] = [d / "sdk", chip_dir / "sdk"]
     defs = header_defines(chip_dir / "sdk" / "bl_target.h")
+    defs.update(header_defines(d / "sdk" / "bl_board.h"))     # a board may set the sketch size (i.MX RT)
     t["ibus"], t["dbus"] = defs["BL_SKETCH_IBUS_BASE"], defs["BL_SKETCH_DBUS_BASE"]
     t["max_size"] = defs["BL_SKETCH_MAX_SIZE"]
     t["chip_id"] = defs["BL_TARGET_CHIP_ID"]
@@ -164,6 +165,13 @@ def find_gcc(target):
         hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-*32" / "*" / "bin" / exe)))  # esp-x32, esp-rv32
         if hits:
             return hits[-1]
+    if gcc_name.startswith("arm-"):
+        # Teensyduino's compiler (Arduino IDE or arduino-cli Boards Manager)
+        for r in [*roots, *arduino_data_dirs()]:
+            hits = sorted(glob.glob(str(r / "packages" / "teensy" / "tools" / "teensy-compile" / "*" / "arm" / "bin" / exe)))
+            if hits:
+                return hits[-1]
+        sys.exit(f"error: {gcc_name} not found. Install Teensyduino (Arduino IDE Boards Manager: Teensy).")
     sys.exit(f"error: {gcc_name} not found. Run: {FLICK_CMD} setup")
 
 
@@ -512,6 +520,15 @@ def resolve_libraries(proj, sources, include_dirs):
     return libs
 
 
+def teensy_core_dir(gcc):
+    """cores/teensy4 of the Teensyduino install whose compiler flick uses."""
+    pkg = Path(gcc).resolve().parents[5]        # packages/teensy (gcc is in tools/teensy-compile/<v>/arm/bin)
+    cores = sorted(pkg.glob("hardware/avr/*/cores/teensy4"), key=lambda p: version_key(p.parents[1].name))
+    if not cores:
+        sys.exit(f"error: Teensyduino's core not found next to {gcc}")
+    return cores[-1]
+
+
 def sketch_build_dir(proj, target_name):
     """Where a sketch's build output goes: Flick's cache folder, not the sketch
     folder (which stays as the user wrote it). One folder per sketch path."""
@@ -545,6 +562,9 @@ def build(proj, target_name=None):
     inc = []
     for d in base_dirs + [d for lib in libs for d in lib_src_dirs(lib)]:
         inc += ["-I", str(d)]
+    if target.get("builder") == "teensy":
+        # Last on the path, after the SDK's own headers: Teensy's register definitions (imxrt.h).
+        inc += ["-idirafter", str(teensy_core_dir(gcc))]
     defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
 
     def compile_one(src, obj, extra_defs=(), quiet=False):
@@ -556,7 +576,7 @@ def build(proj, target_name=None):
         else:
             lang = CFLAGS
         obj.parent.mkdir(parents=True, exist_ok=True)
-        run([gcc, *lang, *target["cflags"], *PLATFORM_DEFINES, *inc, *extra_defs,
+        run([gcc, *lang, *target["cflags"], *target.get("defines", PLATFORM_DEFINES), *inc, *extra_defs,
              *(["-w"] if quiet else []), "-c", str(src), "-o", str(obj)])
 
     objs = []
@@ -616,7 +636,8 @@ def build(proj, target_name=None):
     run([gcc, *target.get("ldflags", []), "-fno-rtti", "-nostdlib", "-nostartfiles",
          "-T", str(ld), "-T", str(target["chip_dir"] / "sdk" / "rom.ld"),
          "-Wl,--gc-sections", "-Wl,--no-undefined", "-Wl,-Map," + str(out / (cfg["name"] + ".map")),
-         *objs, "-Wl,--start-group", "-lstdc++", "-lm", "-lgcc", "-Wl,--end-group", "-o", str(elf)])
+         *objs, "-Wl,--start-group", "-lstdc++", "-lm", "-lgcc", *target.get("libs", []), "-Wl,--end-group",
+         "-o", str(elf)])
 
     image = make_image(elf.read_bytes(), target)
     flick = out / (cfg["name"] + ".flick")
@@ -710,6 +731,7 @@ def find_port(port=None):
 
 
 ESPRESSIF_VID = 0x303A
+PJRC_VID = 0x16C0       # Teensy: native USB serial, like Espressif's
 USB_SERIAL_JTAG_PID = 0x1001
 
 
@@ -749,7 +771,7 @@ _baud_cache = {}
 
 def is_native_usb_port(port):
     serial = import_serial()
-    return any(p.device == port and p.vid == ESPRESSIF_VID for p in serial.tools.list_ports.comports())
+    return any(p.device == port and p.vid in (ESPRESSIF_VID, PJRC_VID) for p in serial.tools.list_ports.comports())
 
 
 def console_baud(port, baud=None):
@@ -1216,6 +1238,12 @@ def stage_baseline(target):
         for f in root.rglob("*"):
             if f.is_file():
                 wanted[f.relative_to(root)] = f
+    return sync_files(dst, wanted)
+
+
+def sync_files(dst, wanted):
+    """Make folder dst hold exactly wanted ({relative path: source file}).
+    Copies keep their timestamps, so a build recompiles only what changed."""
     if dst.exists():
         for f in list(dst.rglob("*")):
             if f.is_file() and f.relative_to(dst) not in wanted:
@@ -1226,6 +1254,56 @@ def stage_baseline(target):
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, out)
     return dst
+
+
+def teensy_bootloader_port():
+    """The Teensy's port as Teensyduino's uploader names it (usb:...), from arduino-cli."""
+    out = subprocess.run([find_arduino_cli(), "board", "list", "--format", "json"],
+                         capture_output=True, text=True).stdout
+    ports = [d["port"]["address"] for d in json.loads(out or "{}").get("detected_ports", [])
+             if d.get("port", {}).get("protocol") == "teensy"]
+    if len(ports) != 1:
+        sys.exit(f"error: expected one Teensy on USB, found {len(ports)}")
+    return ports[0]
+
+
+def build_baseline_teensy(target, flash):
+    """Baseline for the i.MX RT1062 (Teensy 4.x): an Arduino sketch built with
+    Teensyduino through arduino-cli. Staged from chips/<chip>/baseline plus the
+    generated API table; the image is a .hex for Teensy's bootloader (HalfKay)."""
+    gen = ROOT / "baseline" / "src" / "gen"
+    wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
+    for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
+        wanted[Path(name)] = gen / name
+    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
+    build_path = baseline_build_path(target["name"])
+    # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
+    # The staging folder too: arduino-cli does not copy .inc files into its build folder.
+    inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))
+    # The linker script gets the target's addresses (bl_target.h, bl_board.h) from the preprocessor.
+    ld = build_path.parent / "imxrt1062_flick.ld"
+    build_path.mkdir(parents=True, exist_ok=True)
+    run([find_gcc(target), "-E", "-P", "-x", "c", "-DBL_LINKER_SCRIPT",
+         *[a for d in (SDK / "include", *target["sdk_dirs"]) for a in ("-I", str(d))],
+         str(sketch / "imxrt1062_flick.ld.in"), "-o", str(ld)])
+    # An empty sketchbook: only Teensyduino's own libraries go into Baseline, never
+    # whatever the user installed (another SdFat breaks Teensy's SD library).
+    user_dir = BUILD_ROOT / "teensy-sketchbook"
+    (user_dir / "libraries").mkdir(parents=True, exist_ok=True)
+    os.environ["ARDUINO_DIRECTORIES_USER"] = str(user_dir)
+    cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"], "--build-path", str(build_path),
+           "--build-property", f"build.flags.defs=-D__IMXRT1062__ -DTEENSYDUINO=160 {inc}",
+           "--build-property", f'build.flags.ld=-Wl,--gc-sections,--relax,--no-warn-rwx-segments "-T{ld}"',
+           "--warnings", "default", str(sketch)]
+    run(cmd)
+    hexfile = build_path / "baseline.ino.hex"
+    out = DIST / target["name"] / f"baseline-{target['name']}.hex"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(hexfile, out)
+    print(f"Baseline image: {out.relative_to(WORK)} (Intel hex for Teensy's bootloader)")
+    if flash:
+        run([find_arduino_cli(), "upload", "--fqbn", target["fqbn"], "--input-dir", str(build_path),
+             "-p", teensy_bootloader_port(), "-l", "teensy", str(sketch)])
 
 
 def find_arduino_cli():
@@ -1255,7 +1333,10 @@ def arduino_data_dirs():
     if os.environ.get("LOCALAPPDATA"):
         dirs.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15")
     dirs += [Path.home() / ".arduino15", Path.home() / "Library" / "Arduino15"]
-    for cfg in (Path.home() / ".arduinoIDE" / "arduino-cli.yaml",):
+    cfgs = [Path.home() / ".arduinoIDE" / "arduino-cli.yaml"]
+    if os.environ.get("LOCALAPPDATA"):
+        cfgs.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15" / "arduino-cli.yaml")
+    for cfg in cfgs:
         if cfg.exists():
             for line in cfg.read_text().splitlines():
                 if line.strip().startswith("data:"):
@@ -1263,43 +1344,89 @@ def arduino_data_dirs():
     return dirs
 
 
-def newest_esp32_core():
-    """(version tuple, data dir) of the newest installed esp32 Arduino core."""
-    best = None
+def esp32_cores():
+    """(version tuple, data dir) of every installed esp32 Arduino core."""
+    found = []
     for d in arduino_data_dirs():
         for v in glob.glob(str(d / "packages" / "esp32" / "hardware" / "esp32" / "*")):
             try:
-                ver = tuple(int(x) for x in Path(v).name.split("."))
+                found.append((tuple(int(x) for x in Path(v).name.split(".")), d))
             except ValueError:
                 continue
-            if best is None or ver > best[0]:
-                best = (ver, d)
-    return best
+    return found
+
+
+def newest_esp32_core():
+    """(version tuple, data dir) of the newest installed esp32 Arduino core."""
+    return max(esp32_cores(), key=lambda c: c[0], default=None)
+
+
+def vstr(v):
+    return ".".join(map(str, v))
+
+
+def esp32_core_for(target):
+    """The Arduino-ESP32 core to build target's Baseline with: the chip's
+    "core_version" if it is installed, else the newest one, with a warning.
+    A Baseline built with another core usually works; it just isn't what the
+    release was built and tested with."""
+    cores = esp32_cores()
+    if not cores:
+        sys.exit("error: no Arduino-ESP32 core found. Install it with the Arduino IDE Boards Manager.")
+    want = target.get("core_version")
+    exact = [c for c in cores if want and vstr(c[0]) == want]
+    if exact:
+        return exact[0]
+    core = max(cores, key=lambda c: c[0])
+    if want:
+        print(f"warning: {target['chip']} Baselines are built with Arduino-ESP32 {want}, which is not "
+              f"installed; building with {vstr(core[0])} instead (installed: "
+              f"{', '.join(sorted({vstr(c[0]) for c in cores}))})")
+    return core
 
 
 # ---------------------------------------------------------------- Baseline via ESP-IDF
 # Targets with "builder": "idf" build Baseline as an ESP-IDF project (idf/) with
 # Arduino-ESP32 as a component, so Baseline can change the sdkconfig.
 
+def idf_version_of(path):
+    """'5.5.5' for an ESP-IDF checkout, or None if path isn't one."""
+    f = Path(path) / "tools" / "cmake" / "version.cmake"
+    if not f.exists():
+        return None
+    v = dict(re.findall(r"set\(IDF_VERSION_(MAJOR|MINOR|PATCH) (\d+)\)", f.read_text()))
+    return f"{v.get('MAJOR')}.{v.get('MINOR')}.{v.get('PATCH')}"
+
+
 def find_idf(version):
-    """(IDF_PATH, IDF_TOOLS_PATH) of an ESP-IDF checkout matching version (e.g. "5.5")."""
+    """(IDF_PATH, IDF_TOOLS_PATH) of the ESP-IDF checkout to build with: version
+    (e.g. "5.5.5") if it is installed, else the closest one (same major.minor
+    first, then the newest), with a warning. $FLICK_IDF_PATH always wins."""
     tools = Path(os.environ.get("IDF_TOOLS_PATH") or
                  ("C:/Espressif" if os.name == "nt" else Path.home() / ".espressif"))
-    candidates = []
-    if os.environ.get("FLICK_IDF_PATH"):
-        candidates.append(Path(os.environ["FLICK_IDF_PATH"]))
-    if os.environ.get("IDF_PATH"):
-        candidates.append(Path(os.environ["IDF_PATH"]))
+    forced = os.environ.get("FLICK_IDF_PATH")
+    if forced:
+        found = idf_version_of(forced)
+        if not found:
+            sys.exit(f"error: FLICK_IDF_PATH={forced} is not an ESP-IDF checkout")
+        if found != version:
+            print(f"warning: Baselines are built with ESP-IDF v{version}; FLICK_IDF_PATH is v{found}")
+        return Path(forced), tools
+    paths = [Path(os.environ["IDF_PATH"])] if os.environ.get("IDF_PATH") else []
     for root in (tools / "frameworks", Path.home() / "esp"):
-        candidates += sorted(root.glob(f"esp-idf-v{version}*"), reverse=True)
-    for c in candidates:
-        ver = c / "tools" / "cmake" / "version.cmake"
-        if ver.exists():
-            v = dict(re.findall(r"set\(IDF_VERSION_(MAJOR|MINOR|PATCH) (\d+)\)", ver.read_text()))
-            if f"{v.get('MAJOR')}.{v.get('MINOR')}" == version:
-                return c, tools
-    sys.exit(f"error: ESP-IDF v{version} not found. Install it (for example in "
-             f"{tools / 'frameworks'}) or set FLICK_IDF_PATH.")
+        paths += sorted(root.glob("esp-idf-v*"), reverse=True)
+    found = [(p, v) for p, v in ((p, idf_version_of(p)) for p in paths) if v]
+    if not found:
+        sys.exit(f"error: ESP-IDF not found. Install v{version} (for example in "
+                 f"{tools / 'frameworks'}) or set FLICK_IDF_PATH.")
+    key = lambda v: tuple(int(x) for x in v.split("."))
+    same_minor = [pv for pv in found if key(pv[1])[:2] == key(version)[:2]]
+    exact = [pv for pv in found if pv[1] == version]
+    path, found_v = (exact or [max(same_minor or found, key=lambda pv: key(pv[1]))])[0]
+    if found_v != version:
+        print(f"warning: Baselines are built with ESP-IDF v{version}, which is not installed; "
+              f"building with v{found_v} ({path}) instead")
+    return path, tools
 
 
 def idf_env(idf_path, tools_path):
@@ -1871,7 +1998,7 @@ def cmd_baseline_update(args, target):
         bsu = Path(args.file)
     else:
         print(f"target {target['name']}: {target['description']}")
-        build_baseline_idf(target, newest_esp32_core())
+        build_baseline_idf(target, esp32_core_for(target))
         bsu = DIST / target["name"] / f"baseline-{target['name']}.bsu"
     pkg = bsu.read_bytes()
     h = parse_bsu(pkg)
@@ -1930,13 +2057,10 @@ def cmd_baseline(args):
     target = load_target(args.target or DEFAULT_TARGET)
     if args.action == "update":
         return cmd_baseline_update(args, target)
-    min_core = tuple(int(x) for x in target["min_core"].split("."))
-    core = newest_esp32_core()
-    if not core or core[0] < min_core:
-        found = ".".join(map(str, core[0])) if core else "none"
-        sys.exit(f"error: Baseline needs Arduino-ESP32 core >= {target['min_core']} (found {found}). "
-                 "Install it with the Arduino IDE Boards Manager.")
     print(f"target {target['name']}: {target['description']}")
+    if target.get("builder") == "teensy":
+        return build_baseline_teensy(target, args.action == "flash")
+    core = esp32_core_for(target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)
         if args.action == "flash":
