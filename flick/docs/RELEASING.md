@@ -12,7 +12,7 @@
 **The kit's layout** is the repository's: `flick package` (`KIT_FILES` in `tools/flick.py`) takes the top level as it is and the part of `flick/` that builds and uploads sketches, and leaves out Baseline's source, the ESP-IDF project, the API table, the benchmarks, CI and the developer notes.
 
 ```
-README.md  flick.py  AGENTS.md  CLAUDE.md  .vscode/  secrets.cfg.example  LICENSE  requirements.txt
+README.md  flick.py  AGENTS.md  CLAUDE.md  .vscode/  LICENSE  requirements.txt
 examples/       01_basics/01_hello_flick ... 07_updates/  (examples/README.md lists them)
 my_sketches/    the user's sketches (flick new NAME puts them here)
 flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/ (3 files), THIRD_PARTY_NOTICES.md
@@ -20,7 +20,7 @@ flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/ (3 f
 
 `flick.py` at the top only starts `flick/tools/flick.py`, which takes the folder above `flick/` as the user's (secrets, libraries, `my_sketches/`).
 
-**The example runner** has no WiFi credentials: the release builds the examples without `secrets.cfg` (`build_examples.py --out` always does), and the page lists the ones that need the user's network (`WIFI_SSID` in the source) as "build it from the kit".
+**The example runner** has no WiFi credentials: the release builds the examples without the secrets file (`build_examples.py --out` always does), and the page lists the ones that need the user's network (`WIFI_SSID` in the source) as "build it from the kit".
 
 **Why both the firmware and a kit:**
 - **Baseline alone** only runs sketches. Sketches are compiled against the kit's headers, which are the API. Kit 1.x works with any Baseline 1.x of the same or a newer minor version.

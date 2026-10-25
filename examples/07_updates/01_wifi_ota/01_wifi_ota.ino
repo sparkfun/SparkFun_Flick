@@ -12,7 +12,7 @@
 // Pocket C6, Thing Plus S3) Baseline first restarts without the sketch, and
 // the update erases the sketch and LittleFS: upload a sketch again afterwards.
 //
-// WiFi: WIFI_SSID / WIFI_PASSWORD from secrets.cfg (see secrets.cfg.example).
+// WiFi: WIFI_SSID / WIFI_PASSWORD, set once with: python flick.py wifi "network" "password"
 #include <WiFi.h>
 #include <ArduinoOTA.h>
 

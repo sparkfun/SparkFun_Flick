@@ -12,6 +12,8 @@ The goal of Flick is to reduce the time it takes to compile and upload sketches.
 | ble_serial | 140.2 s | 13.1 s | 7.8 s | **20.9 s** | **0.51 s** | 41x | 563,648 bytes | 1,520 bytes |
 | wifi_http_get | 126.1 s | 15.0 s | 8.6 s | **23.6 s** | **0.59 s** | 40x | 979,008 bytes | 2,660 bytes |
 
+How the boards compare (upload speeds, flash left, and what each one can't do): [flick/docs/BOARD_COMPARISON.md](flick/docs/BOARD_COMPARISON.md).
+
 Baseline is not an interpreted language; it's fast machine code all the way down. You just tell the chatbot what you want, it writes the code, compiles it (specifically for Baseline) and loads only the bits that need changing.
 
 Baseline is intended for folks who are just past the beginner's phase of programming a microcontroller. There are a few limitations and quirks to Baseline that users should know about. Generally speaking, everything works transparently but there are a few exceptions listed in [docs/ARDUINO_COMPAT.md](flick/docs/ARDUINO_COMPAT.md).
@@ -129,13 +131,14 @@ Press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then pick one:
 | Sketch: build + upload + monitor | The same as Ctrl+Shift+B |
 | Sketch: build only | Checks that the open sketch compiles, without a board |
 | New sketch | Creates a sketch in `my_sketches/` |
+| Set WiFi network | Saves the network name and password the WiFi sketches use |
 | Serial monitor | Shows the board's serial output without uploading |
 | Setup: install the compiler (once) | Step 3 |
 | Baseline: reboot into safe mode | Restarts the board without running the sketch, if a sketch misbehaves |
 
 ### WiFi passwords
 
-Copy `secrets.cfg.example` to `secrets.cfg` and fill in your network. Each `WIFI_SSID = MyNetwork` line becomes `#define WIFI_SSID "MyNetwork"` in every sketch, so your password never ends up in your code. `secrets.cfg` is ignored by git.
+Run the task **Set WiFi network** (or `python flick.py wifi "network" "password"`) once. It saves them in `secrets.cfg` in the `.flick` folder in your home folder, outside your sketches. Each `WIFI_SSID = MyNetwork` line becomes `#define WIFI_SSID "MyNetwork"` in every sketch, so your password never ends up in your code or in git. Other keys: `python flick.py secrets --set API_KEY=...`.
 
 ### When things go wrong
 

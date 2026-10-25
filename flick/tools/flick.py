@@ -49,7 +49,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent      # flick/: the tool, SDK, boards, Baseline source
 # The folder above flick/ is the user's (the repository and the kit look the
-# same): flick.py, examples/, my_sketches/, libraries/, secrets.cfg.
+# same): flick.py, examples/, my_sketches/, libraries/. Secrets are in ~/.flick.
 WORK = ROOT.parent
 FLICK_CMD = "python flick.py"      # how messages tell the user to run flick
 # The download page: Baseline for every board (a Flash button each), the examples, the kit.
@@ -195,20 +195,96 @@ void loop()
 """
 
 
-def secret_defines():
-    """-DKEY="value" for each KEY = value in secrets.cfg (repo root, or $FLICK_SECRETS).
-    Keeps WiFi passwords and API keys out of sketches: #ifdef WIFI_SSID ... in code."""
-    f = Path(os.environ.get("FLICK_SECRETS") or WORK / "secrets.cfg")
-    out = []
+# Secrets (WiFi passwords, API keys) live in ~/.flick/secrets.cfg, outside every
+# sketch and repository folder, so they can't be committed by accident and every
+# copy of Flick on the PC shares them. $FLICK_SECRETS points somewhere else.
+SECRETS_TEMPLATE = """# Secrets for your sketches. Each KEY = value line becomes #define KEY "value"
+# when flick builds, so passwords and keys stay out of your code.
+# The WiFi examples use WIFI_SSID and WIFI_PASSWORD. Set them with:
+#   python flick.py wifi "network name" "password"
+"""
+SECRET_KEY = re.compile(r"[A-Z_][A-Z0-9_]*")
+
+
+def secrets_file():
+    return Path(os.environ.get("FLICK_SECRETS") or FLICK_HOME / "secrets.cfg")
+
+
+def read_secrets(f):
+    """{KEY: value} from a secrets file."""
+    out = {}
     if f.exists():
-        for line in f.read_text().splitlines():
+        for line in f.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 k, v = (x.strip() for x in line.split("=", 1))
-                if re.fullmatch(r"[A-Z_][A-Z0-9_]*", k):
-                    v = v.replace("\\", "\\\\").replace('"', '\\"')
-                    out.append(f'-D{k}="{v}"')
+                if SECRET_KEY.fullmatch(k):
+                    out[k] = v
     return out
+
+
+def secret_defines():
+    """-DKEY="value" for each KEY = value in the secrets file.
+    Keeps WiFi passwords and API keys out of sketches: #ifdef WIFI_SSID ... in code."""
+    f = secrets_file()
+    old = WORK / "secrets.cfg"          # where Flick 0.2 kept them
+    if not f.exists() and old.exists() and "FLICK_SECRETS" not in os.environ:
+        print(f"note: using {old}; run  {FLICK_CMD} secrets  to move it to {f}")
+        f = old
+    out = []
+    for k, v in read_secrets(f).items():
+        v = v.replace("\\", "\\\\").replace('"', '\\"')
+        out.append(f'-D{k}="{v}"')
+    return out
+
+
+def write_secrets(f, values):
+    """Set KEY = value lines in the secrets file, keeping its other lines."""
+    lines = f.read_text(encoding="utf-8").splitlines() if f.exists() else SECRETS_TEMPLATE.splitlines()
+    for k, v in values.items():
+        if not SECRET_KEY.fullmatch(k):
+            sys.exit(f"error: '{k}' is not a valid name (capital letters, digits and _)")
+        if "\n" in v or "\r" in v:
+            sys.exit(f"error: {k} can't contain a line break")
+        new = f"{k} = {v}"
+        for i, line in enumerate(lines):
+            if not line.lstrip().startswith("#") and line.split("=", 1)[0].strip() == k:
+                lines[i] = new
+                break
+        else:
+            lines.append(new)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def cmd_secrets(args):
+    """Show where the secrets file is and which names it sets (never the values);
+    create it, or move one from the old place next to flick.py."""
+    f = secrets_file()
+    old = WORK / "secrets.cfg"
+    if not f.exists() and old.exists() and "FLICK_SECRETS" not in os.environ:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(old), str(f))
+        print(f"moved {old} to {f}")
+    if args.set:
+        k, _, v = args.set.partition("=")
+        write_secrets(f, {k.strip(): v.strip()})
+        print(f"saved {k.strip()} in {f}")
+        return
+    if not f.exists():
+        write_secrets(f, {})
+        print(f"created {f}")
+    names = list(read_secrets(f))
+    print(f"secrets file: {f}")
+    print(f"sets: {', '.join(names)}" if names else f"sets nothing yet: {FLICK_CMD} wifi \"network\" \"password\"")
+
+
+def cmd_wifi(args):
+    """Save the WiFi network the examples and your sketches join (WIFI_SSID, WIFI_PASSWORD)."""
+    f = secrets_file()
+    write_secrets(f, {"WIFI_SSID": args.ssid, "WIFI_PASSWORD": args.password})
+    print(f"saved the WiFi network name and password in {f}")
+    print("rebuild and upload a sketch to use them")
 
 
 def load_config(proj):
@@ -661,10 +737,13 @@ def open_port(port, baud):
 
 
 # Baud rates Baseline's console may use on a USB-serial chip, most likely first:
-# 921600 (classic ESP32 Baselines), 2000000 (ones built while 2 Mbaud was tried)
-# and 115200 (older ones). Native USB ports ignore the baud rate; 115200 must
-# stay last.
-CONSOLE_BAUDS = (921600, 2000000, 115200)
+# 115200 (Baseline 0.3 and later, and the oldest ones), 921600 (0.1 to 0.2) and
+# 2000000 (one build while 2 Mbaud was tried). Native USB ports ignore the rate.
+CONSOLE_BAUDS = (115200, 921600, 2000000)
+# For an upload, flick asks the console to run at UPLOAD_BAUD (@BSK BAUD, Baseline
+# 0.3+). Baseline's reply says how many lines may be in flight (window=): the
+# round trip through the USB-serial chip costs more than the line itself.
+UPLOAD_BAUD = 921600
 _baud_cache = {}
 
 
@@ -681,12 +760,14 @@ def console_baud(port, baud=None):
     if port in _baud_cache:
         return _baud_cache[port]
     if is_native_usb_port(port):
-        return CONSOLE_BAUDS[-1]
+        return 115200
     for b in CONSOLE_BAUDS:
         try:
             with open_port(port, b) as s:
                 s.reset_input_buffer()
-                s.write(f"{PROTO_PREFIX} INFO\n".encode())
+                # The newline ends whatever an earlier probe at a wrong rate left
+                # half-received, so the loader sees INFO at the start of a line.
+                s.write(f"\n{PROTO_PREFIX} INFO\n".encode())
                 deadline, buf = time.time() + 1.0, b""
                 while time.time() < deadline:
                     buf += s.read(s.in_waiting or 1)
@@ -695,7 +776,16 @@ def console_baud(port, baud=None):
                         return b
         except OSError:
             break
-    return CONSOLE_BAUDS[0]     # nothing answered (no Baseline yet, or it is busy): assume the current one
+    # Nothing answered (no Baseline yet, or it is restarting): assume the current
+    # rate, and end the line the probes at other rates left half-received, or the
+    # next command would arrive mid-line and go to the sketch.
+    try:
+        with open_port(port, CONSOLE_BAUDS[0]) as s:
+            s.write(b"\n")
+            s.flush()
+    except OSError:
+        pass
+    return CONSOLE_BAUDS[0]
 
 
 OTA_PORT = 3232
@@ -771,6 +861,13 @@ class Link:
         while time.time() < deadline:
             if b"\n" in self.buf:
                 line, self.buf = self.buf.split(b"\n", 1)
+                # A sketch that prints without a newline ("....") puts Baseline's
+                # reply at the end of its own line: hand back the sketch's text
+                # first, and the reply as a line of its own next.
+                i = line.find(PROTO_PREFIX.encode() + b" ")
+                if i > 0:
+                    self.buf = line[i:] + b"\n" + self.buf
+                    line = line[:i]
                 return line.decode(errors="replace").rstrip("\r")
             self.buf += self.ser.read(self.ser.in_waiting or 1)
         return None
@@ -860,19 +957,63 @@ def cmd_upload(args):
             monitor(s, port, args.baud, link, follow=not args.port)
 
 
+def fast_console(link):
+    """Before an upload: a UART console (USB-serial chip) goes to UPLOAD_BAUD for its
+    length. Returns (lines to keep in flight, the rate to go back to or None).
+    Native USB has no rate to raise; over WiFi, TCP keeps many lines in flight."""
+    ser = link.ser
+    if isinstance(ser, NetPort):
+        return 16, None
+    if is_native_usb_port(ser.port):
+        return 1, None
+    old = ser.baudrate
+    r = link.request_status(f"BAUD {UPLOAD_BAUD}", timeout=2)
+    if not r or not r[0]:
+        return 1, None          # a Baseline from before 0.3: one line at a time at its own rate
+    window = int(info_fields(r[1]).get("window", "1"))
+    if old != UPLOAD_BAUD:
+        ser.flush()
+        ser.baudrate = UPLOAD_BAUD
+        ser.reset_input_buffer()
+        link.buf = b""
+    return max(1, window), (old if old != UPLOAD_BAUD else None)
+
+
+def console_back(link, rate):
+    """After an upload, the board restarts at its console rate: follow it."""
+    if rate:
+        link.ser.baudrate = rate
+        link.buf = b""
+
+
+def send_lines(link, cmd, data, window, progress=None):
+    """<cmd> <offset> <base64> lines for all of data, with up to window lines in flight
+    (Baseline answers them in order)."""
+    pending = 0
+    for off in range(0, len(data), CHUNK):
+        link.send(f"{cmd} {off} {base64.b64encode(data[off:off + CHUNK]).decode()}")
+        pending += 1
+        while pending >= window or (pending and off + CHUNK >= len(data)):
+            r = link.reply(10)
+            if not r or not r[0]:
+                sys.exit(f"\nerror from Baseline: {r[1] if r else 'no reply'} (during {cmd})")
+            pending -= 1
+        if progress:
+            progress(min(off + CHUNK, len(data)))
+
+
 def send_image(link, image, quiet=False):
     """Upload a .flick image over an open link; Baseline installs it and reboots."""
     digest = hashlib.sha256(image).hexdigest()
     t0 = time.time()
+    window, back = fast_console(link)
     link.request(f"BEGIN {len(image)} {digest}", timeout=15)   # erases the slot
-    for off in range(0, len(image), CHUNK):
-        data = base64.b64encode(image[off:off + CHUNK]).decode()
-        link.request(f"DATA {off} {data}")
-        if not quiet:
-            print(f"\r  {min(off + CHUNK, len(image))}/{len(image)} bytes", end="", flush=True)
+    send_lines(link, "DATA", image, window,
+               None if quiet else lambda n: print(f"\r  {n}/{len(image)} bytes", end="", flush=True))
     if not quiet:
         print()
     installed = link.request("END", timeout=10)
+    console_back(link, back)
     if not quiet:
         print("installed:", installed)
         print(f"upload took {time.time() - t0:.2f}s")
@@ -1585,13 +1726,14 @@ def cmd_lib(args):
 # The kit is this repository without what only Baseline's developers need:
 # the top level as it is, and the part of flick/ that builds and uploads sketches.
 KIT_FILES = {
-    "": ["README.md", "flick.py", "AGENTS.md", "CLAUDE.md", "LICENSE", "secrets.cfg.example",
+    "": ["README.md", "flick.py", "AGENTS.md", "CLAUDE.md", "LICENSE",
          "requirements.txt", ".vscode/tasks.json", "examples/**/*", "my_sketches/**/*"],
     "flick/": ["tools/flick.py", "tools/tests/**/*",
                "sdk/include/**/*", "sdk/src/**/*", "sdk/ld/**/*",
                "chips/*/chip.json", "chips/*/sdk/**/*",
                "targets/*/target.json", "targets/*/sdk/**/*",
-               "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md", "THIRD_PARTY_NOTICES.md"],
+               "docs/API.md", "docs/ARDUINO_COMPAT.md", "docs/OTA.md", "docs/BOARD_COMPARISON.md",
+               "THIRD_PARTY_NOTICES.md"],
 }
 KIT_GITIGNORE = """# flick build output, downloaded libraries and secrets
 build/
@@ -1707,24 +1849,18 @@ def send_update(link, kind, data):
     if not r[0]:
         return r[1]
     t0 = time.time()
-    # Over WiFi, keep several lines in flight (TCP keeps them in order): one
-    # reply per line would cost a network round trip each. Over USB, one at a time.
-    window = 16 if isinstance(link.ser, NetPort) else 1
-    pending, shown = 0, -1
-    for off in range(0, len(data), CHUNK):
-        link.send(f"UDATA {off} {base64.b64encode(data[off:off + CHUNK]).decode()}")
-        pending += 1
-        while pending >= window or (pending and off + CHUNK >= len(data)):
-            r = link.reply(10)
-            if not r or not r[0]:
-                sys.exit(f"\nerror from Baseline: {r[1] if r else 'no reply'}")
-            pending -= 1
-        pct = min(off + CHUNK, len(data)) * 100 // len(data)
-        if pct // 10 != shown:
-            shown = pct // 10
+    window, back = fast_console(link)
+    shown = [-1]
+
+    def progress(n):
+        pct = n * 100 // len(data)
+        if pct // 10 != shown[0]:
+            shown[0] = pct // 10
             print(f"\r  {pct}%", end="", flush=True)
+    send_lines(link, "UDATA", data, window, progress)
     print()
     print(link.request("UEND", timeout=60))
+    console_back(link, back)
     print(f"sent in {time.time() - t0:.1f}s")
     return None
 
@@ -1839,8 +1975,8 @@ def cmd_baseline(args):
 # ---------------------------------------------------------------- main
 
 def main():
-    # Board output can hold bytes the terminal cannot show (the classic ESP32's
-    # ROM boot lines arrive at 115200 while the console runs at 921600).
+    # Board output can hold bytes the terminal cannot show (on the classic ESP32,
+    # boot lines at 115200 reach a Baseline 0.1/0.2 console at 921600).
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
@@ -1900,6 +2036,15 @@ def main():
     p.add_argument("-t", "--target", action="append",
                    help="for this target (repeatable); default: the plugged-in board, else all")
     p.set_defaults(fn=cmd_setup)
+
+    p = sub.add_parser("wifi", help="save the WiFi network sketches join (WIFI_SSID, WIFI_PASSWORD in ~/.flick/secrets.cfg)")
+    p.add_argument("ssid", help="network name")
+    p.add_argument("password", help="password (quote it if it has spaces)")
+    p.set_defaults(fn=cmd_wifi)
+
+    p = sub.add_parser("secrets", help="show or create the secrets file (~/.flick/secrets.cfg); --set KEY=value")
+    p.add_argument("--set", metavar="KEY=value", help="add or change one secret")
+    p.set_defaults(fn=cmd_secrets)
 
     p = sub.add_parser("lib", help="search or install Arduino libraries (Library Manager)")
     p.add_argument("action", choices=["search", "install"])

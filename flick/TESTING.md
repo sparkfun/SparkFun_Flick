@@ -13,7 +13,7 @@ python flick.py upload tools/tests/led_check     # LEDs, by eye: red, green, blu
 ```
 
 - `flick test` runs `tools/tests/selftest` (memory, PSRAM, Strings, libm, time, Preferences, LittleFS, microSD, Ticker, the board's I2C devices, WiFi scan, BLE scan, WiFi connect + `WiFi.onEvent` + NTP + HTTP, then a 2 s deep sleep and the checks after waking), then a crash in `setup()` (`tools/tests/crash_test`, must roll back and be recorded in `INFO`), then a `loop()` that never returns (`tools/tests/hang_test`, the watchdog must catch it and roll back).
-- WiFi checks need `secrets.cfg` (copy `secrets.cfg.example`); without it they are skipped. On a chip without a radio (ESP32-P4) the WiFi and BLE checks are skipped.
+- WiFi checks need `WIFI_SSID`/`WIFI_PASSWORD` in `~/.flick/secrets.cfg` (`python flick.py wifi NAME PASSWORD`); without them they are skipped. On a chip without a radio (ESP32-P4) the WiFi and BLE checks are skipped.
 - Before testing a new board, check it with `esptool flash-id`: the chip revision (classic ESP32: 3.0 or later) and the flash size against `flash_size` in its `target.json`.
 
 ## Boards
@@ -38,7 +38,7 @@ Results on the current Baseline (ABI 1.6, ESP-IDF build) unless noted.
 | Feature | Thing Plus C6 | Thing Plus C5 | Pro Micro C3 | Qwiic Pocket C6 | IoT RedBoard | DataLogger IoT | IoT RedBoard P4 (PoE) | Thing Plus S3 | Thing Plus C | Postcard |
 |---|---|---|---|---|---|---|---|---|---|---|
 | Baseline boots, `INFO` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⬜ | ⬜ |
-| Sketch upload | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ 921600 (2 Mbaud tried, issue 5) | ✅ (CH340) | ✅ (USB) | ✅ (USB) | ⬜ | ⬜ |
+| Sketch upload | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ (USB) | ✅ 921600 (2 Mbaud tried, issue 5; since 0.3.0 115200, 921600 for uploads) | ✅ (CH340) | ✅ (USB) | ✅ (USB) | ⬜ | ⬜ |
 | Memory: `malloc` internal / PSRAM | ✅ / — | ✅ / ✅ 8 MB | ✅ / — | ✅ / — | ✅ / — | ✅ / — | ✅ / ✅ | ✅ / ✅ (2 MB) | ⬜ | ✅ (chip) / ✅ 2 MB |
 | Strings, `F()`, libm, time | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ (before `F()`/libm) | ⬜ | ✅ (chip) |
 | Chip temperature | ✅ | ✅ | ✅ | ✅ | — (no sensor) | — (no sensor) | ✅ | ⬜ | — | — |
@@ -127,3 +127,11 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 16. **Staged Baseline push over WiFi dropped on the Qwiic Pocket C6 (2026-10-23, fixed).** Update mode erased the whole staging area (1.26 MB, about 5 s) in one call before replying; on a single-core chip WiFi cannot run during a flash erase, and the connection dropped (`errno 113`). The C3 had survived the same erase by luck. **Fixed:** the staging area is erased one 4 KB sector at a time, just ahead of each write (push and download). Pocket C6 WiFi push then went through (30 s).
 17. **`<ctype.h>` (2026-10-23, added).** `isdigit`, `toupper`... and Arduino's `isDigit`... now work on every chip (`sdk/include/compat/ctype.h`, `sdk/src/sketch_ctype.c`, ASCII). newlib's own header needs locale tables Baseline does not export; libstdc++ still gets the class bits (`_U`, `_L`, ...) it defines `std::ctype_base` with. `selftest` checks them. Library sweep: 28/28 on the Pocket C6 and S3 (ArduinoJson needed the class bits).
 18. **RTK Postcard pins were wrong (2026-10-23, fixed).** The target came from the docs; SparkFun's RTK Everywhere firmware (Begin.ino, RTK_POSTCARD) and the hardware say: GNSS UART RX 21 / TX 22 (they were swapped; a probe saw the LG290P transmitting on GPIO 21), GNSS/shield I2C SDA 7 / SCL 20 (swapped), microSD on the optional Portability Shield on SPI CS 27. The LG290P runs with its reset (GPIO 33) undriven and talks a few seconds after power-up. `Serial1.begin(460800)` with the defaults now reads NMEA; this was also the first hardware test of `Serial1`.
+19. **Classic ESP32 console at 115200, uploads at 921600 (2026-10-24, IoT RedBoard, Baseline 0.3.0).** The console now runs at 115200 (readable boot messages: 45 of 45 lines at reset, the ROM's included) and `@BSK BAUD 921600` raises it for an upload, with 4 lines in flight. Three problems found on the way, all fixed:
+   - **Lines lost with several in flight:** the UART interrupt can't run while a line is written to flash (cache off), and the 128-byte FIFO overflowed at 921600 ("expected offset 2304"). Fixed with `CONFIG_UART_ISR_IN_IRAM` (IRAM end 0x4009B3A0, about 19 KB left); Baseline's `BAUD` reply says the window (`window=4`), older Baselines get one line at a time.
+   - **Task watchdog in `bsk_loader`:** with input that never runs dry, the loader's read loop starved the idle task (reset 6). Fixed: one tick after each loader line.
+   - **Slow reads:** reading the console byte by byte through `HardwareSerial` cost more than the wire (2.1 MB in 107 s even with lines in flight). Fixed with one bulk `Serial.read(buf, n)` per pass (`bl_console_read_buf`).
+   - Also: a sketch printing without a newline (`06_mqtt_basic`'s dots) put Baseline's reply mid-line, so flick missed `OK baud=...` and then talked at the wrong rate. flick and the web runner now find `@BSK ` anywhere in a line. And probing 115200 first left garbage half-lines at other rates: probes now start with a newline.
+   - **Results:** Baseline update over USB 2.1 MB in **35.1 s** (was 120 s); `selftest` (15.8 KB) 0.43 s (was 1.00 s); `01_hello_flick` 0.09-0.10 s (was 0.13 s); `06_mqtt_basic` 0.19-0.20 s; 12 of 12 back-to-back uploads. `flick test`: 27 passed, 0 failed, 3 skipped (WiFi connect skipped: no network saved). One earlier `flick test` run stalled after the LittleFS checks on the first run after a fresh flash (not seen again; a microSD card was inserted in between).
+   - Older Baselines (0.1 to 0.2, console at 921600) still work with the new flick: found after the 115200 probe, `BAUD` answered with ERR, one line at a time (`selftest` 1.00 s).
+   - Not yet tested: the web runner's upload with `BAUD`, and native-USB boards with this Baseline (unchanged path: no `BAUD`, one line at a time).

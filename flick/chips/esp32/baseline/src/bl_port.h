@@ -10,16 +10,19 @@
 #include "driver/gpio.h"
 #include "bl_target.h"     // + the target's bl_board.h
 
-/* Console + sketch upload run on UART0 (the board's USB-serial chip) at 921600.
- * 2 Mbaud was tried (2026-10-22/23): on the IoT RedBoard's CH340 about 3% of
- * console replies lost a byte (0 of 120 at 921600), and uploads were no faster,
- * being bound by request/reply round trips. A board may set BL_PORT_CONSOLE_BAUD
- * in its bl_board.h. The ROM and bootloader messages stay at 115200
- * (chips/esp32/idf/sdkconfig.defaults says why). flick tries 921600,
- * 2000000 (Baselines built in between), then 115200 (older Baselines). */
+/* Console + sketch upload run on UART0 (the board's USB-serial chip). The
+ * console is at 115200 (since 0.3.0), the rate serial monitors expect and the
+ * one the ROM and bootloader always print at. For an upload, flick sends
+ * "@BSK BAUD 921600" and the console runs at that rate until the board
+ * restarts, or until no loader line has arrived for a few seconds.
+ * 921600 is the fastest the IoT RedBoard's CH340 carried reliably: at 2 Mbaud
+ * about 3% of replies lost a byte (0 of 120 at 921600), and uploads were no
+ * faster. Baselines from 0.1 to 0.2 ran the console at 921600 (one build at
+ * 2 Mbaud); flick still finds those. A board may set BL_PORT_CONSOLE_BAUD in
+ * its bl_board.h. */
 #define BL_PORT_CONSOLE_USB 0
 #ifndef BL_PORT_CONSOLE_BAUD
-#define BL_PORT_CONSOLE_BAUD 921600
+#define BL_PORT_CONSOLE_BAUD 115200
 #endif
 
 /* Flash and PSRAM pins, from eFuse and the chip package, read once

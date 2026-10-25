@@ -3,7 +3,7 @@
 #include <WiFi.h>
 #include <time.h>
 
-#ifndef WIFI_SSID      // secrets.cfg (see secrets.cfg.example) defines these
+#ifndef WIFI_SSID      // set them once with: python flick.py wifi "network" "password"
 #define WIFI_SSID "your-network"
 #define WIFI_PASSWORD "your-password"
 #endif

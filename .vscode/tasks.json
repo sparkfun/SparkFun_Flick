@@ -33,6 +33,14 @@
             "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
         },
         {
+            "label": "Set WiFi network",
+            "type": "process",
+            "command": "python",
+            "args": ["${workspaceFolder}/flick.py", "wifi", "${input:wifiName}", "${input:wifiPassword}"],
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "panel": "dedicated", "clear": true }
+        },
+        {
             "label": "Serial monitor",
             "type": "process",
             "command": "python",
@@ -58,6 +66,17 @@
         }
     ],
     "inputs": [
+        {
+            "id": "wifiName",
+            "type": "promptString",
+            "description": "WiFi network name, for sketches that use WIFI_SSID (saved in ~/.flick/secrets.cfg, never in your sketch)"
+        },
+        {
+            "id": "wifiPassword",
+            "type": "promptString",
+            "password": true,
+            "description": "WiFi password (saved in ~/.flick/secrets.cfg)"
+        },
         {
             "id": "sketchName",
             "type": "promptString",

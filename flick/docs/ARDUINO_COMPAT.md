@@ -76,7 +76,7 @@ Install libraries with the Arduino IDE's Library Manager or `arduino-cli lib ins
 
 Like the Arduino IDE, `flick` declares the functions a `.ino` defines, so a sketch may call a function before its definition.
 
-**Secrets.** Put `KEY = value` lines in `secrets.cfg` at the repository root (git-ignored; see `secrets.cfg.example`) and every sketch is built with `-DKEY="value"`: `#ifdef WIFI_SSID` ... `WiFi.begin(WIFI_SSID, WIFI_PASSWORD)` keeps passwords out of the sketch.
+**Secrets.** Put `KEY = value` lines in `~/.flick/secrets.cfg` (`python flick.py wifi NAME PASSWORD` sets the WiFi ones, `python flick.py secrets --set KEY=value` any other) and every sketch is built with `-DKEY="value"`: `#ifdef WIFI_SSID` ... `WiFi.begin(WIFI_SSID, WIFI_PASSWORD)` keeps passwords out of the sketch.
 
 ## How callbacks work
 

@@ -17,7 +17,7 @@
 // Within a minute the board installs version 2 and prints "running version 2".
 // If a new version crashed on its first run, Baseline would go back to the old one.
 //
-// WiFi: WIFI_SSID / WIFI_PASSWORD from secrets.cfg (see secrets.cfg.example).
+// WiFi: WIFI_SSID / WIFI_PASSWORD, set once with: python flick.py wifi "network" "password"
 #include <WiFi.h>
 #include <HTTPClient.h>
 

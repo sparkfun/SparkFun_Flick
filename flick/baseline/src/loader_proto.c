@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "sdkconfig.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
@@ -282,6 +283,37 @@ static void cmd_uend(void)
     restart_soon();
 }
 
+/* BAUD <rate>: a UART console switches to <rate> right after this reply, to
+ * make an upload faster. It goes back to its own rate (bl_console_default_baud)
+ * when no loader line has arrived for BAUD_IDLE_MS, and at every restart, so a
+ * host that disappears mid-upload never leaves the console at an odd rate. */
+#define BAUD_IDLE_MS    3000
+/* How many upload lines the host may send before waiting for replies. Lines
+ * that arrive while a DATA line is written to flash are only kept if the UART
+ * interrupt still runs with the cache off (CONFIG_UART_ISR_IN_IRAM); without
+ * it the 128-byte hardware FIFO overflows at 921600, so one line at a time. */
+#if CONFIG_UART_ISR_IN_IRAM
+#define BAUD_WINDOW     4
+#else
+#define BAUD_WINDOW     1
+#endif
+
+static void cmd_baud(char *args)
+{
+    unsigned long baud = strtoul(args, NULL, 10);
+    if (s_sink != console_sink || !bl_console_is_uart()) {
+        ERR("BAUD is for a UART console only");
+        return;
+    }
+    if (baud != 115200 && baud != 230400 && baud != 460800 && baud != 921600 &&
+        baud != 1500000 && baud != 2000000) {
+        ERR("unsupported baud rate %lu", baud);
+        return;
+    }
+    OK("baud=%lu window=%d", baud, BAUD_WINDOW);
+    bl_console_set_baud(baud);      // after the reply has left at the old rate
+}
+
 static void handle_line(char *line)
 {
     if (strncmp(line, "@BSK ", 5) != 0) {
@@ -323,6 +355,8 @@ static void handle_line(char *line)
     } else if (!strcmp(cmd, "CRASHCLEAR")) {
         bl_last_crash_clear();      // forget the recorded crash (INFO crash= becomes "-")
         OK("crash cleared");
+    } else if (!strcmp(cmd, "BAUD")) {
+        cmd_baud(args);
     } else if (!strcmp(cmd, "USBOFF")) {
         bl_usb_forget();    // back to the plain USB serial port (needed before flashing Baseline)
         OK("rebooting without USB devices");
@@ -359,10 +393,17 @@ static void loader_task(void *arg)
 {
     bool line_start = true;
     bool buffering = false;
+    TickType_t last_line = xTaskGetTickCount();
+    static char chunk[256];
     for (;;) {
-        int c;
-        while ((c = bl_console_read()) >= 0) {
-            char ch = (char)c;
+        size_t got;
+        if (bl_console_baud() != bl_console_default_baud() &&
+            xTaskGetTickCount() - last_line > pdMS_TO_TICKS(BAUD_IDLE_MS)) {
+            bl_console_set_baud(bl_console_default_baud());     // the upload ended or was abandoned
+        }
+        while ((got = bl_console_read_buf(chunk, sizeof(chunk))) > 0) {
+          for (size_t i = 0; i < got; i++) {
+            char ch = chunk[i];
             if (line_start) {
                 buffering = (ch == '@');
                 line_start = false;
@@ -382,6 +423,11 @@ static void loader_task(void *arg)
                     ERR("line too long");
                 } else if (strncmp(s_line, "@BSK ", 5) == 0) {
                     loader_handle_line(s_line, console_sink, NULL);
+                    last_line = xTaskGetTickCount();
+                    // With several upload lines in flight the input never runs dry,
+                    // so this loop would keep the CPU from the idle task until the
+                    // task watchdog fired. One tick per line (768 bytes) is plenty.
+                    vTaskDelay(1);
                 } else {
                     to_sketch(s_line, raw_len);
                     to_sketch("\n", 1);
@@ -394,6 +440,7 @@ static void loader_task(void *arg)
             } else {
                 s_overflow = true;
             }
+          }
         }
         vTaskDelay(1);
     }

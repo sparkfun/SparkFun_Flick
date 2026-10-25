@@ -84,7 +84,7 @@ Measured on 2026-10-23:
 
 | Board | Transport | Package | Result |
 |---|---|---|---|
-| IoT RedBoard (dual) | USB at 921600 | 2.1 MB raw image | 120 s |
+| IoT RedBoard (dual) | USB at 921600 | 2.1 MB raw image | 35 s (Baseline 0.3.0: 4 lines in flight; 120 s one at a time) |
 | IoT RedBoard (dual) | WiFi push | 2.1 MB raw image | 45 s |
 | Pro Micro C3 (staged) | native USB push | 1.26 MB `.bsu` | 14 s, then about 30 s for the bootloader's install |
 | Pro Micro C3 (staged) | WiFi push | 1.26 MB `.bsu` | 23 s, then about 30 s for the bootloader's install |

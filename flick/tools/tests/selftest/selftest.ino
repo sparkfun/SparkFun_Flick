@@ -10,7 +10,7 @@
 //   - microSD, if the board has a slot and a card is in it
 //   - the status and RGB LEDs (look at the board when it says LOOK)
 //   - WiFi scan and BLE scan (needs networks / devices nearby)
-//   - WiFi connection, NTP and HTTP, if WIFI_SSID is set (secrets.cfg, see flick)
+//   - WiFi connection, NTP and HTTP, if WIFI_SSID is set (python flick.py wifi ...)
 //   - deep sleep: the board sleeps for 2 s; after the timer wakes it, the
 //     second phase checks that RTC memory and Preferences survived.
 #include <Preferences.h>
@@ -274,7 +274,7 @@ static void check_radios()
     }
     WiFi.disconnect();
 #else
-    SKIP("WiFi connect, NTP, HTTP", "no WIFI_SSID (put it in secrets.cfg)");
+    SKIP("WiFi connect, NTP, HTTP", "no WIFI_SSID (python flick.py wifi NAME PASSWORD)");
 #endif
 
     check_ble();

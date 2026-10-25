@@ -4,7 +4,7 @@ Start with **`01_basics/01_hello_flick`**: it blinks the board's LED and prints 
 
 To make one of these your own, copy its folder into `my_sketches/` and rename the folder and its `.ino` to match.
 
-Sketches marked **WiFi** read your network name and password from `secrets.cfg`: copy `secrets.cfg.example` to `secrets.cfg` and fill it in.
+Sketches marked **WiFi** need your network name and password. Set them once with the VS Code task **Set WiFi network**, or `python flick.py wifi "network" "password"`; they're kept in `~/.flick/secrets.cfg`, not in the sketch.
 
 ## 01_basics
 

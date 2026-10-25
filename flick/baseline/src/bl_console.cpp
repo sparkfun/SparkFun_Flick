@@ -37,6 +37,34 @@ void bl_console_use(Stream *s)
     s_con = s ? s : &Serial;
 }
 
+static unsigned long s_baud = BL_PORT_CONSOLE_BAUD;
+
+int bl_console_is_uart(void)
+{
+    return !BL_PORT_CONSOLE_USB;
+}
+
+unsigned long bl_console_baud(void)
+{
+    return s_baud;
+}
+
+unsigned long bl_console_default_baud(void)
+{
+    return BL_PORT_CONSOLE_BAUD;
+}
+
+void bl_console_set_baud(unsigned long baud)
+{
+#if !BL_PORT_CONSOLE_USB
+    Serial.flush();                 // the last reply leaves at the old rate
+    Serial.updateBaudRate(baud);
+    s_baud = baud;
+#else
+    (void)baud;
+#endif
+}
+
 void bl_console_write(const char *s, size_t n)
 {
     s_con->write((const uint8_t *)s, n);
@@ -108,4 +136,29 @@ void bl_console_log(char level, const char *tag, const char *fmt, ...)
 int bl_console_read(void)
 {
     return s_con->available() ? s_con->read() : -1;
+}
+
+size_t bl_console_read_buf(char *buf, size_t max)
+{
+    int avail = s_con->available();
+    if (avail <= 0) {
+        return 0;
+    }
+    size_t n = (size_t)avail < max ? (size_t)avail : max;
+#if !BL_PORT_CONSOLE_USB
+    if (s_con == &Serial) {
+        // One UART driver call for the lot: byte by byte, the driver's lock and
+        // queue cost more than the bytes at 921600 (uploads ran at ~20 KB/s).
+        return Serial.read((uint8_t *)buf, n);
+    }
+#endif
+    size_t got = 0;
+    while (got < n) {
+        int c = s_con->read();
+        if (c < 0) {
+            break;
+        }
+        buf[got++] = (char)c;
+    }
+    return got;
 }

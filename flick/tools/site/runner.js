@@ -13,6 +13,7 @@
 
 const PREFIX = "@BSK ";
 const CHUNK = 768;
+const UPLOAD_BAUD = 921600;    // a UART console runs at this for an upload (@BSK BAUD, Baseline 0.3+)
 const ESPRESSIF = 0x303a, USB_SERIAL_JTAG = 0x1001;
 const USB_SERIAL_CHIPS = [0x1a86, 0x10c4, 0x0403];     // CH340, CP210x, FTDI (the classic ESP32 boards)
 const GROUPS = {
@@ -29,7 +30,7 @@ class Link {
   constructor(port, onLine) {
     this.port = port;
     this.onLine = onLine;
-    this.waiter = null;        // the pending request's resolve()
+    this.waiters = [];         // resolve() of each reply still to come, oldest first
     this.buf = "";
     this.closed = false;
   }
@@ -56,14 +57,19 @@ class Link {
         this.buf += dec.decode(value, { stream: true });
         let i;
         while ((i = this.buf.indexOf("\n")) >= 0) {
-          const line = this.buf.slice(0, i).replace(/\r$/, "");
+          let line = this.buf.slice(0, i).replace(/\r$/, "");
           this.buf = this.buf.slice(i + 1);
+          // A sketch that prints without a newline ("....") puts Baseline's reply
+          // at the end of its own line: show its text, then handle the reply.
+          const at = line.indexOf(PREFIX);
+          if (at > 0) {
+            this.onLine(line.slice(0, at));
+            line = line.slice(at);
+          }
           if (line.startsWith(PREFIX)) {
             const body = line.slice(PREFIX.length);
-            if (this.waiter && (body.startsWith("OK") || body.startsWith("ERR"))) {
-              const w = this.waiter;
-              this.waiter = null;
-              w({ ok: body.startsWith("OK"), text: body.replace(/^(OK|ERR)\s*/, "") });
+            if (this.waiters.length && (body.startsWith("OK") || body.startsWith("ERR"))) {
+              this.waiters.shift()({ ok: body.startsWith("OK"), text: body.replace(/^(OK|ERR)\s*/, "") });
             }
           } else {
             this.onLine(line);
@@ -82,13 +88,19 @@ class Link {
     await this.writer.write(new TextEncoder().encode(PREFIX + line + "\n"));
   }
 
-  // The reply to one command: { ok, text }, or null after the timeout.
+  // A promise for the next reply not yet claimed: { ok, text }, or null after the
+  // timeout. Register it before sending the line it answers.
+  expect(timeout = 5000) {
+    const reply = new Promise((resolve) => { this.waiters.push(resolve); });
+    return Promise.race([reply, sleep(timeout).then(() => null)]);
+  }
+
+  // The reply to one command.
   async request(line, timeout = 5000) {
-    const reply = new Promise((resolve) => { this.waiter = resolve; });
+    const reply = this.expect(timeout);
     await this.send(line);
-    const t = sleep(timeout).then(() => null);
-    const r = await Promise.race([reply, t]);
-    if (!r) this.waiter = null;
+    const r = await reply;
+    if (!r) this.waiters = [];       // a lost reply: start over
     return r;
   }
 
@@ -128,11 +140,14 @@ function infoFields(text) {
 
 async function openLink(port) {
   const info = port.getInfo();
-  // USB-serial chips: Baseline's console is 921600 (115200 on old Baselines). Native USB ignores the rate.
-  const bauds = USB_SERIAL_CHIPS.includes(info.usbVendorId) ? [921600, 115200] : [115200];
+  // USB-serial chips: Baseline's console is 115200 (921600 on Baselines 0.1 to 0.2).
+  // Native USB ignores the rate.
+  const bauds = USB_SERIAL_CHIPS.includes(info.usbVendorId) ? [115200, 921600] : [115200];
   for (const baud of bauds) {
     const link = new Link(port, (line) => log(line));
     await link.open(baud);
+    // The newline ends whatever a probe at a wrong rate left half-received.
+    await link.writer.write(new TextEncoder().encode("\n"));
     const r = await link.request("INFO", 2000);
     if (r && r.ok) {
       state.baud = baud;
@@ -236,6 +251,18 @@ async function watch() {
   }
 }
 
+// Reopen the port at another rate. watch() of the old link stops, a new one starts.
+async function reopen(baud) {
+  const old = state.link;
+  state.link = null;
+  await old.close();
+  const nl = new Link(state.port, (line) => log(line));
+  await nl.open(baud);
+  state.link = nl;
+  watch();
+  return nl;
+}
+
 function b64(bytes) {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -247,6 +274,7 @@ async function run(ex) {
   state.busy = true;
   render();
   const target = state.board.target;
+  let fast = false;
   try {
     const res = await fetch(`examples/${ex.path}/${target}.flick`);
     if (!res.ok) throw new Error(`no image for this board (${res.status})`);
@@ -254,19 +282,40 @@ async function run(ex) {
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", img)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
     log(`--- uploading ${ex.name} (${img.length} bytes)`, "note");
-    const link = state.link;
+    let link = state.link;
+    // A UART console goes to UPLOAD_BAUD for the upload; Baseline's reply says how
+    // many lines may be in flight. Older Baselines answer ERR: one at a time.
+    let window = 1;
+    if (USB_SERIAL_CHIPS.includes(state.port.getInfo().usbVendorId)) {
+      const r = await link.request(`BAUD ${UPLOAD_BAUD}`, 2000);
+      if (r && r.ok) {
+        window = Math.max(1, parseInt(infoFields(r.text).window || "1", 10));
+        if (state.baud !== UPLOAD_BAUD) {
+          link = await reopen(UPLOAD_BAUD);
+          fast = true;
+        }
+      }
+    }
     let r = await link.request(`BEGIN ${img.length} ${hash}`, 15000);
     if (!r || !r.ok) throw new Error(r ? r.text : "no reply to BEGIN");
+    const replies = [];
+    const check = (r, what) => { if (!r || !r.ok) throw new Error(r ? r.text : `no reply ${what}`); };
     for (let off = 0; off < img.length; off += CHUNK) {
-      r = await link.request(`DATA ${off} ${b64(img.subarray(off, off + CHUNK))}`);
-      if (!r || !r.ok) throw new Error(r ? r.text : `no reply at byte ${off}`);
+      replies.push(link.expect(5000));
+      await link.send(`DATA ${off} ${b64(img.subarray(off, off + CHUNK))}`);
+      while (replies.length >= window) check(await replies.shift(), `at byte ${off}`);
     }
+    while (replies.length) check(await replies.shift(), "to DATA");
     r = await link.request("END", 10000);
     if (!r || !r.ok) throw new Error(r ? r.text : "no reply to END");
     log(`--- ${ex.name} installed; the board restarts into it`, "note");
   } catch (e) {
     log(`--- upload failed: ${e.message}`, "bad");
   } finally {
+    // The board restarts (or, after a failure, drops back by itself) to its own rate.
+    if (fast && state.link) {
+      try { await reopen(state.baud); } catch (e) {}
+    }
     state.busy = false;
     render();
   }

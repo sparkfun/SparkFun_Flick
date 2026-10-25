@@ -25,8 +25,14 @@ CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y
 # CONFIG_BT_A2DP_ENABLE is not set
 # CONFIG_BT_HFP_ENABLE is not set
 
-# Baseline's console runs at 921600 (BL_PORT_CONSOLE_BAUD in bl_port.h, which
-# says why not 2 Mbaud). The ROM and bootloader messages stay at 115200: IDF
-# only applies a console baud rate with CONFIG_ESP_CONSOLE_UART_CUSTOM, so the
-# line below has no effect (it never did, at 2 Mbaud either).
-CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
+# Baseline's console runs at 115200, like the ROM and bootloader messages, and
+# rises to 921600 only during an upload (BL_PORT_CONSOLE_BAUD and the loader's
+# BAUD command; bl_port.h says why). IDF applies this line only with
+# CONFIG_ESP_CONSOLE_UART_CUSTOM, so it just records the rate.
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# Keep the UART interrupt running while flash is written (the cache is off then).
+# An upload sends several lines before waiting for replies (loader BAUD
+# window=); without this the 128-byte UART FIFO overflows during each flash
+# write at 921600 and a line is lost. Costs a little IRAM (about 25 KB free).
+CONFIG_UART_ISR_IN_IRAM=y

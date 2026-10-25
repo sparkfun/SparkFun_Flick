@@ -21,7 +21,7 @@
 // Within a minute the board downloads the update (about 1.3 MB), restarts,
 // and prints the new version.
 //
-// WiFi: WIFI_SSID / WIFI_PASSWORD from secrets.cfg (see secrets.cfg.example).
+// WiFi: WIFI_SSID / WIFI_PASSWORD, set once with: python flick.py wifi "network" "password"
 #include <WiFi.h>
 #include <HTTPClient.h>
 

@@ -6,6 +6,8 @@
  *   host -> @BSK BEGIN <size> <sha256hex>   <- @BSK OK slot=b      (inactive slot erased)
  *   host -> @BSK DATA <offset> <base64>     <- @BSK OK <next offset>
  *   host -> @BSK END                        <- @BSK OK slot=b name=...   then reboot
+ *   host -> @BSK BAUD <rate>                <- @BSK OK baud=<rate>  (UART console only: then
+ *                                              runs at <rate> until a restart or 3 s without commands)
  *   host -> @BSK ABORT | SAFE | RESET
  * Errors: @BSK ERR <message>
  * All other console input is passed to the sketch.

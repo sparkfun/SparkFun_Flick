@@ -33,7 +33,7 @@ A sketch is a folder named like its main file: `my_sketches/plant_monitor/plant_
 - **Libraries:** a `libraries/` subfolder works like an Arduino sketchbook's.
 - **`sketch.cfg` (optional):** `name = ...`, `stack = 8192` (bytes, for `setup()`/`loop()`) and `target = ...` (for `build`).
 - **Includes:** `baseline.h` is included automatically. `#include <Arduino.h>`, `<WiFi.h>`, `<Wire.h>`, `<HTTPClient.h>`, `<Preferences.h>`, `<LittleFS.h>`, `<BLEDevice.h>`, `<esp_now.h>` and the like all work.
-- **Secrets:** WiFi credentials and keys go in `secrets.cfg` (copy `secrets.cfg.example`; it is git-ignored). Each `KEY = value` becomes `#define KEY "value"`. Write `#ifdef WIFI_SSID` fallbacks, and never put credentials in the sketch.
+- **Secrets:** WiFi credentials and keys live in `~/.flick/secrets.cfg`, outside this folder. The user sets the WiFi network once with `python flick.py wifi "network" "password"` (or the VS Code task **Set WiFi network**); other keys with `python flick.py secrets --set KEY=value`. Each `KEY = value` becomes `#define KEY "value"`. Write `#ifdef WIFI_SSID` fallbacks, never put credentials in the sketch, and never print or read out the secrets file.
 - **Board pins:** `LED_BUILTIN`, `RGB_BUILTIN`, `SDA`, `SCL`, `A0`... and `BL_BOARD_*` / `BL_TARGET_NAME` come from `flick/targets/<target>/sdk/bl_board.h`. Use those names rather than raw pin numbers.
 
 ## Rules: what Baseline does not do
