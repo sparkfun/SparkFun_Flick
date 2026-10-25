@@ -250,6 +250,17 @@ static void wdog_feed(void)
     WDOG1_WSR = 0xAAAA;
 }
 
+/* Baseline calls that can take seconds (microSD setup with no card, LittleFS
+ * formatting) give the watchdog its longest time-out, 128 s, for their length
+ * (BlWdogLong in bl_teensy.h), like WdtPause on the ESP32 family. WT can be
+ * rewritten while the watchdog runs; SRS and WDA must stay 1 (SRS = 0 resets). */
+void bl_wdog_long(bool on)
+{
+    uint16_t wcr = WDOG1_WCR & ~WDOG_WCR_WT(0xFF);
+    WDOG1_WCR = wcr | WDOG_WCR_WT(on ? 0xFF : WDOG_HALF_SECONDS - 1);
+    wdog_feed();        // the new time-out counts from here
+}
+
 /* ---- Faults: record where, mark a crash, reset at once ------------------ */
 extern "C" FASTRUN __attribute__((noinline)) void bl_fault_c(const uint32_t *frame, uint32_t ipsr)
 {

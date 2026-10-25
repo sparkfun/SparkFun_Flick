@@ -32,6 +32,18 @@ void *bl_rtc_memory_block(uint32_t *size);
 int bl_wake_cause_code(void);
 void bl_sleep_restart(uint64_t us) __attribute__((noreturn));
 
+void bl_wdog_long(bool on);
+
+#ifdef __cplusplus
+}
+/* For the length of a call that can take seconds: the watchdog waits 128 s, not 5. */
+struct BlWdogLong {
+    BlWdogLong() { bl_wdog_long(true); }
+    ~BlWdogLong() { bl_wdog_long(false); }
+};
+extern "C" {
+#endif
+
 /* bl_teensy_hw.cpp */
 void bl_timers_poll(void);                  /* fires due timers (Ticker): from bl_poll() */
 bool bl_is_psram(const void *p);

@@ -26,6 +26,7 @@ static int s_sd_bus = -1;       /* BL_SD_SPI / BL_SD_MMC while mounted */
 static bool lfs_mount(void)
 {
     if (!s_lfs_mounted) {
+        BlWdogLong wdog;        // formatting a blank region takes seconds
         s_lfs_mounted = s_lfs.begin(BL_BOARD_FS_SIZE);      // formats a blank region
     }
     return s_lfs_mounted;
@@ -124,6 +125,7 @@ extern "C" int bl_impl_fs_format(void)
     if (!lfs_mount()) {
         return BL_ERR_FAIL;
     }
+    BlWdogLong wdog;
     return s_lfs.quickFormat() ? BL_OK : BL_ERR_FAIL;
 }
 
@@ -265,6 +267,7 @@ extern "C" int bl_impl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if
         bus = BL_SD_SPI;
     }
 #endif
+    BlWdogLong wdog;        // with no card, SdFat retries for seconds before it gives up
     bool ok;
     if (bus == BL_SD_MMC) {
 #ifdef BL_BOARD_SD_BUILTIN
