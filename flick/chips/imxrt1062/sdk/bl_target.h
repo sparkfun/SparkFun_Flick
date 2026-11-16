@@ -51,6 +51,12 @@
  * imxrt.h's attachInterruptVector() works in them. */
 #define BL_TEENSY_VECTORS       0x20000000
 
+/* ---- What the chip has: the SDK declares only the matching APIs, so a sketch
+ * that uses something this chip lacks fails to compile with a clear message
+ * (sdk/include/baseline_features.h). */
+#define BL_PLATFORM_TEENSY    1       /* Teensyduino names (IntervalTimer, extmem_malloc, analogWriteFrequency, ...) */
+#define BL_HAS_AUDIO          1       /* the Teensy Audio library (Audio.h) */
+
 #define BL_TARGET_CHIP          "imxrt1062"   /* chips/<chip> */
 
 #include "bl_board.h"                 /* targets/<target>/sdk/bl_board.h */

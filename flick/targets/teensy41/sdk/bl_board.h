@@ -33,7 +33,6 @@
 #define BL_BOARD_MOSI           11
 #define BL_BOARD_SS             10
 #define BL_BOARD_SD_BUILTIN     254         /* Teensyduino's BUILTIN_SDCARD: the SDIO slot */
-#define BL_SD_DEFAULT_BUS       1           /* BL_SD_MMC: SD_MMC.begin() mounts the SDIO slot */
 
 /* ---- Baseline defaults ---- */
 #define BL_SERIAL1_RX           0

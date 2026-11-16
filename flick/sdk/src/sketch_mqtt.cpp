@@ -1,6 +1,8 @@
 /* sketch_mqtt.cpp - out-of-line parts of baseline_mqtt.h. */
 #include "baseline.h"
 
+#if defined(BL_HAS_WIFI)     /* the whole file: boards with this feature only */
+
 #define TOPIC_MAX 256
 
 PubSubClient::~PubSubClient()
@@ -123,3 +125,5 @@ int PubSubClient::endPublish()
     pubLen_ = pubCap_ = 0;
     return ok ? 1 : 0;
 }
+
+#endif /* BL_HAS_WIFI */

@@ -44,6 +44,16 @@
 #define BL_TOUCH_T9 32
 #define BL_HAS_DAC  1               /* DAC1 = GPIO25, DAC2 = GPIO26 */
 
+/* ---- What the chip has: the SDK declares only the matching APIs, so a sketch
+ * that uses something this chip lacks fails to compile with a clear message
+ * (sdk/include/baseline_features.h). */
+#define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+#define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, ESP-NOW, WiFi OTA */
+#define BL_HAS_BLE            1       /* Bluetooth LE (BLESerial, BLEDevice, ...) */
+#define BL_HAS_BT_CLASSIC     1       /* Bluetooth Classic (BluetoothSerial) */
+#define BL_HAS_TOUCH          1       /* capacitive touch pins (touchRead, T0...) */
+#define BL_HAS_DAC            1       /* DAC outputs (dacWrite) */
+
 #define BL_TARGET_CHIP          "esp32"     /* chips/<chip> */
 
 #include "bl_board.h"                 /* targets/<target>/sdk/bl_board.h */

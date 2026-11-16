@@ -31,6 +31,23 @@
 #define F_CPU 600000000
 #endif
 
+/* ---- Teensyduino names for things the ESP32 family names differently ---- */
+/* PWM: analogWrite() takes analogWriteResolution() bits (default 8) at the
+ * pin's analogWriteFrequency() (Teensy's default per pin, 4.482 kHz on most). */
+void analogWriteResolution(unsigned int bits);
+void analogWriteFrequency(uint8_t pin, float frequency);
+/* Teensy 4.1 PSRAM (EXTMEM chips): like Teensyduino, these fall back to RAM
+ * when there is no PSRAM. free() frees either kind. */
+static inline void *extmem_malloc(size_t size) { void *p = BL->ps_malloc(size); return p ? p : malloc(size); }
+static inline void *extmem_calloc(size_t n, size_t size) { void *p = BL->ps_calloc(n, size); return p ? p : calloc(n, size); }
+static inline void *extmem_realloc(void *ptr, size_t size) { void *p = BL->ps_realloc(ptr, size); return p ? p : realloc(ptr, size); }
+static inline void extmem_free(void *ptr) { free(ptr); }
+/* The die temperature, degrees C. */
+static inline float tempmonGetTemp(void) { return BL->temperature_read(); }
+#ifdef BL_BOARD_SD_BUILTIN
+#define BUILTIN_SDCARD BL_BOARD_SD_BUILTIN      /* SD.begin(BUILTIN_SDCARD): the 4.1's slot */
+#endif
+
 /* The same as digitalWrite()/digitalRead() for now (a call into Baseline). */
 static inline void digitalWriteFast(uint8_t pin, uint8_t val) { digitalWrite(pin, val); }
 static inline uint8_t digitalReadFast(uint8_t pin) { return digitalRead(pin); }

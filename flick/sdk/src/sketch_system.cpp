@@ -71,6 +71,7 @@ void Ticker::detach()
     }
 }
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- hardware timer API on Baseline timers ---- */
 
 struct hw_timer_s {
@@ -326,6 +327,7 @@ bool getLocalTime(struct tm *info, uint32_t ms)
     return true;
 }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---- tone ---- */
 
 static uint64_t s_tone_pins;    // pins tone() attached to LEDC

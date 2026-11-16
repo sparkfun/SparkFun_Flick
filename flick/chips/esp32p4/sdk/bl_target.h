@@ -31,6 +31,11 @@
 #define BL_SKETCH_RAM_BASE      0x4FFA6000
 #define BL_SKETCH_RAM_SIZE      0x8000      /* 32 KB */
 
+/* ---- What the chip has: the SDK declares only the matching APIs, so a sketch
+ * that uses something this chip lacks fails to compile with a clear message
+ * (sdk/include/baseline_features.h). */
+#define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+
 #define BL_TARGET_CHIP          "esp32p4"     /* chips/<chip> */
 
 #include "bl_board.h"                 /* targets/<target>/sdk/bl_board.h */

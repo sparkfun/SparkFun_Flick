@@ -3,7 +3,9 @@
 
 LittleFSFS LittleFS;
 SDFS SD;
+#if defined(BL_PLATFORM_ESP32)
 SDMMCFS SD_MMC;
+#endif
 
 /* ---- Preferences ---- */
 

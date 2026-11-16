@@ -1,6 +1,9 @@
 // 01_ble_serial.ino - a BLE serial port (Nordic UART Service) bridged to USB.
 // Connect with nRF Connect, Bluefruit Connect, or "Serial Bluetooth Terminal".
 // Text typed in the USB monitor goes to the phone, and the other way round.
+#if !defined(BL_HAS_BLE)
+#error "This board has no Bluetooth LE."
+#endif
 
 bool wasConnected = false;
 

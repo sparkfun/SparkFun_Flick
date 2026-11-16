@@ -1,6 +1,8 @@
 /* sketch_net.cpp - out-of-line parts of baseline_net.h. */
 #include "baseline.h"
 
+#if defined(BL_HAS_WIFI)     /* the whole file: boards with this feature only */
+
 WiFiClass WiFi;
 MDNSResponder MDNS;
 ArduinoOTAClass ArduinoOTA;
@@ -216,3 +218,5 @@ String WebServer::text(int what, int index, const char *name)
     free(big);
     return s;
 }
+
+#endif /* BL_HAS_WIFI */

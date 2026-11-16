@@ -43,7 +43,15 @@
 #define BL_TOUCH_T12 12
 #define BL_TOUCH_T13 13
 #define BL_TOUCH_T14 14
-#define BL_HAS_USB_DEVICE 1         /* USB keyboard/mouse/gamepad/MIDI */
+
+/* ---- What the chip has: the SDK declares only the matching APIs, so a sketch
+ * that uses something this chip lacks fails to compile with a clear message
+ * (sdk/include/baseline_features.h). */
+#define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+#define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, ESP-NOW, WiFi OTA */
+#define BL_HAS_BLE            1       /* Bluetooth LE (BLESerial, BLEDevice, ...) */
+#define BL_HAS_TOUCH          1       /* capacitive touch pins (touchRead, T0...) */
+#define BL_HAS_USB_DEVICE     1       /* USB device mode (USBHIDKeyboard, USBMIDI, ...) */
 
 #define BL_TARGET_CHIP          "esp32s3"   /* chips/<chip> */
 

@@ -1,6 +1,8 @@
 /* sketch_ble.cpp - Arduino BLE library classes on top of Baseline (see baseline_ble.h). */
 #include "baseline.h"
 
+#if defined(BL_HAS_BLE)     /* the whole file: boards with this feature only */
+
 #define MAX_CHARS   32      /* match Baseline's tables */
 #define MAX_REMOTE  16
 #define MAX_CLIENTS 4
@@ -329,3 +331,5 @@ String BLERemoteCharacteristic::readValue()
     int n = bl_ble_remote_read(h_, buf, sizeof(buf));
     return n > 0 ? String((const char *)buf, n < (int)sizeof(buf) ? n : sizeof(buf)) : String();
 }
+
+#endif /* BL_HAS_BLE */

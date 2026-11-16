@@ -1,6 +1,8 @@
 /* sketch_espnow.cpp - classic esp_now_* API on top of Baseline (see baseline_espnow.h). */
 #include "baseline.h"
 
+#if defined(BL_HAS_WIFI)     /* the whole file: boards with this feature only */
+
 #define MAX_PEERS 20
 
 static bool s_init;
@@ -163,3 +165,5 @@ esp_err_t esp_now_send(const uint8_t *peer_addr, const uint8_t *data, size_t len
     }
     return bl_espnow_send(peer_addr, data, len) == BL_OK ? ESP_OK : ESP_FAIL;
 }
+
+#endif /* BL_HAS_WIFI */

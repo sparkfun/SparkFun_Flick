@@ -21,6 +21,11 @@
 #include <time.h>
 #include <sys/time.h>
 
+#if defined(BL_PLATFORM_ESP32)     /* ESP-IDF names, up to the timers */
+#ifndef ESP_OK
+typedef int esp_err_t;
+#define ESP_OK                  0
+#endif
 #ifndef ESP_FAIL
 #define ESP_FAIL                (-1)
 #endif
@@ -91,6 +96,7 @@ static inline esp_err_t esp_light_sleep_start(void) { return bl_to_esp(bl_sleep_
 
 /* Start NTP (WiFi must be connected) and set the time zone by offsets, or by a
  * POSIX TZ string such as "EST5EDT,M3.2.0,M11.1.0". */
+#if defined(BL_HAS_WIFI)
 static inline void configTime(long gmtOffset_sec, int daylightOffset_sec, const char *server1,
                               const char *server2 = 0, const char *server3 = 0)
 {
@@ -102,8 +108,10 @@ static inline void configTzTime(const char *tz, const char *server1, const char 
     bl_sdk_tz_set(tz);
     bl_time_ntp_start(server1, server2, server3);
 }
+#endif /* BL_HAS_WIFI */
 /* Wait up to ms for the clock to be set, then fill info with the local time. */
 bool getLocalTime(struct tm *info, uint32_t ms = 5000);
+#endif /* BL_PLATFORM_ESP32 */
 
 /* ---------------- timers ---------------- */
 
@@ -146,6 +154,7 @@ private:
     void *arg_ = 0;
 };
 
+#if defined(BL_PLATFORM_ESP32)
 /* Hardware timers (Arduino-ESP32 3.x API), backed by Baseline timers. */
 struct hw_timer_s;
 typedef struct hw_timer_s hw_timer_t;
@@ -184,6 +193,7 @@ esp_err_t esp_timer_delete(esp_timer_handle_t timer);
 bool esp_timer_is_active(esp_timer_handle_t timer);
 static inline int64_t esp_timer_get_time(void) { return (int64_t)micros(); }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---------------- tone (LEDC) ---------------- */
 void tone(uint8_t pin, unsigned int frequency, unsigned long duration = 0);
 void noTone(uint8_t pin);

@@ -8,6 +8,7 @@
 
 #ifdef __cplusplus
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- Reset reason (ESP-IDF esp_reset_reason_t values) ---- */
 typedef enum {
     ESP_RST_UNKNOWN = 0, ESP_RST_POWERON, ESP_RST_EXT, ESP_RST_SW, ESP_RST_PANIC, ESP_RST_INT_WDT,
@@ -22,6 +23,7 @@ typedef enum { ADC_0db = BL_ADC_ATTEN_0DB, ADC_2_5db = BL_ADC_ATTEN_2_5DB, ADC_6
 static inline void analogSetAttenuation(adc_attenuation_t atten) { bl_adc_set_attenuation(-1, atten); }
 static inline void analogSetPinAttenuation(uint8_t pin, adc_attenuation_t atten) { bl_adc_set_attenuation(pin, atten); }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---- More analog pins, where the board's bl_board.h names them ---- */
 #ifdef BL_BOARD_A1
 static const int A1 = BL_BOARD_A1;
@@ -54,6 +56,7 @@ static inline unsigned long pulseInLong(uint8_t pin, uint8_t state, unsigned lon
     return pulseIn(pin, state, timeout);
 }
 
+#if defined(BL_HAS_WIFI)
 /* ---- WiFiMulti: connect to the strongest of several known networks ---- */
 class WiFiMulti {
 public:
@@ -67,5 +70,6 @@ private:
     int count_ = 0;
 };
 
+#endif /* BL_HAS_WIFI */
 #endif /* __cplusplus */
 #endif /* BASELINE_EXTRAS_H */

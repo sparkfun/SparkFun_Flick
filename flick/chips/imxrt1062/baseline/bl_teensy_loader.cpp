@@ -121,6 +121,8 @@ static const char *s_safe_reason;
 static uint32_t s_started_ms;
 static bl_sketch_callbacks_t s_cb;
 static int s_remap_mode;        /* 1: system addresses, 2: FlexSPI offsets, 0: failed */
+static void systick_hook(void);
+static void trial_check(void);
 
 static const char *sketch_check(int slot)
 {
@@ -230,6 +232,7 @@ static void sketch_start(int slot)
     s_status = "running";
     s_running = true;
     s_started_ms = millis();
+    systick_hook();
     if (s_cb.setup) {
         s_cb.setup();
     }
@@ -259,6 +262,81 @@ void bl_wdog_long(bool on)
     uint16_t wcr = WDOG1_WCR & ~WDOG_WCR_WT(0xFF);
     WDOG1_WCR = wcr | WDOG_WCR_WT(on ? 0xFF : WDOG_HALF_SECONDS - 1);
     wdog_feed();        // the new time-out counts from here
+}
+
+/* ---- while(1); stops the sketch ------------------------------------------
+ * The classic Arduino way to stop, `while (1);` or `for (;;);`, compiles to one
+ * instruction that branches to itself. Left alone it would spin until the
+ * watchdog resets the board and rolls the sketch back. Instead, Teensy's 1 ms
+ * SysTick interrupt (wrapped here) looks at where the sketch's code was
+ * interrupted: on a branch to itself, it sends that thread into bl_parked(),
+ * which keeps uploads, INFO and the watchdog going and never returns to the
+ * sketch. Interrupts (IntervalTimer, audio) keep running, as on any Arduino.
+ * A loop that does anything else is still a hang for the watchdog. */
+static void (*volatile s_systick_next)(void);
+static volatile uint32_t s_halt_pc;
+static char s_status_buf[64];
+
+extern "C" void bl_systick(void);
+
+extern "C" __attribute__((noreturn, used)) void bl_parked_c(void)
+{
+    snprintf(s_status_buf, sizeof(s_status_buf), "stopped: while(1) at 0x%08lx", (unsigned long)s_halt_pc);
+    s_status = s_status_buf;
+    Serial.printf("\n[flick] the sketch stopped in while(1) (0x%08lx); uploads still work\n", (unsigned long)s_halt_pc);
+    for (;;) {
+        trial_check();
+        bl_poll();
+        yield();
+    }
+}
+
+/* Entered by exception return with whatever stack the sketch had: align it
+ * for the AAPCS (doubles, varargs) before any C runs. */
+extern "C" __attribute__((naked, noreturn)) void bl_parked(void)
+{
+    asm volatile(
+        "mov r0, sp\n"
+        "bic r0, r0, #7\n"
+        "mov sp, r0\n"
+        "b bl_parked_c\n");
+}
+
+extern "C" FASTRUN __attribute__((noinline, used)) void bl_systick_c(uint32_t *frame)
+{
+    if (s_running && !s_halt_pc && (frame[7] & 0x1FF) == 0) {     // the thread was interrupted, not an ISR
+        uint32_t pc = frame[6];
+        if (pc >= BL_SKETCH_IBUS_BASE && pc < BL_SKETCH_IBUS_BASE + BL_SKETCH_MAX_SIZE) {
+            const uint16_t *ins = (const uint16_t *)pc;
+            if (ins[0] == 0xE7FE || (ins[0] == 0xF7FF && ins[1] == 0xBFFE)) {     // b.n . / b.w .
+                s_halt_pc = pc;
+                frame[6] = (uint32_t)bl_parked & ~1u;   // the thread resumes in bl_parked()
+            }
+        }
+    }
+    s_systick_next();
+}
+
+extern "C" FASTRUN __attribute__((naked)) void bl_systick(void)
+{
+    asm volatile(
+        "tst lr, #4\n"
+        "ite eq\n"
+        "mrseq r0, msp\n"
+        "mrsne r0, psp\n"
+        "b bl_systick_c\n");
+}
+
+/* Install the wrapper, and again if Teensy's core replaced the SysTick vector
+ * (EventResponder does when timer events are first used). */
+static void systick_hook(void)
+{
+    void (*cur)(void) = _VectorsRam[15];
+    if (cur != bl_systick) {
+        s_systick_next = cur;
+        asm volatile("dsb" ::: "memory");
+        _VectorsRam[15] = bl_systick;
+    }
 }
 
 /* ---- Faults: record where, mark a crash, reset at once ------------------ */
@@ -627,6 +705,9 @@ void bl_poll(void)
     }
     busy = true;
     bl_timers_poll();
+    if (s_running) {
+        systick_hook();
+    }
     int avail;
     while ((avail = Serial.available()) > 0) {
         char c = (char)Serial.read();
@@ -720,15 +801,9 @@ void bl_teensy_start(void)
     sketch_start(s_ps.active);
 }
 
-void bl_teensy_loop(void)
+/* A sketch that has run TRIAL_MS without crashing is kept. */
+static void trial_check(void)
 {
-    bl_poll();
-    if (!s_running) {
-        return;
-    }
-    if (s_cb.loop) {
-        s_cb.loop();
-    }
     if (s_started_ms && millis() - s_started_ms >= TRIAL_MS) {
         s_started_ms = 0;
         s_ni.crashes = 0;
@@ -738,4 +813,16 @@ void bl_teensy_loop(void)
             ps_save();
         }
     }
+}
+
+void bl_teensy_loop(void)
+{
+    bl_poll();
+    if (!s_running) {
+        return;
+    }
+    if (s_cb.loop) {
+        s_cb.loop();
+    }
+    trial_check();
 }

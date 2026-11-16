@@ -118,7 +118,9 @@ static inline long random(long howbig) { return howbig > 0 ? (long)(bl_random() 
 static inline long random(long howsmall, long howbig) { return howsmall >= howbig ? howsmall : howsmall + random(howbig - howsmall); }
 
 #include "baseline_string.h"
+#if defined(BL_HAS_WIFI)
 #include "baseline_espnow.h"
+#endif
 
 class Print;
 
@@ -215,6 +217,7 @@ public:
     void setDebugOutput(bool) {}
 };
 
+#if defined(BL_HAS_BLE)
 /* ---- BLESerial: BLE serial port (Nordic UART Service) ---- */
 class BLESerialClass : public Stream {
 public:
@@ -226,6 +229,8 @@ public:
     int read() override { return bl_ble_serial_read(); }
 };
 
+#endif /* BL_HAS_BLE */
+#if defined(BL_HAS_BT_CLASSIC)
 /* ---- BluetoothSerial: Bluetooth Classic serial port (SPP) ----
  * Classic ESP32 only (the S3, C3, C6 have no Bluetooth Classic): elsewhere
  * begin() returns false. Phones and PCs pair with it as a serial port. */
@@ -265,6 +270,7 @@ public:
     operator bool() { return hasClient(); }
 };
 
+#endif /* BL_HAS_BT_CLASSIC */
 /* ---- IPAddress ---- */
 class IPAddress : public Printable {
 public:
@@ -286,7 +292,9 @@ private:
 };
 
 /* WiFi, WiFiClient/Server/UDP, HTTPClient, WebServer */
+#if defined(BL_HAS_WIFI)
 #include "baseline_net.h"
+#endif
 
 /* ---- Wire: I2C master on the Qwiic connector ---- */
 /* Wire (bus 0) and Wire1 (bus 1, on chips with a second I2C controller).
@@ -336,6 +344,7 @@ private:
     size_t rxPos_ = 0;
 };
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- ESP: chip and memory information ---- */
 class EspClass {
 public:
@@ -355,26 +364,39 @@ public:
     void deepSleep(uint64_t time_us) { bl_sleep_wake(BL_WAKE_TIMER, time_us, 0, 0); bl_sleep_deep(); }
 };
 
+#endif /* BL_PLATFORM_ESP32 */
 extern SerialClass Serial;
+#if defined(BL_HAS_BLE)
 extern BLESerialClass BLESerial;
+#endif
 extern TwoWire Wire;
 extern TwoWire Wire1;
+#if defined(BL_PLATFORM_ESP32)
 extern EspClass ESP;
+#endif
 
 /* attachInterrupt, SPI, Serial1/Serial2 */
 #include "baseline_io.h"
 /* Arduino BLE library: BLEDevice, BLEServer, BLEScan, BLEClient, ... */
+#if defined(BL_HAS_BLE)
 #include "baseline_ble.h"
+#endif
 /* Preferences, LittleFS / File, SD / SD_MMC */
 #include "baseline_storage.h"
 /* PubSubClient (MQTT) */
+#if defined(BL_HAS_WIFI)
 #include "baseline_mqtt.h"
+#endif
 /* sleep, time/NTP, Ticker / hw_timer / esp_timer, tone */
 #include "baseline_system.h"
 /* FastLED-compatible LED strips */
+#if defined(BL_PLATFORM_ESP32)
 #include "baseline_fastled.h"
+#endif
 /* USB keyboard / mouse / gamepad / media keys / MIDI (ESP32-S3) */
+#if defined(BL_HAS_USB_DEVICE)
 #include "baseline_usb.h"
+#endif
 /* MAX17048 LiPo fuel gauge */
 #include "baseline_fuelgauge.h"
 #include "baseline_extras.h"

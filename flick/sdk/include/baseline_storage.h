@@ -228,10 +228,16 @@ public:
         if (ssPin == BOARD_DEFAULT) {
             return bl_sd_begin(-1, -1, 0, format_if_empty) == BL_OK;
         }
+#ifdef BL_BOARD_SD_BUILTIN
+        if (ssPin == BL_BOARD_SD_BUILTIN) {     // Teensy's BUILTIN_SDCARD: the SDIO slot
+            return bl_sd_begin(BL_SD_MMC, 0, 0, format_if_empty) == BL_OK;
+        }
+#endif
         return bl_sd_begin(BL_SD_SPI, ssPin, frequency, format_if_empty) == BL_OK;
     }
 };
 
+#if defined(BL_PLATFORM_ESP32)
 class SDMMCFS : public SDCardFS {
 public:
     bool setPins(int clk, int cmd, int d0) { return true; }     // Baseline uses the board's pins
@@ -243,8 +249,11 @@ public:
     }
 };
 
+#endif /* BL_PLATFORM_ESP32 */
 extern SDFS SD;
+#if defined(BL_PLATFORM_ESP32)
 extern SDMMCFS SD_MMC;
+#endif
 
 /* Arduino code often writes fs::FS and fs::File */
 namespace fs {
@@ -252,7 +261,9 @@ using ::File;
 using ::FS;
 using ::LittleFSFS;
 using ::SDFS;
+#if defined(BL_PLATFORM_ESP32)
 using ::SDMMCFS;
+#endif
 using ::SeekMode;
 }
 

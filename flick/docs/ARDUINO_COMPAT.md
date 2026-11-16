@@ -99,6 +99,28 @@ short, make shared variables `volatile`, guard multi-variable reads with
 `noInterrupts()`/`interrupts()`). `Ticker` callbacks still run on the sketch's
 own context.
 
+## What each board has
+
+Each chip's `bl_target.h` says what it has, and the SDK declares only those
+APIs, so a sketch that uses something its board lacks fails to compile, with
+a line from flick saying why. Compat headers for a missing feature stop with
+`#error "This board has no ..."`.
+
+| Macro | Boards | APIs |
+|---|---|---|
+| `BL_PLATFORM_ESP32` | every ESP32 chip | Arduino-ESP32 / ESP-IDF names: `esp_*` (sleep, timer, random, restart, reset reason, ESP-NOW), `ESP`, `ESP_LOGx`/`log_x`, `ledc*`, `hw_timer`, `ps_malloc`, `psramFound`, `temperatureRead`, `analogReadMilliVolts`, attenuation, I2S, `SD_MMC`, `rgbLedWrite`, FastLED |
+| `BL_PLATFORM_TEENSY` | Teensy 4.0, 4.1 | Teensyduino names (below) |
+| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6 | WiFi, HTTP, web server, DNS, mDNS, MQTT, ESP-NOW, WiFi OTA, NTP |
+| `BL_HAS_BLE` | ESP32, S3, C3, C5, C6 | `BLESerial`, the BLE library |
+| `BL_HAS_BT_CLASSIC` | classic ESP32 | `BluetoothSerial` |
+| `BL_HAS_TOUCH` | ESP32, S3 | `touchRead`, `T0`... |
+| `BL_HAS_DAC` | classic ESP32 | `dacWrite` |
+| `BL_HAS_USB_DEVICE` | ESP32-S3 | USB keyboard, mouse, gamepad, MIDI |
+| `BL_HAS_AUDIO` | Teensy 4.0, 4.1 | the Teensy Audio library |
+
+Ticker, Servo, `tone()`, Preferences, LittleFS, SD, Wire, SPI and the UARTs
+work on every board.
+
 ## Teensy 4.x (`teensy40`, `teensy41`)
 
 - **Audio library:** `#include <Audio.h>`. The objects live in Baseline and the
@@ -120,11 +142,15 @@ own context.
   table is at a fixed address for that.
 - **Ports:** `Serial1`-`Serial7` (`Serial8` on the 4.1), `Wire`/`Wire1`/`Wire2`,
   `SPI`. LittleFS is 576 KB on the 4.0 and 3.75 MB on the 4.1; Preferences are
-  files in it. microSD: the 4.1's built-in slot (`SD_MMC.begin()`), or SPI.
+  files in it. microSD: the 4.1's built-in slot (`SD.begin(BUILTIN_SDCARD)`), or SPI.
 - **Memory:** sketch globals up to 128 KB (in DTCM; eDMA reaches it), code up to
   384 KB (4.0) or 1 MB (4.1); `malloc` gives the 512 KB OCRAM heap,
-  `ps_malloc` the 4.1's PSRAM. `FASTRUN`, `DMAMEM`, `FLASHMEM`, `EXTMEM` are
-  accepted and ignored.
+  `extmem_malloc` the 4.1's PSRAM (RAM when there is none, as in Teensyduino).
+  `FASTRUN`, `DMAMEM`, `FLASHMEM`, `EXTMEM` are accepted and ignored.
+- **Teensy names, not ESP32 ones:** `analogWriteFrequency()`/`analogWriteResolution()`
+  (not `ledc*`), `extmem_malloc()` (not `ps_malloc`), `tempmonGetTemp()` (not
+  `temperatureRead`), `SD.begin(BUILTIN_SDCARD)` on the 4.1 (not `SD_MMC`).
+  `esp_*` and `ESP.` don't exist here. Examples: `examples/08_teensy`.
 - **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
 - **No WiFi, BLE or ESP-NOW:** those calls return errors.
 

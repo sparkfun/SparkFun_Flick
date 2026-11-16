@@ -170,6 +170,7 @@ private:
 extern HardwareSerial Serial1;
 extern HardwareSerial Serial2;
 
+#if defined(BL_HAS_TOUCH)
 /* ---------------- touch pins ----------------
  * touchRead() values differ by chip: on the classic ESP32 they DROP when
  * touched (interrupt below the threshold); on the S3 they RISE (interrupt
@@ -197,6 +198,8 @@ static inline void touchSleepWakeUpEnable(uint8_t pin, touch_value_t threshold)
     bl_sleep_wake(BL_WAKE_TOUCH, 0, 0, 0);
 }
 
+#endif /* BL_HAS_TOUCH */
+#if defined(BL_PLATFORM_ESP32)
 /* ---------------- LEDC PWM (any frequency / resolution) ---------------- */
 static inline bool ledcAttach(uint8_t pin, uint32_t freq, uint8_t resolution) { return bl_ledc_attach(pin, freq, resolution) == 1; }
 static inline bool ledcWrite(uint8_t pin, uint32_t duty) { return bl_ledc_write(pin, duty) == 1; }
@@ -204,6 +207,7 @@ static inline bool ledcDetach(uint8_t pin) { return bl_ledc_detach(pin) == 1; }
 static inline uint32_t ledcWriteTone(uint8_t pin, uint32_t freq) { return bl_ledc_write_tone(pin, freq); }
 static inline uint32_t ledcChangeFrequency(uint8_t pin, uint32_t freq, uint8_t resolution) { return bl_ledc_change_frequency(pin, freq, resolution); }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---------------- Servo (ESP32Servo-compatible) ----------------
  * 50 Hz, 14-bit LEDC. write() takes degrees (0-180), or microseconds when the
  * value is 500 or more, as in the Arduino Servo library. */
@@ -230,6 +234,7 @@ private:
     int hz_ = 50;
 };
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---------------- I2S (Arduino-ESP32 3.x ESP_I2S) ----------------
  * One I2S port. Mono/stereo samples of 8/16/24/32 bits, standard I2S or PDM
  * (PDM microphones: setPinsPdmRx(clk, data); PDM speakers/amps: setPinsPdmTx). */
@@ -266,5 +271,6 @@ private:
     uint16_t rxLen_ = 0, rxPos_ = 0;
 };
 
+#endif /* BL_PLATFORM_ESP32 */
 #endif /* __cplusplus */
 #endif /* BASELINE_IO_H */

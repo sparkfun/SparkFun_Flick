@@ -19,6 +19,7 @@ unsigned long pulseIn(uint8_t pin, uint8_t state, unsigned long timeout)
     return (unsigned long)(micros() - begin);
 }
 
+#if defined(BL_HAS_WIFI)
 /* ---- WiFi events: Baseline queues them; the pump delivers them on the sketch task ---- */
 
 namespace {
@@ -113,3 +114,4 @@ uint8_t WiFiMulti::run(uint32_t connectTimeout)
     }
     return WiFi.status();
 }
+#endif /* BL_HAS_WIFI */

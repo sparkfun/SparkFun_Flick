@@ -65,8 +65,14 @@ static inline int digitalRead(int pin)
 #endif
     return BL->gpio_read(pin);
 }
+#ifdef BL_PLATFORM_TEENSY
+int bl_teensy_analog_write(int pin, int value);    /* sketch_teensy.cpp: analogWriteResolution/Frequency */
+#endif
 static inline int analogWrite(int pin, int value)
 {
+#ifdef BL_PLATFORM_TEENSY
+    return bl_teensy_analog_write(pin, value);
+#endif
 #ifdef BL_SDK_RGB_ONLY_LED
     if (pin == BL_BOARD_RGB_LED) {
         uint8_t v = (uint8_t)(value < 0 ? 0 : value > 255 ? 255 : value);
@@ -105,10 +111,16 @@ void bl_sdk_tz_set_offsets(long gmt_offset_sec, int dst_offset_sec);
 #define OUTPUT_OPEN_DRAIN BL_OUTPUT_OPEN_DRAIN
 #endif
 
-/* ---- Logging: Arduino (log_i), ESP-IDF (ESP_LOGI), and Baseline names ---- */
+/* ---- Logging: Baseline names everywhere; Arduino-ESP32 (log_i) and ESP-IDF
+ * (ESP_LOGI) names on the ESP32 family ---- */
 #ifndef BL_TAG
 #define BL_TAG "sketch"
 #endif
+#define BL_LOGE(fmt, ...) bl_log(BL_LOG_ERROR, BL_TAG, fmt, ##__VA_ARGS__)
+#define BL_LOGW(fmt, ...) bl_log(BL_LOG_WARN,  BL_TAG, fmt, ##__VA_ARGS__)
+#define BL_LOGI(fmt, ...) bl_log(BL_LOG_INFO,  BL_TAG, fmt, ##__VA_ARGS__)
+#define BL_LOGD(fmt, ...) bl_log(BL_LOG_DEBUG, BL_TAG, fmt, ##__VA_ARGS__)
+#if defined(BL_PLATFORM_ESP32)
 #define log_e(fmt, ...) bl_log(BL_LOG_ERROR,   BL_TAG, fmt, ##__VA_ARGS__)
 #define log_w(fmt, ...) bl_log(BL_LOG_WARN,    BL_TAG, fmt, ##__VA_ARGS__)
 #define log_i(fmt, ...) bl_log(BL_LOG_INFO,    BL_TAG, fmt, ##__VA_ARGS__)
@@ -119,11 +131,9 @@ void bl_sdk_tz_set_offsets(long gmt_offset_sec, int dst_offset_sec);
 #define ESP_LOGI(tag, fmt, ...) bl_log(BL_LOG_INFO,    tag, fmt, ##__VA_ARGS__)
 #define ESP_LOGD(tag, fmt, ...) bl_log(BL_LOG_DEBUG,   tag, fmt, ##__VA_ARGS__)
 #define ESP_LOGV(tag, fmt, ...) bl_log(BL_LOG_VERBOSE, tag, fmt, ##__VA_ARGS__)
-#define BL_LOGE(...) log_e(__VA_ARGS__)
-#define BL_LOGW(...) log_w(__VA_ARGS__)
-#define BL_LOGI(...) log_i(__VA_ARGS__)
-#define BL_LOGD(...) log_d(__VA_ARGS__)
+#endif /* BL_PLATFORM_ESP32 */
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- Misc Arduino / ESP-IDF names ---- */
 static inline uint32_t getCpuFrequencyMhz(void) { return bl_system_info(BL_INFO_CPU_MHZ); }
 static inline uint32_t esp_random(void) { return bl_random(); }
@@ -133,6 +143,7 @@ static inline void esp_restart(void) { bl_restart(); }
  * already puts blocks over 4 KB in PSRAM when the board has it. */
 static inline bool psramFound(void) { return bl_system_info(BL_INFO_PSRAM_SIZE) != 0; }
 
+#endif /* BL_PLATFORM_ESP32 */
 #ifdef __cplusplus
 }
 #endif

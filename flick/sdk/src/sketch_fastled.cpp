@@ -1,6 +1,8 @@
 /* sketch_fastled.cpp - FastLED-compatible API (see baseline_fastled.h). */
 #include "baseline.h"
 
+#if defined(BL_PLATFORM_ESP32)     /* the whole file: boards with this feature only */
+
 CFastLED FastLED;
 
 /* ---- sine: quarter-wave table, linear interpolation ---- */
@@ -246,3 +248,5 @@ void CFastLED::delay(unsigned long ms)
     show();
     ::delay(ms);
 }
+
+#endif /* BL_PLATFORM_ESP32 */

@@ -133,6 +133,7 @@ def load_target(name):
     t["ibus"], t["dbus"] = defs["BL_SKETCH_IBUS_BASE"], defs["BL_SKETCH_DBUS_BASE"]
     t["max_size"] = defs["BL_SKETCH_MAX_SIZE"]
     t["chip_id"] = defs["BL_TARGET_CHIP_ID"]
+    t["board_name"] = defs.get("BL_BOARD_NAME", name)
     return t
 
 
@@ -190,7 +191,7 @@ SKETCH_TEMPLATE = """\
 void setup()
 {
     pinMode(LED_BUILTIN, OUTPUT);
-    Serial.printf("Hello from {name} on Baseline %s (%s)\\n", bl_baseline_version(), ESP.getChipModel());
+    Serial.printf("Hello from {name} on %s, Baseline %s\\n", BL_BOARD_NAME, bl_baseline_version());
 }
 
 void loop()
@@ -529,6 +530,43 @@ def teensy_core_dir(gcc):
     return cores[-1]
 
 
+# Names that belong to a feature or a platform: when the compiler says one is
+# undeclared, flick says why in a line (the board doesn't have it).
+FEATURE_NAMES = [
+    (r"BLE\w*|BLESerial(Class)?", "Bluetooth LE", "BL_HAS_BLE"),
+    (r"BluetoothSerial", "Bluetooth Classic", "BL_HAS_BT_CLASSIC"),
+    (r"esp_now_\w+|ESP_NOW_\w+", "ESP-NOW (the WiFi radio)", "BL_HAS_WIFI"),
+    (r"WiFi\w*|HTTPClient|WebServer|DNSServer|MDNS|PubSubClient|Network\w*|ArduinoOTA|configT(z)?ime|WL_\w+",
+     "WiFi", "BL_HAS_WIFI"),
+    (r"touch\w+|T[0-9]+", "capacitive touch", "BL_HAS_TOUCH"),
+    (r"dacWrite", "a DAC", "BL_HAS_DAC"),
+    (r"USB\w*", "USB device mode in this Baseline", "BL_HAS_USB_DEVICE"),
+    (r"esp_\w+|ESP_\w+|ESP|EspClass|ledc\w+|ps_(m|c|re)alloc|psramFound|temperatureRead|analogReadMilliVolts|"
+     r"analogSet(Pin)?Attenuation|rgbLedWrite|neopixelWrite|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
+     r"hw_timer_t|I2SClass|SD_MMC|getLocalTime|getCpuFrequencyMhz|log_[ewidv]|gpio_num_t|GPIO_NUM_\w+|FastLED|CRGB",
+     "an ESP32 API", "BL_PLATFORM_ESP32"),
+    (r"IntervalTimer|elapsedMicros|elapsedMillis|Audio\w+|extmem_\w+|analogWrite(Frequency|Resolution)|tempmonGetTemp|"
+     r"BUILTIN_SDCARD|digital(Write|Read|Toggle)Fast", "a Teensy API", "BL_PLATFORM_TEENSY"),
+]
+UNDECLARED = re.compile(r"'([A-Za-z_]\w*)' (?:was not declared in this scope|does not name a type|has not been declared|"
+                        r"was not declared|undeclared)")
+
+
+def missing_feature_hints(output, target, sketch):
+    """One line per missing feature: from an #error "This board has no ..." or an undeclared name."""
+    board = f"{target['board_name']} ({target['name']})"
+    have = set(header_defines(target["chip_dir"] / "sdk" / "bl_target.h"))
+    hints = []
+    for m in re.finditer(r'#error "(This (?:board|chip) has no [^"]*)"', output):
+        hints.append(f"flick: {sketch} can't run on {board}: {m.group(1)}")
+    for name in dict.fromkeys(UNDECLARED.findall(output)):
+        for pattern, what, macro in FEATURE_NAMES:
+            if re.fullmatch(pattern, name) and macro not in have:
+                hints.append(f"flick: {name} is {what}; {board} doesn't have it.")
+                break
+    return list(dict.fromkeys(hints))
+
+
 def sketch_build_dir(proj, target_name):
     """Where a sketch's build output goes: Flick's cache folder, not the sketch
     folder (which stays as the user wrote it). One folder per sketch path."""
@@ -576,8 +614,15 @@ def build(proj, target_name=None):
         else:
             lang = CFLAGS
         obj.parent.mkdir(parents=True, exist_ok=True)
-        run([gcc, *lang, *target["cflags"], *target.get("defines", PLATFORM_DEFINES), *inc, *extra_defs,
-             *(["-w"] if quiet else []), "-c", str(src), "-o", str(obj)])
+        r = subprocess.run([gcc, *lang, *target["cflags"], *target.get("defines", PLATFORM_DEFINES), *inc,
+                            *extra_defs, *(["-w"] if quiet else []), "-c", str(src), "-o", str(obj)],
+                           capture_output=True, text=True, errors="replace")
+        sys.stdout.write(r.stdout)
+        sys.stderr.write(r.stderr)
+        if r.returncode != 0:
+            for hint in missing_feature_hints(r.stdout + r.stderr, target, proj.name):
+                print(hint, file=sys.stderr)
+            sys.exit(r.returncode)
 
     objs = []
     for src in user + [SDK / "src" / "sketch_crt.c"]:     # crt carries the sketch's name/stack
@@ -944,7 +989,35 @@ class Link:
 def cmd_info(args):
     _, s = open_link_port(args)
     with s:
-        print(Link(s).request("INFO"))
+        info = Link(s).request("INFO")
+    print(info)
+    for line in describe_sketch_addresses(info_fields(info)):
+        print(line)
+
+
+def describe_sketch_addresses(fields):
+    """Source lines for the addresses in INFO's status (a while(1) stop) and crash
+    (the sketch's pc), from the newest build of that sketch in Flick's cache."""
+    sketch, target = fields.get("sketch", "-"), fields.get("target")
+    if sketch == "-" or not target or not (TARGETS / target / "target.json").exists():
+        return []
+    elfs = sorted(BUILD_ROOT.glob(f"sketches/{sketch}-*/{target}/{sketch}.elf"), key=lambda p: p.stat().st_mtime)
+    if not elfs:
+        return []
+    t = load_target(target)
+    out = []
+    for what, key, pattern in (("stopped", "status", r"while\(1\) at (0x[0-9a-f]+)"), ("crashed", "crash", r"pc=(0x[0-9a-f]+)")):
+        m = re.search(pattern, fields.get(key, ""))
+        if not m or not (t["ibus"] <= int(m.group(1), 16) < t["ibus"] + t["max_size"]):
+            continue
+        a2l = find_gcc(t)[:-len("gcc.exe" if os.name == "nt" else "gcc")] + "addr2line"
+        r = subprocess.run([a2l, "-f", "-C", "-e", str(elfs[-1]), m.group(1)], capture_output=True, text=True)
+        lines = r.stdout.splitlines()
+        if r.returncode == 0 and len(lines) >= 2 and not lines[1].startswith("??"):
+            loc = re.match(r"(.*):(\d+)", lines[1])     # path:line, maybe followed by (discriminator N)
+            where = f"{Path(loc.group(1)).name}:{loc.group(2)}" if loc else lines[1]
+            out.append(f"  {what} in {lines[0]}() at {where}")
+    return out
 
 
 def cmd_safe(args):
@@ -1100,7 +1173,7 @@ def upload_dir(port, baud, proj, target):
 
 
 def cmd_test(args):
-    """Bring-up test: selftest (with a deep sleep), crash rollback, watchdog rollback."""
+    """Bring-up test: selftest (with a deep sleep), crash rollback, watchdog rollback, while(1) stop."""
     port = find_port(args.port)
     baud = console_baud(port, args.baud)
     fields = info_fields(board_request(port, baud, "INFO"))
@@ -1109,7 +1182,7 @@ def cmd_test(args):
     board_request(port, baud, "CRASHCLEAR")
     rows = []           # (check, PASS/FAIL/SKIP/LOOK, detail)
 
-    print("1/3 selftest (about a minute, including a 2 s deep sleep)...")
+    print("1/4 selftest (about a minute, including a 2 s deep sleep)...")
     for attempt in range(2):
         upload_dir(port, baud, TESTS / "selftest", target)
         text = capture_console(port, baud, "RESULT:", 180)
@@ -1131,7 +1204,7 @@ def cmd_test(args):
         rows.append(("selftest finished", "FAIL", "no RESULT line within 3 minutes"))
         print(text[-2000:])
 
-    print("2/3 crash rollback...")
+    print("2/4 crash rollback...")
     upload_dir(port, baud, TESTS / "crash_test", target)
     time.sleep(4)
     f = info_fields(board_request(port, baud, "INFO"))
@@ -1140,7 +1213,7 @@ def cmd_test(args):
     rows.append(("crash recorded (INFO crash=)", "PASS" if f.get("crash", '"-"') != '"-"' else "FAIL",
                  f.get("crash", "").strip('"')[:80]))
 
-    print("3/3 watchdog rollback (about 15 s)...")
+    print("3/4 watchdog rollback (about 15 s)...")
     board_request(port, baud, "CRASHCLEAR")
     upload_dir(port, baud, TESTS / "hang_test", target)
     time.sleep(12)
@@ -1148,6 +1221,19 @@ def cmd_test(args):
     rows.append(("hung loop() caught by the watchdog, rolls back", "PASS" if f.get("sketch") == "selftest" else "FAIL",
                  f"running {f.get('sketch')}, reset={f.get('reset')}"))
     board_request(port, baud, "CRASHCLEAR")
+
+    # The classic `while (1);` is a stop, not a hang: parked, no crash, no rollback.
+    name = "while(1) stops the sketch (no crash, no rollback)"
+    if not load_target(target).get("stop_detect"):
+        rows.append((name, "SKIP", "not in this chip's Baseline yet"))
+    else:
+        print("4/4 while(1) stop (about 15 s)...")
+        upload_dir(port, baud, TESTS / "stop_test", target)
+        time.sleep(12)      # past the 10 s trial
+        f = info_fields(board_request(port, baud, "INFO"))
+        ok = f.get("sketch") == "stop_test" and f.get("status", "").strip('"').startswith("stopped")             and f.get("crash", '"-"') == '"-"'
+        rows.append((name, "PASS" if ok else "FAIL",
+                     f"running {f.get('sketch')}, status {f.get('status')}, crash {f.get('crash', '')[:40]}"))
 
     width = max(len(r[0]) for r in rows)
     print()

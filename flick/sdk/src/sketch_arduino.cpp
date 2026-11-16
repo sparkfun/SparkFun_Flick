@@ -2,10 +2,14 @@
 #include "baseline.h"
 
 SerialClass Serial;
+#if defined(BL_HAS_BLE)
 BLESerialClass BLESerial;
+#endif
 TwoWire Wire(0);
 TwoWire Wire1(1);
+#if defined(BL_PLATFORM_ESP32)
 EspClass ESP;
+#endif
 
 /* ---- Print ---- */
 
@@ -249,12 +253,13 @@ size_t IPAddress::printTo(Print &p) const
     return p.print(toString());
 }
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- ESP ---- */
 
 uint64_t EspClass::getEfuseMac()
 {
-    uint8_t m[6];
-    bl_wifi_mac(m);
+    uint8_t m[6] = {0};
+    BL->wifi_mac(m);        /* the table entry: boards without WiFi (P4) answer with an error, so 0 */
     uint64_t v = 0;
     for (int i = 5; i >= 0; i--) {
         v = (v << 8) | m[i];     // same byte order as Arduino-ESP32
@@ -262,6 +267,7 @@ uint64_t EspClass::getEfuseMac()
     return v;
 }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---- Wire ---- */
 
 bool TwoWire::begin(int sda, int scl, uint32_t frequency)

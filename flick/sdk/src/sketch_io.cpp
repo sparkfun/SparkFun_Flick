@@ -88,6 +88,7 @@ void detachInterrupt(uint8_t pin)
     }
 }
 
+#if defined(BL_HAS_TOUCH)
 /* ---- touch interrupts (deferred, like attachInterrupt) ---- */
 
 static PinHandler s_touch[MAX_PINS];
@@ -136,6 +137,7 @@ void touchDetachInterrupt(uint8_t pin)
     }
 }
 
+#endif /* BL_HAS_TOUCH */
 /* ---- Servo ---- */
 
 int Servo::attach(int pin, int min_us, int max_us)
@@ -177,6 +179,7 @@ void Servo::writeMicroseconds(int us)
     }
 }
 
+#if defined(BL_PLATFORM_ESP32)
 /* ---- I2S ---- */
 
 size_t I2SClass::readBytes(char *buffer, size_t size)
@@ -209,6 +212,7 @@ int I2SClass::read()
     return available() ? rx_[rxPos_++] : -1;
 }
 
+#endif /* BL_PLATFORM_ESP32 */
 /* ---- SPI ---- */
 
 uint16_t SPIClass::transfer16(uint16_t data)

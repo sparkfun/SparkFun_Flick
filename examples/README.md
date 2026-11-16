@@ -75,3 +75,13 @@ Sketches marked **WiFi** need your network name and password. Set them once with
 | `01_wifi_ota` | **WiFi.** Upload sketches, and Baseline, over WiFi from your PC. |
 | `02_ota_pull_sketch` | **WiFi.** The board downloads a newer version of itself from a web server. |
 | `03_ota_pull_baseline` | **WiFi.** The same for Baseline. |
+
+## 08_teensy
+
+Teensy 4.x only: Teensy's own APIs. On other boards these stop with "This board has no ...".
+
+| Sketch | What it does |
+|---|---|
+| `01_interval_timer` | IntervalTimer: a function called every 100 us from a timer interrupt. |
+| `02_usb_audio_tone` | The Teensy Audio library plays notes to the computer over USB audio (and to an audio shield). |
+| `03_usb_audio_spectrum` | Music from the computer over USB audio, shown as an FFT spectrum in the serial monitor. |

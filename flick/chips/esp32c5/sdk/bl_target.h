@@ -30,6 +30,13 @@
 #define BL_SKETCH_RAM_BASE      0x40846000
 #define BL_SKETCH_RAM_SIZE      0x8000      /* 32 KB */
 
+/* ---- What the chip has: the SDK declares only the matching APIs, so a sketch
+ * that uses something this chip lacks fails to compile with a clear message
+ * (sdk/include/baseline_features.h). */
+#define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+#define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, ESP-NOW, WiFi OTA */
+#define BL_HAS_BLE            1       /* Bluetooth LE (BLESerial, BLEDevice, ...) */
+
 #define BL_TARGET_CHIP          "esp32c5"     /* chips/<chip> */
 
 #include "bl_board.h"                 /* targets/<target>/sdk/bl_board.h */

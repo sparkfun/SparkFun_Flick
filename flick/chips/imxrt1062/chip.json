@@ -28,6 +28,8 @@
     "usb_vids": [
         "16C0"
     ],
+    "stop_detect": true,
+    "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) instead of letting the watchdog roll it back (flick test step 4).",
     "ci": false,
     "ci_note": "CI builds in Espressif's ESP-IDF image, which has no Teensyduino: baseline.yml and build_examples.py --out leave these targets out until a job installs it.",
     "status": "bring-up"

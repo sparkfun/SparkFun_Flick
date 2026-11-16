@@ -1,6 +1,6 @@
 // 07_servo_sweep.ino - sweep a hobby servo back and forth.
 // Servo signal wire to SERVO_PIN, power from a separate 5 V supply, grounds together.
-#include <ESP32Servo.h>
+#include <Servo.h>
 
 const int SERVO_PIN = 14;
 Servo servo;

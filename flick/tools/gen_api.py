@@ -141,6 +141,42 @@ def fnptr(e, name):
     return f"{e.ret} (*{name})({e.params})"
 
 
+# Sketch-side wrappers exist only on boards that have the feature (bl_target.h's
+# BL_PLATFORM_* / BL_HAS_* macros), so a sketch that calls WiFi or BLE on a
+# Teensy, or Teensy's audio on an ESP32, fails to compile instead of failing
+# quietly at run time. The table entries themselves are the same everywhere.
+# Field prefix -> required macro. (ledc_, ps_ and sleep_ stay: the SDK builds
+# Servo, tone() and the Teensy names on them.)
+WRAPPER_PREFIX_REQUIRES = [
+    (("wifi_", "http_", "net_", "tcp_", "udp_", "web_", "mdns_", "mqtt_", "dns_", "ota_", "espnow_"), "BL_HAS_WIFI"),
+    (("ble_",), "BL_HAS_BLE"),
+    (("bt_",), "BL_HAS_BT_CLASSIC"),
+    (("touch_",), "BL_HAS_TOUCH"),
+    (("dac_",), "BL_HAS_DAC"),
+    (("usb_",), "BL_HAS_USB_DEVICE"),
+    (("i2s_", "rgb_", "led_strip_"), "BL_PLATFORM_ESP32"),
+    (("audio_",), "BL_HAS_AUDIO"),
+    (("isr_", "dma_channel_"), "BL_TARGET_SKETCH_ISR"),
+]
+# Arduino-ESP32 names (not bl_*) that would mislead elsewhere.
+WRAPPER_NAME_REQUIRES = {
+    "analogReadMilliVolts": "BL_PLATFORM_ESP32", "rgbLedWrite": "BL_PLATFORM_ESP32",
+    "ps_malloc": "BL_PLATFORM_ESP32", "ps_calloc": "BL_PLATFORM_ESP32", "ps_realloc": "BL_PLATFORM_ESP32",
+    "temperatureRead": "BL_PLATFORM_ESP32",
+}
+
+
+def wrapper_requires(e):
+    if e.field == "usb_devices":
+        return None     # for Baseline's INFO, not a sketch feature
+    if e.wrapper in WRAPPER_NAME_REQUIRES:
+        return f"defined({WRAPPER_NAME_REQUIRES[e.wrapper]})"
+    for prefixes, macro in WRAPPER_PREFIX_REQUIRES:
+        if e.field.startswith(prefixes):
+            return f"defined({macro})"
+    return None
+
+
 def gen_api_h(major, minor, entries):
     o = [HEADER, "#ifndef BASELINE_API_H\n#define BASELINE_API_H\n\n",
          '#include "baseline_types.h"\n\n',
@@ -160,12 +196,17 @@ def gen_api_h(major, minor, entries):
     o.append("/* ---------------- Sketch side ---------------- */\n\n")
     o.append("/* Set by sketch_entry() before any sketch code runs. */\n")
     o.append("extern const bl_api_t *BL;\n\n")
+    o.append("/* The board's features (BL_PLATFORM_*, BL_HAS_*) decide which wrappers exist. */\n")
+    o.append("#include \"bl_target.h\"\n\n")
     o.append("/* True if the running Baseline provides `field` (for entries newer than the\n"
              "   sketch's required minor). */\n")
     o.append("#define BL_HAS(field) (offsetof(bl_api_t, field) < BL->struct_size)\n\n")
     for e in entries:
         if e.wrapper == "-" or e.wrapper.startswith("@"):     # @name: written by hand in baseline.h
             continue
+        need = wrapper_requires(e)
+        if need:
+            o.append(f"#if {need}\n")
         o.append(f"/* {e.doc} */\n")
         if e.variadic:
             o.append(f"#define {e.wrapper}(...) (BL->{e.field}(__VA_ARGS__))\n")
@@ -173,6 +214,8 @@ def gen_api_h(major, minor, entries):
             args = ", ".join(e.arg_names())
             ret = "" if e.ret == "void" else "return "
             o.append(f"static inline {e.ret} {e.wrapper}({e.params}) {{ {ret}BL->{e.field}({args}); }}\n")
+        if need:
+            o.append("#endif\n")
     o.append("#endif /* BASELINE_FIRMWARE */\n\n#endif /* BASELINE_API_H */\n")
     return "".join(o)
 

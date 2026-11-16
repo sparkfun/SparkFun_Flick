@@ -1,6 +1,8 @@
 /* sketch_usb.cpp - USB device mode (see baseline_usb.h). */
 #include "baseline.h"
 
+#if defined(BL_HAS_USB_DEVICE)     /* the whole file: boards with this feature only */
+
 ESPUSB USB;
 
 static uint32_t s_wanted;
@@ -19,3 +21,5 @@ bool ESPUSB::begin()
     // saves them and reboots, and this sketch starts again.
     return bl_usb_begin(s_wanted) == BL_OK;
 }
+
+#endif /* BL_HAS_USB_DEVICE */
