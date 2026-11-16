@@ -1,5 +1,9 @@
-// runner.js - run Flick's examples on a board from the browser (Web Serial, Chrome/Edge).
+// runner.js - flash Baseline and run Flick's examples from the browser (Web Serial, Chrome/Edge).
 //
+// Flash buttons (button.flash, data-target/-chip/-flash-mb) write the parts in
+// manifests/<target>.json with esptool-js; see flashBoard().
+//
+// Running an example:
 // Speaks the same line protocol as `flick upload` (baseline/src/loader_proto.h):
 //   @BSK INFO                       -> @BSK OK baseline=.. abi=.. chip=.. target=.. ...
 //   @BSK BEGIN <size> <sha256>      erase the inactive slot
@@ -375,13 +379,125 @@ async function sendInput(e) {
   input.value = "";
 }
 
+// ------------------------------------------------------------------ flashing Baseline
+//
+// esptool-js (the library ESP Web Tools is built on), used directly so a
+// USB-serial board flashes at 921600 instead of ESP Web Tools' fixed 115200
+// (the RedBoard: about 25 s instead of 2 minutes). Choosing the port is the
+// only confirmation. No erase: the image blanks NVS and otadata itself, the
+// manifest adds a blank coredump partition, and LittleFS keeps the user's files.
+
+const ESPTOOL = "https://cdn.jsdelivr.net/npm/esptool-js@0.6.0/+esm";
+const FLASH_BAUD = 921600;
+
+async function flashBoard(btn) {
+  const target = btn.dataset.target, family = btn.dataset.chip, need = Number(btn.dataset.flashMb);
+  const status = btn.parentElement.querySelector(".flash-status");
+  const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
+  if (!("serial" in navigator)) { say("Use Chrome or Edge on a computer.", "bad"); return; }
+  if (state.busy) return;
+  if (state.link) await disconnect();              // step 2 may hold the port
+  let port;
+  try {
+    port = await navigator.serial.requestPort({
+      filters: [ESPRESSIF, ...USB_SERIAL_CHIPS].map((v) => ({ usbVendorId: v })),
+    });
+  } catch (e) {
+    return;                                        // the user closed the chooser
+  }
+  state.busy = true;
+  render();
+  for (const b of document.querySelectorAll("button.flash")) b.disabled = true;
+  try {
+    say("Downloading Baseline...");
+    const manifestUrl = new URL(`manifests/${target}.json`, location.href);
+    const manifest = await (await fetch(manifestUrl)).json();
+    const files = await Promise.all(manifest.builds[0].parts.map(async (p) => {
+      const res = await fetch(new URL(p.path, manifestUrl));
+      if (!res.ok) throw new Error(`can't download ${p.path} (${res.status})`);
+      return { data: new Uint8Array(await res.arrayBuffer()), address: p.offset };
+    }));
+    const { ESPLoader, Transport } = await import(ESPTOOL);
+    const uart = USB_SERIAL_CHIPS.includes(port.getInfo().usbVendorId);
+    // Native USB ignores the rate; a USB-serial chip tries 921600, then 115200.
+    const bauds = uart ? [FLASH_BAUD, 115200] : [115200];
+    for (let i = 0; i < bauds.length; i++) {
+      const transport = new Transport(port, false);
+      const terminal = {
+        clean() {}, write() {},
+        writeLine(text) { if (!/^Writing at/.test(text)) log(text, "note"); },
+      };
+      const loader = new ESPLoader({ transport, baudrate: bauds[i], terminal });
+      let fatal = false;
+      try {
+        say("Connecting to the chip...");
+        try {
+          await loader.main();
+        } catch (e) {
+          // main() syncs at 115200 and then switches rate: a failure is retried
+          // at 115200 before it is reported.
+          console.error(e);
+          const why = String((e && e.message) || e);
+          if (/open|in use|access|InvalidState|NetworkError/i.test(why) || (e && e.name === "InvalidStateError")) {
+            fatal = true;
+            throw new Error(`can't open the port (${why}). Close any other tab or program using it ` +
+                            "(a serial monitor, the Arduino IDE, flick monitor), then Flash again.");
+          }
+          throw new Error(`the chip doesn't answer (${why}). Hold BOOT, press RESET, release BOOT, then Flash again.`);
+        }
+        const found = loader.chip.CHIP_NAME;
+        if (found !== family) {
+          fatal = true;
+          throw new Error(`this board has an ${found}, but this Baseline is for an ${family}. Pick the row for your board.`);
+        }
+        const have = parseInt(await loader.detectFlashSize(), 10);
+        if (have && have < need) {
+          fatal = true;
+          throw new Error(`this board has ${have} MB of flash, this Baseline needs ${need} MB. ` +
+                          "Is it the right board? (python flick.py baseline flash fits it to smaller flash.)");
+        }
+        const total = files.reduce((n, f) => n + f.data.length, 0);
+        const t0 = performance.now();
+        await loader.writeFlash({
+          fileArray: files, flashSize: "keep", flashMode: "keep", flashFreq: "keep",
+          eraseAll: false, compress: true,
+          reportProgress: (fi, written, size) => {
+            const done = files.slice(0, fi).reduce((n, f) => n + f.data.length, 0)
+              + (written / size) * files[fi].data.length;
+            say(`Writing ${Math.floor((done / total) * 100)}%`);
+          },
+        });
+        say("Restarting the board...");
+        await transport.setRTS(true);
+        await sleep(100);
+        await loader.after("hard_reset");
+        await transport.disconnect();
+        const secs = ((performance.now() - t0) / 1000).toFixed(0);
+        say(`Done in ${secs} s. Now try the examples below: press Connect.`, "good");
+        return;
+      } catch (e) {
+        try { await transport.disconnect(); } catch (e2) {}
+        if (fatal || i === bauds.length - 1) throw e;
+        log(`--- flashing at ${bauds[i]} failed (${e.message}); trying ${bauds[i + 1]}`, "bad");
+        await sleep(500);
+      }
+    }
+  } catch (e) {
+    say(`Failed: ${e.message}`, "bad");
+  } finally {
+    state.busy = false;
+    for (const b of document.querySelectorAll("button.flash")) b.disabled = false;
+    render();
+  }
+}
+
 async function init() {
   $("connect").onclick = connect;
   $("send-form").onsubmit = sendInput;
   $("clear").onclick = () => { $("console").textContent = ""; };
-  // The Flash dialog (ESP Web Tools) needs the port: let go of it first.
-  for (const b of document.querySelectorAll("esp-web-install-button")) {
-    b.addEventListener("click", () => { if (state.link) disconnect(); }, true);
+  for (const b of document.querySelectorAll("button.flash")) {
+    b.onclick = () => flashBoard(b);
+    if (!("serial" in navigator)) b.disabled = true;
   }
   try {
     state.examples = (await (await fetch("examples/examples.json")).json()).examples;

@@ -13,7 +13,7 @@ The **Baseline firmware images** (`baseline-<target>.bin` and `.bsu`) are built 
 | Mbed TLS (in ESP-IDF) | Apache-2.0 | TLS, SHA-256 |
 | NimBLE / Bluedroid (in ESP-IDF) | Apache-2.0 | Bluetooth |
 | LittleFS (via ESP-IDF component) | BSD-3-Clause | The sketch file system |
-| [ESP Web Tools](https://github.com/esphome/esp-web-tools) (download page) | Apache-2.0 | The browser "Flash" button |
+| [esptool-js](https://github.com/espressif/esptool-js) (download page, loaded from a CDN) | Apache-2.0 | The browser "Flash" button |
 
 The sketch compiler that `flick setup` downloads, Espressif's GCC (crosstool-NG), is GPL-3.0 with the GCC Runtime Library Exception: sketches built with it are not affected.
 

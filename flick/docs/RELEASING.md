@@ -7,7 +7,7 @@
 | `baseline-<target>.bin` | The full image (bootloader, partition table, Baseline), flashed at 0x0 | Release assets; the **Flash** button on the download page |
 | `baseline-<target>.bsu` | The same Baseline as an over-the-air update (docs/OTA.md) | Release assets; the download page |
 | `flick-kit-<version>.zip` | Everything for writing sketches (layout below) | Release assets; the download page |
-| Download page | 1. one row per board, each with a **Flash** button (ESP Web Tools, Chrome/Edge) and the downloads; 2. the example runner: every example, prebuilt for every board, uploaded over Web Serial (`tools/site/runner.js`); 3. the kit | GitHub Pages |
+| Download page | 1. one row per board, each with a **Flash** button (`tools/site/runner.js` with esptool-js, Chrome/Edge: 921600 on USB-serial boards, no erase prompt) and the downloads; 2. the example runner: every example, prebuilt for every board, uploaded over Web Serial (`tools/site/runner.js`); 3. the kit | GitHub Pages |
 
 **The kit's layout** is the repository's: `flick package` (`KIT_FILES` in `tools/flick.py`) takes the top level as it is and the part of `flick/` that builds and uploads sketches, and leaves out Baseline's source, the ESP-IDF project, the API table, the benchmarks, CI and the developer notes.
 

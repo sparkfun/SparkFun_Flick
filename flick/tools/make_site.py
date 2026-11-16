@@ -5,8 +5,8 @@
 
 Reads targets/*/target.json and the built images in dist/<target>/
 (flick baseline build), and writes a static site:
-  index.html                  boards, "Flash" buttons (ESP Web Tools, Chrome/Edge), downloads
-  manifests/<target>.json     ESP Web Tools manifests
+  index.html                  boards, "Flash" buttons (runner.js + esptool-js, Chrome/Edge), downloads
+  manifests/<target>.json     what each Flash button writes (ESP Web Tools' manifest format)
   firmware/<target>/          baseline-<target>.bin (USB/web flash at 0x0) and .bsu (over the air)
   downloads/                  the sketch kit zip
   examples/, runner.js        the examples, ready to run from the page over Web Serial
@@ -28,7 +28,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHIP_FAMILY = {"esp32": "ESP32", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3", "esp32c5": "ESP32-C5",
                "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4"}
-ESP_WEB_TOOLS = "https://unpkg.com/esp-web-tools@10.4.0/dist/web/install-button.js?module"
 
 
 def board_name(target_dir):
@@ -72,15 +71,27 @@ def main():
         if bsu.exists():
             shutil.copy2(bsu, fw / bsu.name)
         board = board_name(tdir)
+        flash_mb = int(t["flash_size"].rstrip("MB"))
+        # No full erase: the merged image already blanks NVS and otadata, and
+        # keeping LittleFS keeps the user's files. Only the coredump partition
+        # is blanked, as `flick baseline flash` does: a dump left by the
+        # previous firmware can't be decoded against this Baseline.
+        parts = [{"path": f"../firmware/{name}/{bin_.name}", "offset": 0}]
+        table = ROOT / "chips" / t["chip"] / f"partitions-{flash_mb}MB.csv"
+        for line in table.read_text().splitlines() if table.exists() else []:
+            cells = [c.strip() for c in line.split(",")]
+            if cells[0] == "coredump":
+                size = int(cells[4], 0)
+                blank = out / "firmware" / f"blank-{size // 1024}k.bin"
+                if not blank.exists():
+                    blank.write_bytes(b"\xff" * size)
+                parts.append({"path": f"../firmware/{blank.name}", "offset": int(cells[3], 0)})
         manifest = {
             "name": f"Baseline for {board}",
             "version": version,
-            "new_install_prompt_erase": True,
-            "builds": [{"chipFamily": CHIP_FAMILY[t["chip"]],
-                        "parts": [{"path": f"../firmware/{name}/{bin_.name}", "offset": 0}]}],
+            "builds": [{"chipFamily": CHIP_FAMILY[t["chip"]], "parts": parts}],
         }
         (out / "manifests" / f"{name}.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        flash_mb = int(t["flash_size"].rstrip("MB"))
         rows.append((board, name, t, flash_mb, bin_, bsu))
 
     examples = Path(args.examples) if args.examples else dist / "examples"
@@ -111,11 +122,8 @@ def main():
         <td>{CHIP_FAMILY[t['chip']]}</td>
         <td>{flash_mb} MB<div class="target">OTA {ota}</div></td>
         <td>
-          <esp-web-install-button manifest="manifests/{name}.json">
-            <button slot="activate">Flash</button>
-            <span slot="unsupported">Use Chrome or Edge</span>
-            <span slot="not-allowed">Needs https</span>
-          </esp-web-install-button>
+          <button class="flash" data-target="{name}" data-chip="{CHIP_FAMILY[t['chip']]}" data-flash-mb="{flash_mb}">Flash</button>
+          <div class="flash-status"></div>
         </td>
         <td><a href="firmware/{name}/{bin_.name}">.bin</a>{bsu_link}</td>
       </tr>"""
@@ -129,7 +137,6 @@ def main():
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Flick</title>
-<script type="module" src="{ESP_WEB_TOOLS}"></script>
 <style>
   :root {{ --red: #e0311d; --ink: #1d1d1f; --mute: #6b6b70; --line: #e4e4e7; --bg: #fafafa; --card: #fff;
           --code: #f0f0f2; --good: #1a7f37; --bad: #c62828; --term: #16161a; --term-ink: #e6e6e6; }}
@@ -167,6 +174,9 @@ def main():
   .status {{ color: var(--mute); }}
   .status.good {{ color: var(--good); }}
   .status.bad {{ color: var(--bad); }}
+  .flash-status {{ font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 260px; }}
+  .flash-status.good {{ color: var(--good); }}
+  .flash-status.bad {{ color: var(--bad); }}
   .runner {{ display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 12px; }}
   @media (max-width: 760px) {{ .runner {{ grid-template-columns: minmax(0, 1fr); }} }}
   #examples {{ padding: 4px 12px 12px; max-height: 640px; overflow-y: auto; }}
