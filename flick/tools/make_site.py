@@ -114,13 +114,12 @@ def main():
         kit_link = f'downloads/{kit.name}'
 
     def row_html(board, name, t, flash_mb, bin_, bsu):
-        ota = "keeps the sketch" if flash_mb >= 8 else "erases the sketch"
         bsu_link = (f' · <a href="firmware/{name}/{bsu.name}" title="Baseline update over WiFi">.bsu</a>'
                     if bsu.exists() else "")
         return f"""      <tr>
-        <td>{f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>' if t.get("product_url") else html.escape(board)}<div class="target">{name}</div></td>
+        <td>{f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>' if t.get("product_url") else html.escape(board)}</td>
         <td>{CHIP_FAMILY[t['chip']]}</td>
-        <td>{flash_mb} MB<div class="target">OTA {ota}</div></td>
+        <td>{flash_mb} MB</td>
         <td>
           <button class="flash" data-target="{name}" data-chip="{CHIP_FAMILY[t['chip']]}" data-flash-mb="{flash_mb}">Flash</button>
           <div class="flash-status"></div>
