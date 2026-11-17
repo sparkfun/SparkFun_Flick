@@ -27,7 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHIP_FAMILY = {"esp32": "ESP32", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3", "esp32c5": "ESP32-C5",
-               "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4"}
+               "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4", "imxrt1062": "Teensy 4.x"}
+# Groups in the board menu, in this order (by chip family).
+GROUPS = [("esp32", "ESP32 (classic)"), ("esp32s3", "ESP32-S3"), ("esp32c3", "ESP32-C3"), ("esp32c5", "ESP32-C5"),
+          ("esp32c6", "ESP32-C6"), ("esp32p4", "ESP32-P4"), ("imxrt1062", "Teensy 4.x (PJRC)")]
 
 
 def board_name(target_dir):
@@ -62,16 +65,26 @@ def main():
             continue
         bin_ = dist / name / f"baseline-{name}.bin"
         bsu = dist / name / f"baseline-{name}.bsu"
+        hex_ = dist / name / f"baseline-{name}.hex"
+        board = board_name(tdir)
+        flash_mb = int(t["flash_size"].rstrip("MB"))
+        if t["chip"] not in CHIP_FAMILY:
+            print(f"skipping {name}: no download page support for chip {t['chip']}", file=sys.stderr)
+            continue
         if not bin_.exists():
-            print(f"skipping {name}: {bin_} not built", file=sys.stderr)
+            if hex_.exists():                   # Teensy: download only, flashed with Teensy Loader
+                fw = out / "firmware" / name
+                fw.mkdir(parents=True)
+                shutil.copy2(hex_, fw / hex_.name)
+                rows.append((board, name, t, flash_mb, hex_, bsu))
+            else:
+                print(f"skipping {name}: {bin_} not built", file=sys.stderr)
             continue
         fw = out / "firmware" / name
         fw.mkdir(parents=True)
         shutil.copy2(bin_, fw / bin_.name)
         if bsu.exists():
             shutil.copy2(bsu, fw / bsu.name)
-        board = board_name(tdir)
-        flash_mb = int(t["flash_size"].rstrip("MB"))
         # No full erase: the merged image already blanks NVS and otadata, and
         # keeping LittleFS keeps the user's files. Only the coredump partition
         # is blanked, as `flick baseline flash` does: a dump left by the
@@ -113,21 +126,87 @@ def main():
         shutil.copy2(kit, out / "downloads" / kit.name)
         kit_link = f'downloads/{kit.name}'
 
-    def row_html(board, name, t, flash_mb, bin_, bsu):
-        bsu_link = (f' · <a href="firmware/{name}/{bsu.name}" title="Baseline update over WiFi">.bsu</a>'
-                    if bsu.exists() else "")
-        return f"""      <tr>
-        <td>{f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>' if t.get("product_url") else html.escape(board)}</td>
-        <td>{CHIP_FAMILY[t['chip']]}</td>
-        <td>{flash_mb} MB</td>
-        <td>
-          <button class="flash" data-target="{name}" data-chip="{CHIP_FAMILY[t['chip']]}" data-flash-mb="{flash_mb}">Flash</button>
-          <div class="flash-status"></div>
-        </td>
-        <td><a href="firmware/{name}/{bin_.name}">.bin</a>{bsu_link}</td>
-      </tr>"""
+    def sort_key(r):
+        board, name, t, flash_mb, *_ = r
+        return (bool(t.get("generic")), flash_mb if t.get("generic") else 0, name.endswith("_octal"), board.lower())
 
-    flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards})
+    def board_html(board, name, t, flash_mb, image, bsu):
+        fam = CHIP_FAMILY[t["chip"]]
+        title = (f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>'
+                 if t.get("product_url") else html.escape(board))
+        notes = []
+        if t.get("generic"):
+            notes.append(f"For any {fam} board with {flash_mb} MB of flash, such as {html.escape(t.get('examples', ''))}. "
+                         "Pins follow Arduino-ESP32's generic variant. Not yet tested on hardware.")
+            if t["chip"] != "esp32":
+                notes.append("Plug into the chip's own USB port: on boards with two ports, the one labeled USB, not UART.")
+            if name.endswith("_octal"):
+                notes.append("For modules with octal PSRAM (the R8 in N8R8 or N16R8). GPIO 33-37 belong to the PSRAM.")
+            elif t["chip"] == "esp32s3":
+                notes.append("For modules with quad PSRAM (R2) or none. With octal PSRAM (R8), pick the octal entry.")
+        if image.suffix == ".hex":
+            install = ('<p class="note-small">Open the .hex in <a href="https://www.pjrc.com/teensy/loader.html">Teensy Loader</a> '
+                       'and press the button on the Teensy. This page can not flash a Teensy yet.</p>')
+        else:
+            install = (f'<button class="flash" data-target="{name}" data-chip="{fam}" data-flash-mb="{flash_mb}">Flash</button>'
+                       '<div class="flash-status"></div>')
+        links = [f'<a href="firmware/{name}/{image.name}">{image.suffix}</a>']
+        if bsu.exists():
+            links.append(f'<a href="firmware/{name}/{bsu.name}" title="Baseline update over WiFi">.bsu</a>')
+        note_html = "".join(f"<p class=\"note-small\">{n}</p>" for n in notes)
+        return f"""      <div class="board" data-target="{name}" hidden>
+        <div class="board-title">{title}</div>
+        <div class="facts">{fam} · {flash_mb} MB flash · download {' · '.join(links)}</div>
+        {note_html}
+        {install}
+      </div>"""
+
+    options, panels = [], []
+    for chip, label in GROUPS:
+        group = sorted((r for r in rows if r[2]["chip"] == chip), key=sort_key)
+        if not group:
+            continue
+        options.append(f'    <optgroup label="{html.escape(label)}">')
+        for r in group:
+            options.append(f'      <option value="{r[1]}">{html.escape(r[0])}</option>')
+            panels.append(board_html(*r))
+        options.append("    </optgroup>")
+
+    # Auto-detect, two ways (runner.js, flashBoard()): "SparkFun" matches the
+    # chip and flash size to a SparkFun board (asking when several match, or
+    # taking the target a Baseline already on the board reports); "Generic"
+    # flashes the largest generic image that fits (pickGeneric()).
+    generic = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb,
+                "octal": name.endswith("_octal")}
+               for board, name, t, flash_mb, image, _ in rows if t.get("generic") and image.suffix == ".bin"]
+    sparkfun = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb}
+                for board, name, t, flash_mb, image, _ in rows if not t.get("generic") and image.suffix == ".bin"]
+    auto_text = ("Not sure which ESP module you've got? Auto-detect will check and load the correct Baseline for your "
+                 "board. If you've got a SparkFun board, auto-detect will attempt to select the right one and display "
+                 "the supported examples.")
+    auto_option = []
+    for key, label, have in (("auto-sparkfun", "SparkFun ESP32 board - Auto-detect", sparkfun),
+                             ("auto-generic", "Generic ESP32 board - Auto-detect", generic)):
+        if not have:
+            continue
+        chips = sorted({g["chip"] for g in have}, key=lambda c: list(CHIP_FAMILY.values()).index(c))
+        auto_option.append(f'    <option value="{key}">{html.escape(label)}</option>')
+        panels.insert(len(auto_option) - 1, f"""      <div class="board" data-target="{key}" hidden>
+        <div class="board-title">{html.escape(label)}</div>
+        <div class="facts">{' · '.join(chips)}</div>
+        <p class="note-small">{html.escape(auto_text)}</p>
+        <button class="flash" data-target="{key}" data-chip="" data-flash-mb="0">Flash</button>
+        <div class="flash-status"></div>
+      </div>""")
+    none = ("Pick a board above. SparkFun boards come first in each group; for another board, pick the generic entry "
+            "with its chip and flash size (printed on the module: N8R8 = 8 MB flash, 8 MB PSRAM)"
+            + (", or one of the Auto-detect entries" if auto_option else "") + ". The Flash button checks both before it writes.")
+    board_picker = "\n".join(["  <select id=\"board-pick\" aria-label=\"Board\">",
+                              "    <option value=\"\">Choose your board...</option>", *auto_option, *options, "  </select>",
+                              "  <div class=\"card board-card\" id=\"board-card\">", *panels,
+                              f"      <p class=\"note-small\" id=\"board-none\">{none}</p>", "  </div>"])
+
+    flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards, "generic": generic, "sparkfun": sparkfun})
     kit_button = (f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>'
                   if kit_link else "")
     page = f"""<!doctype html>
@@ -173,7 +252,15 @@ def main():
   .status {{ color: var(--mute); }}
   .status.good {{ color: var(--good); }}
   .status.bad {{ color: var(--bad); }}
-  .flash-status {{ font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 260px; }}
+  #board-pick {{ font: inherit; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--card);
+                color: var(--ink); width: 100%; max-width: 480px; margin-bottom: 12px; }}
+  .board-card {{ padding: 16px; max-width: 720px; }}
+  .board-title {{ font-weight: 600; font-size: 17px; }}
+  .facts {{ color: var(--mute); font-size: 14px; margin: 2px 0 8px; }}
+  .board .note-small {{ margin: 0 0 8px; }}
+  .board button.flash {{ margin-top: 4px; }}
+  .flash-status {{ font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 420px; }}
+  .flash-status button.choice {{ font-size: 13px; padding: 4px 10px; margin: 6px 6px 0 0; }}
   .flash-status.good {{ color: var(--good); }}
   .flash-status.bad {{ color: var(--bad); }}
   .runner {{ display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 12px; }}
@@ -214,19 +301,14 @@ def main():
 <body>
 <header><div>
   <h1>Flick</h1>
-  <p>Arduino sketches for SparkFun ESP32 boards that build in about a second and upload in under one, over USB or WiFi.
-  The board runs Baseline, precompiled firmware with Arduino-ESP32, WiFi, BLE and storage inside; your sketch is only your code.</p>
+  <p>Flick shortens compiling and loading an Arduino sketch to mere seconds. A big blob of code called Baseline
+  is preloaded onto the board. After that, all that is compiled and loaded is your personal sketch.</p>
 </div></header>
 <main>
   <h2><span class="n">1</span>Put Baseline on your board</h2>
-  <p class="lead">Plug in the board and press <b>Flash</b> next to it (Chrome or Edge). You do this once per board,
+  <p class="lead">Pick your board, plug it in and press <b>Flash</b> (Chrome or Edge). You do this once per board,
   and again only for a newer Baseline.</p>
-  <div class="table"><table>
-    <thead><tr><th>Board</th><th>Chip</th><th>Flash</th><th>Install</th><th>Download</th></tr></thead>
-    <tbody>
-{chr(10).join(row_html(*r) for r in rows)}
-    </tbody>
-  </table></div>
+{board_picker}
 
   <h2><span class="n">2</span>Try the examples</h2>
   <p class="lead">Press <b>Connect</b>, pick the board, then <b>Run</b> an example: it is on the board a second later,

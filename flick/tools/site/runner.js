@@ -13,13 +13,16 @@
 //
 // make_site.py puts this next to index.html, with examples/examples.json and
 // examples/<group>/<name>/<target>.flick (tools/ci/build_examples.py --out),
-// and sets window.FLICK = { abi: "1.7", boards: { target: "Board name" } }.
+// and sets window.FLICK = { abi: "1.7", boards: { target: "Board name" },
+// generic: [{ target, name, chip, flash_mb, octal }], sparkfun: [{ target, name, chip, flash_mb }] }
+// (the images the two Auto-detect entries pick from).
 
 const PREFIX = "@BSK ";
 const CHUNK = 768;
 const UPLOAD_BAUD = 921600;    // a UART console runs at this for an upload (@BSK BAUD, Baseline 0.3+)
 const ESPRESSIF = 0x303a, USB_SERIAL_JTAG = 0x1001;
 const USB_SERIAL_CHIPS = [0x1a86, 0x10c4, 0x0403];     // CH340, CP210x, FTDI (the classic ESP32 boards)
+const PJRC = 0x16c0;                                   // Teensy (its USB serial while Baseline runs)
 const GROUPS = {
   "01_basics": "Basics", "02_hardware": "Hardware", "03_wifi": "WiFi", "04_bluetooth": "Bluetooth",
   "05_storage": "Storage", "06_power_and_usb": "Power and USB", "07_updates": "Updates",
@@ -118,7 +121,9 @@ class Link {
 
 // ------------------------------------------------------------------ the page
 
-const state = { link: null, port: null, baud: 115200, board: null, examples: [], busy: false, selected: null };
+// picked: the board chosen in the menu or found by Auto-detect, so the examples
+// show which ones run on it before Connect.
+const state = { link: null, port: null, baud: 115200, board: null, picked: "", examples: [], busy: false, selected: null };
 
 function log(text, cls) {
   const con = $("console");
@@ -164,17 +169,18 @@ async function openLink(port) {
 
 async function connect() {
   if (state.link) return disconnect();
-  if (!("serial" in navigator)) {
+  if (!needs("serial")) {
     setStatus("This browser can't talk to USB serial ports. Use Chrome or Edge on a computer.", "bad");
     return;
   }
   let port;
   try {
     port = await navigator.serial.requestPort({
-      filters: [ESPRESSIF, ...USB_SERIAL_CHIPS].map((v) => ({ usbVendorId: v })),
+      filters: [ESPRESSIF, ...USB_SERIAL_CHIPS, PJRC].map((v) => ({ usbVendorId: v })),
     });
   } catch (e) {
-    return;                                        // the user closed the chooser
+    chooserError(e, setStatus);
+    return;
   }
   setStatus("Connecting...");
   let r;
@@ -339,8 +345,12 @@ async function show(ex) {
 
 function render() {
   const list = $("examples");
+  if (!state.examples.length) {
+    list.textContent = "The examples aren't on this page yet.";
+    return;
+  }
   list.textContent = "";
-  const target = state.board && state.board.target;
+  const target = (state.board && state.board.target) || state.picked;
   let group = null, ul = null;
   for (const ex of state.examples) {
     if (ex.group !== group) {
@@ -356,8 +366,14 @@ function render() {
     const btn = document.createElement("button");
     btn.textContent = "Run";
     const fits = !target || ex.targets.includes(target);
-    btn.disabled = !state.link || state.busy || !fits || ex.wifi;
-    btn.onclick = () => { show(ex); run(ex); };
+    // Not disabled while unconnected: a press then says what is missing.
+    btn.disabled = state.busy || !fits || ex.wifi;
+    btn.onclick = () => {
+      show(ex);
+      if (!needs("serial")) return;
+      if (!state.link) { setStatus("Press Connect first and pick the board's port, then Run.", "bad"); return; }
+      run(ex);
+    };
     const name = document.createElement("a");
     name.href = "#";
     name.textContent = ex.name;
@@ -390,12 +406,97 @@ async function sendInput(e) {
 const ESPTOOL = "https://cdn.jsdelivr.net/npm/esptool-js@0.6.0/+esm";
 const FLASH_BAUD = 921600;
 
+// The parts a manifest lists (image at 0, blank coredump), downloaded.
+async function baselineParts(target) {
+  const manifestUrl = new URL(`manifests/${target}.json`, location.href);
+  const res = await fetch(manifestUrl);
+  if (!res.ok) throw new Error(`can't download the manifest for ${target} (${res.status})`);
+  const manifest = await res.json();
+  return Promise.all(manifest.builds[0].parts.map(async (p) => {
+    const r = await fetch(new URL(p.path, manifestUrl));
+    if (!r.ok) throw new Error(`can't download ${p.path} (${r.status})`);
+    return { data: new Uint8Array(await r.arrayBuffer()), address: p.offset };
+  }));
+}
+
+// "Auto-detect": the generic image for what the chip reports (make_site.py
+// lists them in window.FLICK.generic). Flash: the largest image that fits.
+// ESP32-S3 PSRAM: eFuse PSRAM_CAP 1 or 3 is in-package octal PSRAM (8 or 16 MB),
+// 2 quad (2 MB), 0 none or external (quad wiring, which also runs without PSRAM).
+async function pickGeneric(loader, family, flashMb) {
+  let octal = false, psram = "";
+  if (family === "ESP32-S3" && loader.chip.getPsramCap) {
+    const cap = await loader.chip.getPsramCap(loader);
+    octal = cap === 1 || cap === 3;
+    psram = cap === 1 ? ", 8 MB octal PSRAM" : cap === 3 ? ", 16 MB octal PSRAM" : cap === 2 ? ", 2 MB quad PSRAM" : "";
+  }
+  // An unknown size (0) gets the smallest image: it runs on any flash size.
+  const fits = (window.FLICK.generic || [])
+    .filter((g) => g.chip === family && (!flashMb || g.flash_mb <= flashMb) && g.octal === octal)
+    .sort((a, b) => (flashMb ? b.flash_mb - a.flash_mb : a.flash_mb - b.flash_mb));
+  const size = flashMb ? `${flashMb} MB flash` : "flash size not readable";
+  return { pick: fits[0], found: `${family}, ${size}${psram}` };
+}
+
+// The flash size in MB from the flash chip's ID, or 0 when the ID can't be
+// read. esptool-js's detectFlashSize() answers "4MB" then, which was wrong on
+// a Thing Plus C5 (8 MB) and made Auto-detect refuse it.
+async function flashSizeMb(loader) {
+  for (let i = 0; i < 3; i++) {
+    const id = await loader.readFlashId();
+    const size = loader.DETECTED_FLASH_SIZES[(id >> 16) & 0xff];
+    if (size && size.endsWith("MB")) return parseInt(size, 10);
+    log(`--- flash ID 0x${(id >>> 0).toString(16)}: size not known`, "bad");
+    await sleep(50);
+  }
+  return 0;
+}
+
+// "SparkFun ESP32 board - Auto-detect": the SparkFun boards with this chip and
+// flash size (window.FLICK.sparkfun). Several boards share one (the classic
+// ESP32 boards with 16 MB and a CH340), so the user picks among those.
+// flashMb 0 (not read): every SparkFun board with this chip.
+function sparkfunMatches(family, flashMb) {
+  return (window.FLICK.sparkfun || []).filter((b) => b.chip === family && (!flashMb || b.flash_mb === flashMb));
+}
+
+// A board that already runs Baseline names its own target: ask before the
+// chip is reset into its bootloader. null when nothing answers.
+async function baselineTarget(port) {
+  let r = null;
+  try {
+    r = await openLink(port);
+  } catch (e) {
+    return null;                 // the port won't open: the flasher says why
+  }
+  if (!r) return null;
+  await r.link.close();
+  return r.info.target || null;
+}
+
+// Buttons in the status line, one per board; resolves to the one pressed, or
+// null for Cancel.
+function askWhich(status, text, choices) {
+  return new Promise((resolve) => {
+    status.textContent = text + " ";
+    status.className = "flash-status";
+    for (const c of [...choices, null]) {
+      const b = document.createElement("button");
+      b.textContent = c ? c.name : "Cancel";
+      b.className = "choice";
+      b.onclick = () => resolve(c);
+      status.append(b, " ");
+    }
+  });
+}
+
 async function flashBoard(btn) {
-  const target = btn.dataset.target, family = btn.dataset.chip, need = Number(btn.dataset.flashMb);
+  let target = btn.dataset.target, family = btn.dataset.chip, need = Number(btn.dataset.flashMb);
+  const auto = target.startsWith("auto-") ? target.slice(5) : "";    // "sparkfun" or "generic"
   const status = btn.parentElement.querySelector(".flash-status");
   const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
-  if (!("serial" in navigator)) { say("Use Chrome or Edge on a computer.", "bad"); return; }
-  if (state.busy) return;
+  if (!needs("serial")) { say("This browser can't flash a board: use Chrome or Edge on a computer.", "bad"); return; }
+  if (state.busy) { say("Busy: wait for the upload or flash in progress to finish.", "bad"); return; }
   if (state.link) await disconnect();              // step 2 may hold the port
   let port;
   try {
@@ -403,21 +504,32 @@ async function flashBoard(btn) {
       filters: [ESPRESSIF, ...USB_SERIAL_CHIPS].map((v) => ({ usbVendorId: v })),
     });
   } catch (e) {
-    return;                                        // the user closed the chooser
+    chooserError(e, say);
+    return;
   }
   state.busy = true;
   render();
   for (const b of document.querySelectorAll("button.flash")) b.disabled = true;
   try {
-    say("Downloading Baseline...");
-    const manifestUrl = new URL(`manifests/${target}.json`, location.href);
-    const manifest = await (await fetch(manifestUrl)).json();
-    const files = await Promise.all(manifest.builds[0].parts.map(async (p) => {
-      const res = await fetch(new URL(p.path, manifestUrl));
-      if (!res.ok) throw new Error(`can't download ${p.path} (${res.status})`);
-      return { data: new Uint8Array(await res.arrayBuffer()), address: p.offset };
-    }));
-    const { ESPLoader, Transport } = await import(ESPTOOL);
+    const notes = [];
+    let files = null;
+    if (auto === "sparkfun") {
+      say("Asking the board whether it already runs Baseline...");
+      const known = await baselineTarget(port);
+      const board = (window.FLICK.sparkfun || []).find((b) => b.target === known);
+      if (board) {
+        target = board.target; family = board.chip; need = board.flash_mb;
+        notes.push(`The board's Baseline says it is a ${board.name}.`);
+      }
+    }
+    say("Loading the flasher...");
+    if (!target.startsWith("auto-")) files = await baselineParts(target);
+    let ESPLoader, Transport;
+    try {
+      ({ ESPLoader, Transport } = await import(ESPTOOL));
+    } catch (e) {
+      throw new Error(`can't load esptool-js from the CDN (${e.message}). Check the internet connection.`);
+    }
     const uart = USB_SERIAL_CHIPS.includes(port.getInfo().usbVendorId);
     // Native USB ignores the rate; a USB-serial chip tries 921600, then 115200.
     const bauds = uart ? [FLASH_BAUD, 115200] : [115200];
@@ -446,15 +558,52 @@ async function flashBoard(btn) {
           throw new Error(`the chip doesn't answer (${why}). Hold BOOT, press RESET, release BOOT, then Flash again.`);
         }
         const found = loader.chip.CHIP_NAME;
+        const have = await flashSizeMb(loader);      // 0: not readable
+        if (auto && !files) {
+          let pick, what;
+          if (auto === "sparkfun") {
+            what = `${found}, ${have ? `${have} MB flash` : "flash size not readable"}`;
+            const matches = sparkfunMatches(found, have);
+            if (!matches.length) {
+              fatal = true;
+              throw new Error(`found ${what}, and no SparkFun board has that. ` +
+                              "If it isn't a SparkFun board, pick Generic ESP32 board - Auto-detect.");
+            }
+            pick = matches.length === 1 ? matches[0]
+              : await askWhich(status, `Found ${what}. Which board is it?`, matches);
+            if (!pick) { fatal = true; throw new Error("no board picked."); }
+          } else {
+            ({ pick, found: what } = await pickGeneric(loader, found, have));
+            if (!pick) {
+              fatal = true;
+              throw new Error(`found ${what}, and there is no generic Baseline for it. ` +
+                              "Pick the board from the menu if it is listed.");
+            }
+          }
+          target = pick.target; family = pick.chip; need = pick.flash_mb;
+          say(`Found ${what}. Downloading ${pick.name}...`);
+          notes.push(`Found ${what}: flashed ${pick.name}.`);
+          files = await baselineParts(target);
+        }
         if (found !== family) {
           fatal = true;
-          throw new Error(`this board has an ${found}, but this Baseline is for an ${family}. Pick the row for your board.`);
+          throw new Error(`this board has an ${found}, but this Baseline is for an ${family}. ` +
+                          "Pick your board in the menu, or Auto-detect.");
         }
-        const have = parseInt(await loader.detectFlashSize(), 10);
         if (have && have < need) {
           fatal = true;
           throw new Error(`this board has ${have} MB of flash, this Baseline needs ${need} MB. ` +
-                          "Is it the right board? (python flick.py baseline flash fits it to smaller flash.)");
+                          "Pick your board in the menu, or Auto-detect.");
+        }
+        if (found === "ESP32" && loader.chip.getChipRevision && (await loader.chip.getChipRevision(loader)) < 3) {
+          fatal = true;
+          throw new Error("this ESP32 is an early chip revision (before 3.0); Baseline needs revision 3.0 or later.");
+        }
+        // The S3, C3, C5, C6 and P4 run Baseline's console on the chip's own USB:
+        // flashing through a USB-serial chip works, but the console isn't there.
+        if (found !== "ESP32" && USB_SERIAL_CHIPS.includes(port.getInfo().usbVendorId)) {
+          notes.push("This port is a USB-serial chip, and Baseline talks over the chip's own USB: " +
+                     "to Connect, plug into the board's other USB port (often labeled USB).");
         }
         const total = files.reduce((n, f) => n + f.data.length, 0);
         const t0 = performance.now();
@@ -473,7 +622,15 @@ async function flashBoard(btn) {
         await loader.after("hard_reset");
         await transport.disconnect();
         const secs = ((performance.now() - t0) / 1000).toFixed(0);
-        say(`Done in ${secs} s. Now try the examples below: press Connect.`, "good");
+        const done = [...notes, `Done in ${secs} s. Now try the examples below: press Connect.`].join(" ");
+        say(done, "good");
+        if (auto) {
+          // Show the board that was flashed, with this message, and its examples.
+          showBoard(target);
+          const panel = [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === target);
+          const s2 = panel && panel.querySelector(".flash-status");
+          if (s2) { s2.textContent = done; s2.className = "flash-status good"; }
+        }
         return;
       } catch (e) {
         try { await transport.disconnect(); } catch (e2) {}
@@ -506,13 +663,17 @@ function supportedBrowser() {
   return brands.includes("Google Chrome") || brands.includes("Microsoft Edge");
 }
 
-function browserCheck() {
-  if (supportedBrowser()) return;
-  try { if (sessionStorage.getItem("flick-browser-ok")) return; } catch (e) {}
+// The warning dialog. On page load it shows once per session (a viewer may
+// continue anyway); a button that can't work in this browser shows it on
+// every press, with what that button needed.
+function browserWarning(why) {
   const dlg = $("browser-warn");
-  if (!dlg) return;
-  if (!("serial" in navigator)) $("browser-why").textContent =
-    "This browser can't talk to USB serial ports (Web Serial), so the Flash and Run buttons won't work here.";
+  if (!dlg) { alert(why || "Please use Google Chrome or Microsoft Edge on a computer."); return; }
+  $("browser-why").textContent = why ||
+    ("serial" in navigator
+      ? "Flashing Baseline and running examples talk to the board over USB (Web Serial), which is supported only in Google Chrome and Microsoft Edge on a computer."
+      : "This browser can't talk to USB serial ports (Web Serial), so the Flash, Connect and Run buttons won't work here.");
+  $("browser-copy").textContent = "Copy page link";
   $("browser-copy").onclick = async () => {
     try { await navigator.clipboard.writeText(location.href); $("browser-copy").textContent = "Link copied"; }
     catch (e) { $("browser-copy").textContent = location.href; }
@@ -521,22 +682,74 @@ function browserCheck() {
     try { sessionStorage.setItem("flick-browser-ok", "1"); } catch (e) {}
     if (dlg.close) dlg.close(); else dlg.removeAttribute("open");
   };
+  if (dlg.open) return;
   if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+}
+
+function browserCheck() {
+  if (supportedBrowser()) return;
+  try { if (sessionStorage.getItem("flick-browser-ok")) return; } catch (e) {}
+  browserWarning();
+}
+
+// True if this browser has the API a button needs; otherwise shows why.
+function needs(api) {
+  if (api === "serial" && "serial" in navigator) return true;
+  if (api === "hid" && "hid" in navigator) return true;
+  browserWarning(api === "hid"
+    ? "Flashing a Teensy talks to its bootloader over USB (WebHID), which this browser doesn't support. Use Google Chrome or Microsoft Edge on a computer, or flash the .hex with Teensy Loader."
+    : "This browser can't talk to USB serial ports (Web Serial), so this button can't work here. Use Google Chrome or Microsoft Edge on a computer.");
+  return false;
+}
+
+// requestPort/requestDevice: closing the chooser is a choice, not an error
+// (NotFoundError); anything else (blocked by policy, no permission) is shown.
+function chooserError(e, say) {
+  if (e && e.name === "NotFoundError") { say("No port picked."); return; }
+  say(`The browser refused the USB request: ${(e && e.message) || e}`, "bad");
+}
+
+// ---- board menu ------------------------------------------------------------
+
+// One panel per board (div.board) under the menu; the menu shows one at a
+// time and remembers the choice in this browser.
+// Show one board's panel (and select it in the menu); its examples are marked.
+function showBoard(target) {
+  const pick = $("board-pick");
+  if (!pick) return;
+  if ([...pick.options].some((o) => o.value === target)) pick.value = target;
+  for (const d of document.querySelectorAll("div.board")) d.hidden = d.dataset.target !== pick.value;
+  for (const st of document.querySelectorAll(".flash-status")) { st.textContent = ""; st.className = "flash-status"; }
+  $("board-none").hidden = !!pick.value;
+  state.picked = pick.value.startsWith("auto-") ? "" : pick.value;
+  try { localStorage.setItem("flick-board", pick.value); } catch (e) {}
+  render();
+}
+
+function boardPicker() {
+  const pick = $("board-pick");
+  if (!pick) return;
+  pick.onchange = () => showBoard(pick.value);
+  let saved = "";
+  try { saved = localStorage.getItem("flick-board") || ""; } catch (e) {}
+  if (saved && [...pick.options].some((o) => o.value === saved)) pick.value = saved;
+  showBoard(pick.value);
 }
 
 async function init() {
   browserCheck();
+  boardPicker();
   $("connect").onclick = connect;
   $("send-form").onsubmit = sendInput;
   $("clear").onclick = () => { $("console").textContent = ""; };
-  for (const b of document.querySelectorAll("button.flash")) {
-    b.onclick = () => flashBoard(b);
-    if (!("serial" in navigator)) b.disabled = true;
-  }
+  for (const b of document.querySelectorAll("button.flash")) b.onclick = () => flashBoard(b);
+  for (const b of document.querySelectorAll("button.teensy-flash")) b.onclick = () => flashTeensy(b);
+  for (const b of document.querySelectorAll("button.teensy-reboot")) b.onclick = () => rebootTeensy(b);
   try {
     state.examples = (await (await fetch("examples/examples.json")).json()).examples;
   } catch (e) {
-    $("examples").textContent = "The examples aren't on this page yet.";
+    state.examples = [];
+    render();
     return;
   }
   render();
@@ -544,7 +757,6 @@ async function init() {
   if (first) show(first);
   if (!("serial" in navigator)) {
     setStatus("Running examples needs Chrome or Edge on a computer (Web Serial).", "bad");
-    $("connect").disabled = true;
   }
 }
 
