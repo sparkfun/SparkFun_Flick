@@ -1,0 +1,8 @@
+{
+    "chip": "imxrt1062",
+    "description": "PJRC Teensy 4.1 as a USB keyboard, mouse and joystick: i.MX RT1062 at 600 MHz, 8 MB flash, 1 MB RAM, PSRAM pads, microSD (SDIO), Ethernet PHY, USB host (USB type Serial + Keyboard + Mouse + Joystick)",
+    "flash_size": "8MB",
+    "fqbn": "teensy:avr:teensy41:usb=serialhid,speed=600,opt=o2std",
+    "status": "untested",
+    "variant_of": "teensy41"
+}

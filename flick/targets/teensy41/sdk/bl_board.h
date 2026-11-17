@@ -14,6 +14,9 @@
 
 #define BL_TARGET_NAME          "teensy41"
 #define BL_BOARD_NAME           "PJRC Teensy 4.1"
+#define BL_HAS_USB_AUDIO        1           /* USB type Serial + MIDI + Audio (the *_hid variant: keyboard instead) */
+#define BL_HAS_NET              1           /* sockets and HTTP over Ethernet (no TLS) */
+#define BL_HAS_ETHERNET         1           /* the DP83825 PHY: NativeEthernet.h */
 
 /* ---- Pins seen by sketches ---- */
 #define BL_BOARD_LED_BUILTIN    13

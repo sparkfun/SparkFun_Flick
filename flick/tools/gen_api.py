@@ -148,20 +148,24 @@ def fnptr(e, name):
 # Field prefix -> required macro. (ledc_, ps_ and sleep_ stay: the SDK builds
 # Servo, tone() and the Teensy names on them.)
 WRAPPER_PREFIX_REQUIRES = [
-    (("wifi_", "http_", "net_", "tcp_", "udp_", "web_", "mdns_", "mqtt_", "dns_", "ota_"), "BL_HAS_WIFI"),
+    (("wifi_", "web_", "mdns_", "mqtt_", "dns_", "ota_"), "BL_HAS_WIFI"),
+    (("http_", "net_", "tcp_", "udp_"), "BL_HAS_NET"),       # sockets and HTTP: WiFi or Ethernet
+    (("eth_",), "BL_HAS_ETHERNET"),
     (("espnow_",), "BL_HAS_ESPNOW"),
     (("ble_",), "BL_HAS_BLE"),
     (("bt_",), "BL_HAS_BT_CLASSIC"),
     (("touch_",), "BL_HAS_TOUCH"),
     (("dac_",), "BL_HAS_DAC"),
     (("usb_",), "BL_HAS_USB_DEVICE"),
-    (("i2s_", "rgb_", "led_strip_"), "BL_PLATFORM_ESP32"),
+    (("i2s_",), "BL_PLATFORM_ESP32"),
+    (("rgb_", "led_strip_"), "BL_HAS_LED_STRIP"),
     (("audio_",), "BL_HAS_AUDIO"),
+    (("usbh_",), "BL_HAS_USB_HOST"),
     (("isr_", "dma_channel_"), "BL_TARGET_SKETCH_ISR"),
 ]
 # Arduino-ESP32 names (not bl_*) that would mislead elsewhere.
 WRAPPER_NAME_REQUIRES = {
-    "analogReadMilliVolts": "BL_PLATFORM_ESP32", "rgbLedWrite": "BL_PLATFORM_ESP32",
+    "analogReadMilliVolts": "BL_PLATFORM_ESP32", "rgbLedWrite": "BL_HAS_LED_STRIP",
     "ps_malloc": "BL_PLATFORM_ESP32", "ps_calloc": "BL_PLATFORM_ESP32", "ps_realloc": "BL_PLATFORM_ESP32",
     "temperatureRead": "BL_PLATFORM_ESP32",
 }
@@ -250,8 +254,8 @@ STUB_GROUPS = {
     "WIFI": (("wifi_",), ("http_request", "http_get", "net_resolve")),
     "BLE": (("ble_",), ()),
     "ESPNOW": (("espnow_",), ()),
-    # Teensy-only entries (ABI 1.8): sketch interrupt handlers, DMA channels, the Audio library.
-    "TEENSY": (("isr_", "dma_channel_", "audio_"), ()),
+    # Teensy-only entries: sketch interrupt handlers, DMA channels, the Audio library (ABI 1.8), USB host (1.9).
+    "TEENSY": (("isr_", "dma_channel_", "audio_", "usbh_", "eth_"), ()),
 }
 # What a stub returns. Queries answer "nothing there" (so `while (available())`
 # ends); actions report BL_ERR_UNSUPPORTED.

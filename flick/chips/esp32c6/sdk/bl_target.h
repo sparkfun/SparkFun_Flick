@@ -33,7 +33,10 @@
  * that uses something this chip lacks fails to compile with a clear message
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+#define BL_HAS_LED_STRIP      1       /* WS2812-type LEDs: rgbLedWrite, FastLED.h (RMT or bit-banged) */
 #define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, WiFi OTA */
+#define BL_HAS_NET            1       /* sockets and HTTP (WiFiClient, WiFiUDP, HTTPClient) */
+#define BL_HAS_TLS            1       /* WiFiClientSecure, HTTPS */
 #define BL_HAS_ESPNOW         1       /* ESP-NOW (the chip's own radio) */
 #define BL_HAS_BLE            1       /* Bluetooth LE (BLESerial, BLEDevice, ...) */
 

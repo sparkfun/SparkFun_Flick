@@ -288,6 +288,23 @@ int bl_impl_audio_reconnect(int connection);
 int bl_impl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret);
 float bl_impl_audio_stat(int what);
 void bl_impl_audio_interrupts(int enable);
+int bl_impl_usbh_begin(void);
+int bl_impl_usbh_info(int kind, int index, bl_usbh_info_t *info);
+int bl_impl_usbh_key_take(int index, bl_usbh_key_t *ev);
+int bl_impl_usbh_keyboard_leds(int index, int leds);
+int bl_impl_usbh_mouse_take(int index, bl_usbh_mouse_t *m);
+int bl_impl_usbh_joystick_take(int index, bl_usbh_joystick_t *j);
+int bl_impl_usbh_midi_read(int index, uint8_t *msg);
+int bl_impl_usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable);
+int bl_impl_usbh_serial_begin(int index, uint32_t baud, uint32_t format);
+int bl_impl_usbh_serial_available(int index);
+int bl_impl_usbh_serial_read(int index, uint8_t *buf, size_t len);
+int bl_impl_usbh_serial_write(int index, const uint8_t *buf, size_t len);
+int bl_impl_eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms);
+int bl_impl_eth_status(int what);
+uint32_t bl_impl_eth_ip(int which);
+int bl_impl_eth_mac(uint8_t *mac);
+int bl_impl_eth_maintain(void);
 
 #ifdef __cplusplus
 }

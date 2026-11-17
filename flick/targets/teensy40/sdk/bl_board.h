@@ -11,6 +11,7 @@
 
 #define BL_TARGET_NAME          "teensy40"
 #define BL_BOARD_NAME           "PJRC Teensy 4.0"
+#define BL_HAS_USB_AUDIO        1           /* USB type Serial + MIDI + Audio (the *_hid variant: keyboard instead) */
 
 /* ---- Pins seen by sketches ---- */
 #define BL_BOARD_LED_BUILTIN    13

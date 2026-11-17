@@ -1,7 +1,7 @@
 /* sketch_net.cpp - out-of-line parts of baseline_net.h. */
 #include "baseline.h"
 
-#if defined(BL_HAS_WIFI)     /* the whole file: boards with this feature only */
+#if defined(BL_HAS_WIFI)     /* WiFi, mDNS, OTA: WiFi boards */
 
 WiFiClass WiFi;
 MDNSResponder MDNS;
@@ -48,6 +48,10 @@ String WiFiClass::BSSIDstr(uint8_t i)
              ap.bssid[0], ap.bssid[1], ap.bssid[2], ap.bssid[3], ap.bssid[4], ap.bssid[5]);
     return String(text);
 }
+
+#endif /* BL_HAS_WIFI */
+
+#if defined(BL_HAS_NET)      /* sockets, HTTP: any network */
 
 /* ---- WiFiClient ---- */
 
@@ -172,6 +176,10 @@ String HTTPClient::errorToString(int error)
     default:                             return String();
     }
 }
+
+#endif /* BL_HAS_NET */
+
+#if defined(BL_HAS_WIFI)     /* the web server: WiFi boards for now */
 
 /* ---- WebServer ---- */
 

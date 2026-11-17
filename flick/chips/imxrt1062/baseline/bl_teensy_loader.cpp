@@ -73,8 +73,16 @@ int bl_wake_cause_code(void)
     return s_wake_cause;
 }
 
-/* Deep sleep stand-in: the i.MX RT1062 has no deep sleep with a timer wake
- * in Teensyduino yet, so wait, then restart as if woken by the timer. */
+/* After deep sleep (bl_teensy_impl.cpp): restart as an ESP32 wakes,
+ * with the wake cause kept for the next boot (esp_sleep_wakeup_cause_t value). */
+void bl_sleep_woke(int cause)
+{
+    s_ni.wake_cause = (uint32_t)cause;
+    bl_restart_clean();
+}
+
+/* Deep sleep shorter than Snooze's 1 s timer step: wait, then restart as if
+ * woken by the timer. */
 void bl_sleep_restart(uint64_t us)
 {
     uint64_t end = micros() + us;       // fine for the seconds sleeps are used for
@@ -705,6 +713,7 @@ void bl_poll(void)
     }
     busy = true;
     bl_timers_poll();
+    bl_usbh_poll();
     if (s_running) {
         systick_hook();
     }

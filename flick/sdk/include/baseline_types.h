@@ -80,6 +80,55 @@ typedef union {
 #define BL_AUDIO_STAT_MEMORY_MAX        5   /* AudioMemoryUsageMax() */
 #define BL_AUDIO_STAT_MEMORY_MAX_RESET  6   /* AudioMemoryUsageMaxReset() */
 
+/* ---- USB host (ABI 1.9; Teensy 4.x, USBHost_t36 in Baseline) ----
+ * Device kinds for bl_usbh_info(); index is 0 or 1 (Baseline keeps two of each). */
+#define BL_USBH_KEYBOARD    0
+#define BL_USBH_MOUSE       1
+#define BL_USBH_JOYSTICK    2
+#define BL_USBH_MIDI        3
+#define BL_USBH_SERIAL      4
+#define BL_USBH_DRIVE       5
+#define BL_USBH_HUB         6
+
+/* bl_usbh_key_take(): one keyboard event, queued in the USB interrupt. */
+#define BL_USBH_KEY_PRESS        1   /* key = character (KeyboardController::attachPress) */
+#define BL_USBH_KEY_RELEASE      2
+#define BL_USBH_KEY_RAW_PRESS    3   /* oem = HID key code, modifier keys too (attachRawPress) */
+#define BL_USBH_KEY_RAW_RELEASE  4
+typedef struct {
+    uint8_t type;           /* BL_USBH_KEY_* */
+    uint8_t oem;            /* HID key code (getOemKey) */
+    uint8_t modifiers;      /* getModifiers */
+    uint8_t reserved;
+    uint16_t key;           /* character (getKey) */
+} bl_usbh_key_t;
+
+typedef struct {            /* bl_usbh_mouse_take() */
+    uint8_t buttons;
+    int8_t wheel;
+    int8_t wheel_h;
+    uint8_t reserved;
+    int16_t x, y;           /* movement since the last report */
+} bl_usbh_mouse_t;
+
+#define BL_USBH_JOY_AXES    16
+typedef struct {            /* bl_usbh_joystick_take() */
+    uint32_t buttons;
+    uint32_t axis_mask;     /* which of axes[] the joystick has */
+    int32_t axes[BL_USBH_JOY_AXES];
+    uint8_t type;           /* JoystickController::joytype_t */
+    uint8_t reserved[3];
+} bl_usbh_joystick_t;
+
+typedef struct {            /* bl_usbh_info() */
+    uint8_t connected;
+    uint8_t reserved;
+    uint16_t vid, pid;
+    char manufacturer[32];
+    char product[32];
+    char serial[32];
+} bl_usbh_info_t;
+
 /* ---- GPIO interrupt modes (same values as Arduino-ESP32) ---- */
 #define BL_RISING   0x01
 #define BL_FALLING  0x02
@@ -102,6 +151,10 @@ typedef union {
 #define BL_IP_SUBNET    2
 #define BL_IP_DNS       3
 #define BL_IP_SOFTAP    4
+
+/* bl_eth_status() (ABI 1.9) */
+#define BL_ETH_LINK      1
+#define BL_ETH_HARDWARE  2
 
 typedef struct {
     char ssid[33];
@@ -253,6 +306,7 @@ typedef struct {
 /* ---- File systems (ABI 1.6: fsx_* take one of these) ---- */
 #define BL_FS_LITTLEFS  0
 #define BL_FS_SD        1
+#define BL_FS_USB       2   /* a USB drive on the USB host port (ABI 1.9, Teensy 4.x) */
 
 #define BL_SD_SPI       0   /* microSD over SPI (cs pin) */
 #define BL_SD_MMC       1   /* microSD over SDIO (board pins) */

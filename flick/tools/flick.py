@@ -100,11 +100,18 @@ def target_names():
 
 
 def header_defines(path):
-    """Numeric and string #defines from a header (bl_target.h)."""
+    """Numeric and string #defines from a header (bl_target.h), in order, following
+    #include "..." of a relative path (a variant's bl_board.h includes its base's)."""
     out = {}
-    for m in re.finditer(r'^\s*#define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+|"[^"]*")', path.read_text(), re.M):
-        v = m.group(2)
-        out[m.group(1)] = v.strip('"') if v.startswith('"') else int(v, 0)
+    text = path.read_text()
+    for m in re.finditer(r'^\s*#\s*(?:include\s+"([^"]+)"|define\s+(\w+)\s+(0x[0-9A-Fa-f]+|\d+|"[^"]*"))', text, re.M):
+        if m.group(1):
+            inc = (path.parent / m.group(1))
+            if inc.exists() and "/" in m.group(1):
+                out.update(header_defines(inc))
+            continue
+        v = m.group(3)
+        out[m.group(2)] = v.strip('"') if v.startswith('"') else int(v, 0)
     return out
 
 
@@ -452,10 +459,11 @@ def arduino_user_dirs():
     return dirs
 
 
-def library_roots(proj):
+def library_roots(proj, extra=()):
     roots = [proj / "libraries", WORK / "libraries"]       # the sketch's own, then flick lib install's
     roots += [Path(p) for p in os.environ.get("FLICK_LIBRARIES", "").split(os.pathsep) if p]
     roots += [d / "libraries" for d in arduino_user_dirs()]
+    roots += list(extra)                                    # the platform's bundled libraries, last
     seen, out = set(), []
     for r in roots:
         if r.is_dir() and r.resolve() not in seen:
@@ -495,9 +503,9 @@ def index_libraries(roots):
     return idx
 
 
-def resolve_libraries(proj, sources, include_dirs):
+def resolve_libraries(proj, sources, include_dirs, extra_roots=()):
     """The libraries the sketch needs, in discovery order."""
-    roots = library_roots(proj)
+    roots = library_roots(proj, extra_roots)
     if not roots:
         return []
     idx = None
@@ -536,13 +544,17 @@ FEATURE_NAMES = [
     (r"BLE\w*|BLESerial(Class)?", "Bluetooth LE", "BL_HAS_BLE"),
     (r"BluetoothSerial", "Bluetooth Classic", "BL_HAS_BT_CLASSIC"),
     (r"esp_now_\w+|ESP_NOW_\w+", "ESP-NOW", "BL_HAS_ESPNOW"),
-    (r"WiFi\w*|HTTPClient|WebServer|DNSServer|MDNS|PubSubClient|Network\w*|ArduinoOTA|configT(z)?ime|WL_\w+",
+    (r"WiFiClientSecure|NetworkClientSecure", "TLS (HTTPS)", "BL_HAS_TLS"),
+    (r"HTTPClient|NetworkClient|NetworkUDP", "a network (WiFi, or Ethernet on a Teensy 4.1)", "BL_HAS_NET"),
+    (r"Ethernet\w*", "Ethernet", "BL_HAS_ETHERNET"),
+    (r"WiFi\w*|WebServer|DNSServer|MDNS|PubSubClient|Network\w*|ArduinoOTA|configT(z)?ime|WL_\w+",
      "WiFi", "BL_HAS_WIFI"),
     (r"touch\w+|T[0-9]+", "capacitive touch", "BL_HAS_TOUCH"),
     (r"dacWrite", "a DAC", "BL_HAS_DAC"),
+    (r"rgbLedWrite|neopixelWrite|FastLED|CRGB\w*", "WS2812 LED support", "BL_HAS_LED_STRIP"),
     (r"USB\w*", "USB device mode in this Baseline", "BL_HAS_USB_DEVICE"),
     (r"esp_\w+|ESP_\w+|ESP|EspClass|ledc\w+|ps_(m|c|re)alloc|psramFound|temperatureRead|analogReadMilliVolts|"
-     r"analogSet(Pin)?Attenuation|rgbLedWrite|neopixelWrite|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
+     r"analogSet(Pin)?Attenuation|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
      r"hw_timer_t|I2SClass|SD_MMC|getLocalTime|getCpuFrequencyMhz|log_[ewidv]|gpio_num_t|GPIO_NUM_\w+|FastLED|CRGB",
      "an ESP32 API", "BL_PLATFORM_ESP32"),
     (r"IntervalTimer|elapsedMicros|elapsedMillis|Audio\w+|extmem_\w+|analogWrite(Frequency|Resolution)|tempmonGetTemp|"
@@ -596,7 +608,10 @@ def build(proj, target_name=None):
     t0 = time.time()
 
     base_dirs = [SDK / "include", SDK / "include" / "compat", *target["sdk_dirs"], proj]
-    libs = resolve_libraries(proj, user, base_dirs)
+    # Teensy: Teensyduino's bundled libraries too (FlexCAN_T4, Encoder, ...), after
+    # the user's; headers the SDK provides (Wire.h, SD.h, Audio.h, ...) never come from them.
+    extra = [teensy_core_dir(gcc).parents[1] / "libraries"] if target.get("builder") == "teensy" else []
+    libs = resolve_libraries(proj, user, base_dirs, extra)
     inc = []
     for d in base_dirs + [d for lib in libs for d in lib_src_dirs(lib)]:
         inc += ["-I", str(d)]
@@ -662,7 +677,7 @@ def build(proj, target_name=None):
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
          "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp",
-         "sketch_extras.cpp"] if cxx else [])
+         "sketch_extras.cpp", "sketch_usbhost.cpp"] if cxx else [])
     for name in shared:
         src = SDK / "src" / name
         obj = cache / (name + ".o")
@@ -1354,18 +1369,29 @@ def sync_files(dst, wanted):
     return dst
 
 
-def teensy_bootloader_port():
-    """The Teensy's port as Teensyduino's uploader names it (usb:...), from arduino-cli."""
+def teensy_bootloader_port(serial_port=None):
+    """The Teensy to flash, as Teensyduino's uploader names it (usb:...), from
+    arduino-cli: the one behind serial_port (-p COMx) if given; else the only
+    Teensy, or the only one waiting in a bootloader (a new board, or its button
+    pressed: no serial port)."""
     out = subprocess.run([find_arduino_cli(), "board", "list", "--format", "json"],
                          capture_output=True, text=True).stdout
-    ports = [d["port"]["address"] for d in json.loads(out or "{}").get("detected_ports", [])
+    found = [d["port"] for d in json.loads(out or "{}").get("detected_ports", [])
              if d.get("port", {}).get("protocol") == "teensy"]
-    if len(ports) != 1:
-        sys.exit(f"error: expected one Teensy on USB, found {len(ports)}")
-    return ports[0]
+    if serial_port:
+        hits = [p for p in found if (p.get("label") or "").split(" ")[0] == serial_port]
+        if hits:
+            return hits[0]["address"]
+    if len(found) == 1:
+        return found[0]["address"]
+    waiting = [p for p in found if not (p.get("label") or "").startswith("COM") and "/dev/" not in (p.get("label") or "")]
+    if len(waiting) == 1:
+        return waiting[0]["address"]
+    names = ", ".join(f"{p['address']} ({p.get('label', '')})" for p in found)
+    sys.exit(f"error: {len(found)} Teensys on USB ({names}): pick one with -p COMx, or unplug the others")
 
 
-def build_baseline_teensy(target, flash):
+def build_baseline_teensy(target, flash, serial_port=None):
     """Baseline for the i.MX RT1062 (Teensy 4.x): an Arduino sketch built with
     Teensyduino through arduino-cli. Staged from chips/<chip>/baseline plus the
     generated API table; the image is a .hex for Teensy's bootloader (HalfKay)."""
@@ -1401,7 +1427,7 @@ def build_baseline_teensy(target, flash):
     print(f"Baseline image: {out.relative_to(WORK)} (Intel hex for Teensy's bootloader)")
     if flash:
         run([find_arduino_cli(), "upload", "--fqbn", target["fqbn"], "--input-dir", str(build_path),
-             "-p", teensy_bootloader_port(), "-l", "teensy", str(sketch)])
+             "-p", teensy_bootloader_port(serial_port), "-l", "teensy", str(sketch)])
 
 
 def find_arduino_cli():
@@ -2163,7 +2189,7 @@ def cmd_baseline(args):
         return cmd_baseline_update(args, target)
     print(f"target {target['name']}: {target['description']}")
     if target.get("builder") == "teensy":
-        return build_baseline_teensy(target, args.action == "flash")
+        return build_baseline_teensy(target, args.action == "flash", getattr(args, "port", None))
     core = esp32_core_for(target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)

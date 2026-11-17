@@ -32,6 +32,8 @@ static bool lfs_mount(void)
     return s_lfs_mounted;
 }
 
+extern "C" FS *bl_usbh_fs(void);
+
 static FS *fs_by_id(int fs)
 {
     if (fs == BL_FS_LITTLEFS) {
@@ -39,6 +41,9 @@ static FS *fs_by_id(int fs)
     }
     if (fs == BL_FS_SD) {
         return s_sd_bus >= 0 ? (FS *)&SD : NULL;
+    }
+    if (fs == BL_FS_USB) {
+        return bl_usbh_fs();        // a USB drive on the host port (bl_teensy_usbhost.cpp)
     }
     return NULL;
 }

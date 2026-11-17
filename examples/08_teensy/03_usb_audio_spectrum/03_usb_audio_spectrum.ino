@@ -1,6 +1,9 @@
 // 03_usb_audio_spectrum.ino - the Teensy Audio library's FFT: play music on the
 // computer to the Teensy (Windows: choose "Teensy Audio" as the output device)
 // and watch its spectrum as bars in the serial monitor. Teensy 4.x only.
+#if !defined(BL_HAS_USB_AUDIO)
+#error "This board has no USB audio in its Baseline (Teensy 4.x with the Serial + MIDI + Audio Baseline has it)."
+#endif
 #include <Audio.h>
 
 AudioInputUSB            usbIn;

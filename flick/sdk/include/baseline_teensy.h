@@ -11,6 +11,11 @@
 #ifndef BASELINE_TEENSY_H
 #define BASELINE_TEENSY_H
 
+/* Teensy's register definitions, as Teensyduino's Arduino.h provides them:
+ * libraries that drive the chip directly (FlexCAN_T4, Encoder, ...) expect
+ * CCM_*, IOMUXC_*, NVIC_* without including anything. */
+#include <imxrt.h>
+
 #ifdef __cplusplus
 
 /* Code runs from flash and globals sit in DTCM (eDMA reaches it), whatever the

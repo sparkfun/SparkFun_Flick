@@ -1,4 +1,4 @@
-# Baseline API reference (ABI 1.8)
+# Baseline API reference (ABI 1.9)
 
 Generated from `api/baseline_api.txt` by `tools/gen_api.py`. Do not edit.
 
@@ -284,3 +284,20 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_audio_call` | `int audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret)` | 1.8 | Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*. |
 | `bl_audio_stat` | `float audio_stat(int what)` | 1.8 | BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0. |
 | `bl_audio_interrupts` | `void audio_interrupts(int enable)` | 1.8 | AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates. |
+| `bl_usbh_begin` | `int usbh_begin(void)` | 1.9 | Start the USB host port (USBHost::begin): power it and enumerate what is plugged in, hubs included. Baseline services it from then on. |
+| `bl_usbh_info` | `int usbh_info(int kind, int index, bl_usbh_info_t *info)` | 1.9 | Whether device index of BL_USBH_* kind is connected, and its IDs and strings. BL_OK or BL_ERR_ARG. |
+| `bl_usbh_key_take` | `int usbh_key_take(int index, bl_usbh_key_t *ev)` | 1.9 | The next keyboard event (presses, releases, raw codes), queued in the USB interrupt. 1 if one was taken, 0 if none. |
+| `bl_usbh_keyboard_leds` | `int usbh_keyboard_leds(int index, int leds)` | 1.9 | Set the keyboard's LEDs (bit 0 Num Lock, 1 Caps Lock, 2 Scroll Lock); -1 only reads them. Returns the LEDs. |
+| `bl_usbh_mouse_take` | `int usbh_mouse_take(int index, bl_usbh_mouse_t *m)` | 1.9 | 1 and the mouse's report if it sent one since the last call (mouseDataClear), else 0. |
+| `bl_usbh_joystick_take` | `int usbh_joystick_take(int index, bl_usbh_joystick_t *j)` | 1.9 | 1 and the joystick's state if it changed since the last call (joystickDataClear), else 0. |
+| `bl_usbh_midi_read` | `int usbh_midi_read(int index, uint8_t *msg)` | 1.9 | One MIDI message: msg[0] type, [1] channel, [2] data1, [3] data2, [4] cable. 1 if one was read, else 0. |
+| `bl_usbh_midi_send` | `int usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable)` | 1.9 | Send one MIDI message (MIDIDevice::send). |
+| `bl_usbh_serial_begin` | `int usbh_serial_begin(int index, uint32_t baud, uint32_t format)` | 1.9 | Open a USB-serial adapter (FTDI, CP210x, CH34x, PL2303, CDC ACM) at baud; format = USBHOST_SERIAL_* (0 = 8N1). |
+| `bl_usbh_serial_available` | `int usbh_serial_available(int index)` | 1.9 | Bytes waiting from the adapter, or -1 if it isn't connected. |
+| `bl_usbh_serial_read` | `int usbh_serial_read(int index, uint8_t *buf, size_t len)` | 1.9 | Read up to len waiting bytes. Returns how many. |
+| `bl_usbh_serial_write` | `int usbh_serial_write(int index, const uint8_t *buf, size_t len)` | 1.9 | Send len bytes. Returns how many were queued. |
+| `bl_eth_begin` | `int eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms)` | 1.9 | Start Ethernet. mac NULL = the board's own; ip 0 = DHCP (waits up to timeout_ms), else these addresses (0 = derived). Returns 1 when it has an address, else 0. |
+| `bl_eth_status` | `int eth_status(int what)` | 1.9 | BL_ETH_LINK: 1 cable connected, 0 not, -1 unknown. BL_ETH_HARDWARE: 1 if the board has the PHY, else 0. |
+| `bl_eth_ip` | `uint32_t eth_ip(int which)` | 1.9 | IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS. |
+| `bl_eth_mac` | `int eth_mac(uint8_t *mac)` | 1.9 | The MAC address in use (6 bytes). |
+| `bl_eth_maintain` | `int eth_maintain(void)` | 1.9 | Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound). |

@@ -5,7 +5,7 @@
 #include "baseline_types.h"
 
 #define BL_ABI_MAJOR 1
-#define BL_ABI_MINOR 8
+#define BL_ABI_MINOR 9
 
 typedef struct bl_api {
     uint16_t abi_major;
@@ -307,6 +307,25 @@ typedef struct bl_api {
     int (*audio_call)(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret);
     float (*audio_stat)(int what);
     void (*audio_interrupts)(int enable);
+
+    /* ---- added in 1.9 ---- */
+    int (*usbh_begin)(void);
+    int (*usbh_info)(int kind, int index, bl_usbh_info_t *info);
+    int (*usbh_key_take)(int index, bl_usbh_key_t *ev);
+    int (*usbh_keyboard_leds)(int index, int leds);
+    int (*usbh_mouse_take)(int index, bl_usbh_mouse_t *m);
+    int (*usbh_joystick_take)(int index, bl_usbh_joystick_t *j);
+    int (*usbh_midi_read)(int index, uint8_t *msg);
+    int (*usbh_midi_send)(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable);
+    int (*usbh_serial_begin)(int index, uint32_t baud, uint32_t format);
+    int (*usbh_serial_available)(int index);
+    int (*usbh_serial_read)(int index, uint8_t *buf, size_t len);
+    int (*usbh_serial_write)(int index, const uint8_t *buf, size_t len);
+    int (*eth_begin)(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms);
+    int (*eth_status)(int what);
+    uint32_t (*eth_ip)(int which);
+    int (*eth_mac)(uint8_t *mac);
+    int (*eth_maintain)(void);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -366,7 +385,7 @@ static inline int analogRead(int pin) { return BL->adc_read(pin); }
 /* Read a pin's voltage in millivolts, or BL_ERR_*. */
 static inline int analogReadMilliVolts(int pin) { return BL->adc_read_mv(pin); }
 #endif
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_HAS_LED_STRIP)
 /* Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. */
 static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL->rgb_write(pin, red, green, blue); }
 #endif
@@ -400,7 +419,7 @@ static inline int bl_wifi_rssi(void) { return BL->wifi_rssi(); }
 /* Copy the 6-byte station MAC address into mac. Returns 0. */
 static inline int bl_wifi_mac(uint8_t *mac) { return BL->wifi_mac(mac); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* HTTP(S) GET; follows redirects, verifies TLS with the built-in CA bundle. Body is NUL-terminated and truncated to size-1. Returns body length or BL_ERR_*. */
 static inline int bl_http_get(const char *url, char *body, size_t size, int *status) { return BL->http_get(url, body, size, status); }
 #endif
@@ -436,7 +455,7 @@ static inline int bl_espnow_send(const uint8_t *mac, const uint8_t *data, size_t
 /* Take the next received packet: copies sender MAC (6 bytes, may be NULL) and data. Returns length, 0 if none. */
 static inline int bl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return BL->espnow_receive(mac, data, size); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* HTTP(S) request. headers: "Name: value\r\n" lines or NULL. *response gets a malloc'd NUL-terminated body (free with bl_free); may be NULL. Returns HTTP status or BL_ERR_*. */
 static inline int bl_http_request(const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char * *response, size_t *response_len) { return BL->http_request(method, url, headers, body, body_len, response, response_len); }
 #endif
@@ -514,99 +533,99 @@ static inline int bl_wifi_config(uint32_t ip, uint32_t gateway, uint32_t subnet,
 /* Hostname used for DHCP (call before begin). */
 static inline int bl_wifi_set_hostname(const char *name) { return BL->wifi_set_hostname(name); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* DNS lookup. Returns 0 or BL_ERR_*. */
 static inline int bl_net_resolve(const char *host, uint32_t *ip) { return BL->net_resolve(host, ip); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* New client handle (secure = TLS). Reference count starts at 1. */
 static inline int bl_tcp_client_new(int secure) { return BL->tcp_client_new(secure); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Add a reference (the SDK copies clients like Arduino does). */
 static inline void bl_tcp_client_retain(int h) { BL->tcp_client_retain(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Drop a reference; the connection closes at zero. */
 static inline void bl_tcp_client_release(int h) { BL->tcp_client_release(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* TLS: skip verification, or use this CA (NULL = built-in CA bundle). Must stay valid. */
 static inline int bl_tcp_client_tls_config(int h, int insecure, const char *ca_pem) { return BL->tcp_client_tls_config(h, insecure, ca_pem); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Connect. Returns 1 or 0. */
 static inline int bl_tcp_client_connect(int h, const char *host, uint16_t port, int32_t timeout_ms) { return BL->tcp_client_connect(h, host, port, timeout_ms); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Returns bytes written. */
 static inline int bl_tcp_client_write(int h, const uint8_t *data, size_t len) { return BL->tcp_client_write(h, data, len); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Bytes ready to read. */
 static inline int bl_tcp_client_available(int h) { return BL->tcp_client_available(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Read up to size bytes; -1 if none. */
 static inline int bl_tcp_client_read(int h, uint8_t *buf, size_t size) { return BL->tcp_client_read(h, buf, size); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Next byte without consuming it, or -1. */
 static inline int bl_tcp_client_peek(int h) { return BL->tcp_client_peek(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* 1 while connected or data is still buffered. */
 static inline int bl_tcp_client_connected(int h) { return BL->tcp_client_connected(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Close the connection (the handle stays valid). */
 static inline void bl_tcp_client_stop(int h) { BL->tcp_client_stop(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Peer address. */
 static inline int bl_tcp_client_remote(int h, uint32_t *ip, uint16_t *port) { return BL->tcp_client_remote(h, ip, port); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Listen on port. */
 static inline int bl_tcp_server_new(uint16_t port, int max_clients) { return BL->tcp_server_new(port, max_clients); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* A newly connected client handle, or -1. */
 static inline int bl_tcp_server_accept(int h) { return BL->tcp_server_accept(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Stop listening and free the handle. */
 static inline void bl_tcp_server_close(int h) { BL->tcp_server_close(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Open a UDP socket (port 0 = any). */
 static inline int bl_udp_new(uint16_t port) { return BL->udp_new(port); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Close and free. */
 static inline void bl_udp_close(int h) { BL->udp_close(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Start a packet to host (name or dotted IP). */
 static inline int bl_udp_begin_packet(int h, const char *host, uint16_t port) { return BL->udp_begin_packet(h, host, port); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Add bytes to the packet. */
 static inline int bl_udp_write(int h, const uint8_t *data, size_t len) { return BL->udp_write(h, data, len); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Send it. Returns 1 or 0. */
 static inline int bl_udp_end_packet(int h) { return BL->udp_end_packet(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Size of the next received packet, or 0. */
 static inline int bl_udp_parse_packet(int h) { return BL->udp_parse_packet(h); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Read from the current packet. */
 static inline int bl_udp_read(int h, uint8_t *buf, size_t size) { return BL->udp_read(h, buf, size); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_NET)
 /* Sender of the current packet. */
 static inline int bl_udp_remote(int h, uint32_t *ip, uint16_t *port) { return BL->udp_remote(h, ip, port); }
 #endif
@@ -1026,7 +1045,7 @@ static inline int bl_i2s_write(const uint8_t *data, size_t len) { return BL->i2s
 /* Read samples. Returns bytes read. */
 static inline int bl_i2s_read(uint8_t *buf, size_t size) { return BL->i2s_read(buf, size); }
 #endif
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_HAS_LED_STRIP)
 /* Send bytes (already in the strip's color order) to a WS2812-type strip (BL_STRIP_*). */
 static inline int bl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len) { return BL->led_strip_write(pin, chipset, data, len); }
 #endif
@@ -1207,6 +1226,74 @@ static inline float bl_audio_stat(int what) { return BL->audio_stat(what); }
 #if defined(BL_HAS_AUDIO)
 /* AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates. */
 static inline void bl_audio_interrupts(int enable) { BL->audio_interrupts(enable); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Start the USB host port (USBHost::begin): power it and enumerate what is plugged in, hubs included. Baseline services it from then on. */
+static inline int bl_usbh_begin(void) { return BL->usbh_begin(); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Whether device index of BL_USBH_* kind is connected, and its IDs and strings. BL_OK or BL_ERR_ARG. */
+static inline int bl_usbh_info(int kind, int index, bl_usbh_info_t *info) { return BL->usbh_info(kind, index, info); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* The next keyboard event (presses, releases, raw codes), queued in the USB interrupt. 1 if one was taken, 0 if none. */
+static inline int bl_usbh_key_take(int index, bl_usbh_key_t *ev) { return BL->usbh_key_take(index, ev); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Set the keyboard's LEDs (bit 0 Num Lock, 1 Caps Lock, 2 Scroll Lock); -1 only reads them. Returns the LEDs. */
+static inline int bl_usbh_keyboard_leds(int index, int leds) { return BL->usbh_keyboard_leds(index, leds); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* 1 and the mouse's report if it sent one since the last call (mouseDataClear), else 0. */
+static inline int bl_usbh_mouse_take(int index, bl_usbh_mouse_t *m) { return BL->usbh_mouse_take(index, m); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* 1 and the joystick's state if it changed since the last call (joystickDataClear), else 0. */
+static inline int bl_usbh_joystick_take(int index, bl_usbh_joystick_t *j) { return BL->usbh_joystick_take(index, j); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* One MIDI message: msg[0] type, [1] channel, [2] data1, [3] data2, [4] cable. 1 if one was read, else 0. */
+static inline int bl_usbh_midi_read(int index, uint8_t *msg) { return BL->usbh_midi_read(index, msg); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Send one MIDI message (MIDIDevice::send). */
+static inline int bl_usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable) { return BL->usbh_midi_send(index, type, data1, data2, channel, cable); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Open a USB-serial adapter (FTDI, CP210x, CH34x, PL2303, CDC ACM) at baud; format = USBHOST_SERIAL_* (0 = 8N1). */
+static inline int bl_usbh_serial_begin(int index, uint32_t baud, uint32_t format) { return BL->usbh_serial_begin(index, baud, format); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Bytes waiting from the adapter, or -1 if it isn't connected. */
+static inline int bl_usbh_serial_available(int index) { return BL->usbh_serial_available(index); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Read up to len waiting bytes. Returns how many. */
+static inline int bl_usbh_serial_read(int index, uint8_t *buf, size_t len) { return BL->usbh_serial_read(index, buf, len); }
+#endif
+#if defined(BL_HAS_USB_HOST)
+/* Send len bytes. Returns how many were queued. */
+static inline int bl_usbh_serial_write(int index, const uint8_t *buf, size_t len) { return BL->usbh_serial_write(index, buf, len); }
+#endif
+#if defined(BL_HAS_ETHERNET)
+/* Start Ethernet. mac NULL = the board's own; ip 0 = DHCP (waits up to timeout_ms), else these addresses (0 = derived). Returns 1 when it has an address, else 0. */
+static inline int bl_eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms) { return BL->eth_begin(mac, ip, dns, gateway, subnet, timeout_ms); }
+#endif
+#if defined(BL_HAS_ETHERNET)
+/* BL_ETH_LINK: 1 cable connected, 0 not, -1 unknown. BL_ETH_HARDWARE: 1 if the board has the PHY, else 0. */
+static inline int bl_eth_status(int what) { return BL->eth_status(what); }
+#endif
+#if defined(BL_HAS_ETHERNET)
+/* IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS. */
+static inline uint32_t bl_eth_ip(int which) { return BL->eth_ip(which); }
+#endif
+#if defined(BL_HAS_ETHERNET)
+/* The MAC address in use (6 bytes). */
+static inline int bl_eth_mac(uint8_t *mac) { return BL->eth_mac(mac); }
+#endif
+#if defined(BL_HAS_ETHERNET)
+/* Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound). */
+static inline int bl_eth_maintain(void) { return BL->eth_maintain(); }
 #endif
 #endif /* BASELINE_FIRMWARE */
 

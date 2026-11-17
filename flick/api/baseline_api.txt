@@ -406,3 +406,27 @@ abi_major = 1
 8 | int         | audio_call        | int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret | bl_audio_call | Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*.
 8 | float       | audio_stat        | int what                                   | bl_audio_stat        | BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0.
 8 | void        | audio_interrupts  | int enable                                 | bl_audio_interrupts  | AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates.
+
+# ======================= ABI 1.9 ==========================================
+# ---- USB host port (BL_HAS_USB_HOST: Teensy 4.x, USBHost_t36 in Baseline). The drivers
+# live in Baseline (two of each kind); sketches use USBHost_t36's class names
+# (sdk/include/baseline_usbhost.h). Elsewhere BL_ERR_UNSUPPORTED.
+9 | int         | usbh_begin        | void                                       | bl_usbh_begin        | Start the USB host port (USBHost::begin): power it and enumerate what is plugged in, hubs included. Baseline services it from then on.
+9 | int         | usbh_info         | int kind, int index, bl_usbh_info_t *info  | bl_usbh_info         | Whether device index of BL_USBH_* kind is connected, and its IDs and strings. BL_OK or BL_ERR_ARG.
+9 | int         | usbh_key_take     | int index, bl_usbh_key_t *ev               | bl_usbh_key_take     | The next keyboard event (presses, releases, raw codes), queued in the USB interrupt. 1 if one was taken, 0 if none.
+9 | int         | usbh_keyboard_leds | int index, int leds                       | bl_usbh_keyboard_leds | Set the keyboard's LEDs (bit 0 Num Lock, 1 Caps Lock, 2 Scroll Lock); -1 only reads them. Returns the LEDs.
+9 | int         | usbh_mouse_take   | int index, bl_usbh_mouse_t *m              | bl_usbh_mouse_take   | 1 and the mouse's report if it sent one since the last call (mouseDataClear), else 0.
+9 | int         | usbh_joystick_take | int index, bl_usbh_joystick_t *j          | bl_usbh_joystick_take | 1 and the joystick's state if it changed since the last call (joystickDataClear), else 0.
+9 | int         | usbh_midi_read    | int index, uint8_t *msg                    | bl_usbh_midi_read    | One MIDI message: msg[0] type, [1] channel, [2] data1, [3] data2, [4] cable. 1 if one was read, else 0.
+9 | int         | usbh_midi_send    | int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable | bl_usbh_midi_send | Send one MIDI message (MIDIDevice::send).
+9 | int         | usbh_serial_begin | int index, uint32_t baud, uint32_t format  | bl_usbh_serial_begin | Open a USB-serial adapter (FTDI, CP210x, CH34x, PL2303, CDC ACM) at baud; format = USBHOST_SERIAL_* (0 = 8N1).
+9 | int         | usbh_serial_available | int index                              | bl_usbh_serial_available | Bytes waiting from the adapter, or -1 if it isn't connected.
+9 | int         | usbh_serial_read  | int index, uint8_t *buf, size_t len        | bl_usbh_serial_read  | Read up to len waiting bytes. Returns how many.
+9 | int         | usbh_serial_write | int index, const uint8_t *buf, size_t len  | bl_usbh_serial_write | Send len bytes. Returns how many were queued.
+# ---- Ethernet (BL_HAS_ETHERNET: Teensy 4.1, NativeEthernet in Baseline). Sockets and HTTP
+# (tcp_*, udp_*, net_resolve, http_*) then run over it, as over WiFi elsewhere.
+9 | int         | eth_begin         | const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms | bl_eth_begin | Start Ethernet. mac NULL = the board's own; ip 0 = DHCP (waits up to timeout_ms), else these addresses (0 = derived). Returns 1 when it has an address, else 0.
+9 | int         | eth_status        | int what                                   | bl_eth_status        | BL_ETH_LINK: 1 cable connected, 0 not, -1 unknown. BL_ETH_HARDWARE: 1 if the board has the PHY, else 0.
+9 | uint32_t    | eth_ip            | int which                                  | bl_eth_ip            | IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS.
+9 | int         | eth_mac           | uint8_t *mac                               | bl_eth_mac           | The MAC address in use (6 bytes).
+9 | int         | eth_maintain      | void                                       | bl_eth_maintain      | Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound).

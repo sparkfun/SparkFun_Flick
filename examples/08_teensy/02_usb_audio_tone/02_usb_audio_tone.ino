@@ -3,6 +3,9 @@
 // plugged in). Teensy 4.x only; no extra hardware needed.
 // On Windows: Sound settings > Input > "Teensy Audio", then "Listen to this device".
 // The declarations are the way PJRC's Audio System Design Tool writes them.
+#if !defined(BL_HAS_USB_AUDIO)
+#error "This board has no USB audio in its Baseline (Teensy 4.x with the Serial + MIDI + Audio Baseline has it)."
+#endif
 #include <Audio.h>
 #include <Wire.h>
 #include <SPI.h>

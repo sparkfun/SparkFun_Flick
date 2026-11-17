@@ -31,6 +31,7 @@ int bl_reset_reason_code(void);
 void *bl_rtc_memory_block(uint32_t *size);
 int bl_wake_cause_code(void);
 void bl_sleep_restart(uint64_t us) __attribute__((noreturn));
+void bl_sleep_woke(int cause) __attribute__((noreturn));
 
 void bl_wdog_long(bool on);
 
@@ -43,6 +44,9 @@ struct BlWdogLong {
 };
 extern "C" {
 #endif
+
+/* bl_teensy_usbhost.cpp */
+void bl_usbh_poll(void);                    /* USB host enumeration: from bl_poll() */
 
 /* bl_teensy_hw.cpp */
 void bl_timers_poll(void);                  /* fires due timers (Ticker): from bl_poll() */

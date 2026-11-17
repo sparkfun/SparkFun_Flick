@@ -56,6 +56,8 @@
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_TEENSY    1       /* Teensyduino names (IntervalTimer, extmem_malloc, analogWriteFrequency, ...) */
 #define BL_HAS_AUDIO          1       /* the Teensy Audio library (Audio.h) */
+#define BL_HAS_LED_STRIP      1       /* WS2812-type LEDs on any pin: rgbLedWrite, FastLED.h (bit-banged) */
+#define BL_HAS_USB_HOST       1       /* the USB host port (USBHost_t36.h): keyboards, mice, joysticks, MIDI, USB-serial, drives */
 
 #define BL_TARGET_CHIP          "imxrt1062"   /* chips/<chip> */
 

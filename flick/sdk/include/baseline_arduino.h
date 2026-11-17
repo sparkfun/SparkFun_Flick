@@ -291,8 +291,8 @@ private:
     uint8_t bytes_[4] = {};
 };
 
-/* WiFi, WiFiClient/Server/UDP, HTTPClient, WebServer */
-#if defined(BL_HAS_WIFI)
+/* WiFi, WiFiClient/Server/UDP, HTTPClient, WebServer (sockets and HTTP on any network) */
+#if defined(BL_HAS_WIFI) || defined(BL_HAS_NET)
 #include "baseline_net.h"
 #endif
 
@@ -390,7 +390,7 @@ extern EspClass ESP;
 /* sleep, time/NTP, Ticker / hw_timer / esp_timer, tone */
 #include "baseline_system.h"
 /* FastLED-compatible LED strips */
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_HAS_LED_STRIP)
 #include "baseline_fastled.h"
 #endif
 /* USB keyboard / mouse / gamepad / media keys / MIDI (ESP32-S3) */

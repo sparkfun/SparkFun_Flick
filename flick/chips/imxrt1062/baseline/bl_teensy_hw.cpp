@@ -460,3 +460,60 @@ extern "C" uint32_t bl_impl_random(void)
     }
     return Entropy.random();
 }
+
+/* ---------------- WS2812-type LEDs (ABI 1.1 rgb_write, 1.6 led_strip_write) ----------------
+ * Bit-banged on any pin, timed with the cycle counter, interrupts off for the
+ * length of a frame (about 30 us per LED; WS2812 latches if a gap reaches
+ * ~50 us, so the frame can't be split). Bytes go out as given: the SDK puts them
+ * in the strip's color order. */
+static void strip_send(int pin, const uint8_t *data, size_t len, uint32_t t0h_ns, uint32_t t1h_ns, uint32_t bit_ns)
+{
+    volatile uint32_t *set = portSetRegister(pin);
+    volatile uint32_t *clr = portClearRegister(pin);
+    const uint32_t mask = digitalPinToBitMask(pin);
+    const uint32_t mhz = F_CPU_ACTUAL / 1000000;
+    const uint32_t c0 = t0h_ns * mhz / 1000, c1 = t1h_ns * mhz / 1000, cbit = bit_ns * mhz / 1000;
+    ARM_DEMCR |= ARM_DEMCR_TRCENA;
+    ARM_DWT_CTRL |= ARM_DWT_CTRL_CYCCNTENA;
+    pinMode(pin, OUTPUT);
+    *clr = mask;
+    delayMicroseconds(60);      // reset/latch before the frame
+    __disable_irq();
+    uint32_t start = ARM_DWT_CYCCNT - cbit;
+    for (size_t i = 0; i < len; i++) {
+        for (uint8_t bit = 0x80; bit; bit >>= 1) {
+            while (ARM_DWT_CYCCNT - start < cbit) {
+            }
+            start = ARM_DWT_CYCCNT;
+            *set = mask;
+            const uint32_t high = (data[i] & bit) ? c1 : c0;
+            while (ARM_DWT_CYCCNT - start < high) {
+            }
+            *clr = mask;
+        }
+    }
+    while (ARM_DWT_CYCCNT - start < cbit) {
+    }
+    __enable_irq();
+    delayMicroseconds(60);      // latch
+}
+
+extern "C" int bl_impl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len)
+{
+    if (pin < 0 || pin >= CORE_NUM_DIGITAL || (!data && len)) {
+        return BL_ERR_ARG;
+    }
+    switch (chipset) {
+    case BL_STRIP_WS2812: strip_send(pin, data, len, 400, 800, 1250); break;
+    case BL_STRIP_SK6812: strip_send(pin, data, len, 300, 600, 1250); break;
+    case BL_STRIP_WS2811: strip_send(pin, data, len, 500, 1200, 2500); break;
+    default:              return BL_ERR_ARG;
+    }
+    return BL_OK;
+}
+
+extern "C" int bl_impl_rgb_write(int pin, uint8_t red, uint8_t green, uint8_t blue)
+{
+    const uint8_t grb[3] = {green, red, blue};      // a WS2812's own order
+    return bl_impl_led_strip_write(pin, BL_STRIP_WS2812, grb, 3);
+}

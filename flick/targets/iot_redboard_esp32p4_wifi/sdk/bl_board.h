@@ -48,6 +48,8 @@
 
 /* What the board adds to the chip: WiFi and BLE through the C5. */
 #define BL_HAS_WIFI             1
+#define BL_HAS_NET              1
+#define BL_HAS_TLS              1
 #define BL_HAS_BLE              1
 
 /* ---- Baseline defaults ---- */

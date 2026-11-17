@@ -43,7 +43,9 @@ SECTIONS
 	.text.code : {
 		KEEP(*(.startup))
 		*(.flashmem*)
-		*(EXCLUDE_FILE(*core.a:*) .text*)
+		/* Not core.a, and not Snooze: it slows the clocks while the chip sleeps,
+		 * and code fetched from flash then never wakes (it must run from ITCM). */
+		*(EXCLUDE_FILE(*core.a:* *Snooze*) .text*)
 		. = ALIGN(4);
 		KEEP(*(.init))
 		__preinit_array_start = .;

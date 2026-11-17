@@ -209,38 +209,200 @@ extern "C" int bl_impl_last_crash(char *buf, size_t size)
     return bl_last_crash_text(buf, size);
 }
 
-/* ---- sleep: a timed restart for now (bl_sleep_restart) ---- */
+/* ---- sleep ----
+ * Deep sleep: Baseline waits for a wake source, then restarts as an ESP32 wakes
+ * (RTC memory survives); light sleep returns to the sketch. Wake sources: a
+ * timer, one pin at a level (EXT0, or GPIO for light sleep) or several (EXT1).
+ * BL_USE_SNOOZE 1 sleeps the chip in Snooze's low-power modes instead of
+ * waiting; it is off because in Baseline the chip resets when Snooze's timer
+ * should wake it (TESTING.md, deep sleep on Teensy). Waiting keeps USB alive,
+ * so uploads work during a sleep. */
+#ifndef BL_USE_SNOOZE
+#define BL_USE_SNOOZE 0
+#endif
+
+#define WAKE_TIMER  4           /* esp_sleep_wakeup_cause_t */
+#define WAKE_EXT0   2
+#define WAKE_EXT1   3
+#define WAKE_GPIO   7
+#define TIMER_WAKE_CODE 36      /* Snooze's code for its timer (the waiting path uses it too) */
+
 static uint64_t s_wake_us;
+static int s_wake_pin = -1;     /* EXT0 / GPIO */
+static uint64_t s_wake_mask;    /* EXT1 */
+static bool s_wake_high;        /* the level that wakes */
+static int s_light_cause;
+static uint64_t s_ext1_status;
+
+#if BL_USE_SNOOZE
+#include <Snooze.h>
+#define SLEEP_STEP_S 120        /* the watchdog keeps counting: stretch it, wake to feed it */
+static SnoozeTimer s_snz_timer;
+static SnoozeDigital s_snz_digital;
+static SnoozeBlock s_snz(s_snz_timer, s_snz_digital);
+
+/* Snooze.sleep until a pin wakes the chip or the whole time has passed.
+ * Returns what Snooze returned last. */
+static int sleep_steps(bool deep)
+{
+    (void)deep;
+    uint64_t left_s = s_wake_us >= 1000000 ? (s_wake_us + 500000) / 1000000 : 0;
+    BlWdogLong long_watchdog;
+    int who;
+    do {
+        uint32_t step = left_s > SLEEP_STEP_S ? SLEEP_STEP_S : (uint32_t)left_s;
+        if (step) {
+            s_snz_timer.setTimer(step);
+        } else {
+            s_snz_timer.isUsed = false;     /* pins only */
+        }
+        who = Snooze.sleep(s_snz);
+        bl_poll();
+        if (who != TIMER_WAKE_CODE) {
+            break;
+        }
+        left_s -= step;
+    } while (left_s > 0);
+    return who;
+}
+#else
+/* Wait, serving USB and the loader, until a pin is at its level or the time is up. */
+static int sleep_steps(bool deep)
+{
+    (void)deep;
+    uint64_t waited_us = 0;
+    uint32_t last = micros();
+    for (;;) {
+        bl_poll();
+        if (s_wake_pin >= 0 && digitalRead(s_wake_pin) == (s_wake_high ? HIGH : LOW)) {
+            return s_wake_pin;
+        }
+        for (int p = 0; s_wake_mask && p < CORE_NUM_DIGITAL && p < 64; p++) {
+            if ((s_wake_mask & (1ULL << p)) && digitalRead(p) == (s_wake_high ? HIGH : LOW)) {
+                return p;
+            }
+        }
+        uint32_t now = micros();
+        waited_us += (uint32_t)(now - last);
+        last = now;
+        if (s_wake_us && waited_us >= s_wake_us) {
+            return TIMER_WAKE_CODE;
+        }
+        yield();
+    }
+}
+#endif
+
+static void wake_pin(int pin, bool high)
+{
+    s_wake_high = high;
+#if BL_USE_SNOOZE
+    s_snz_digital.pinMode(pin, high ? INPUT_PULLDOWN : INPUT_PULLUP, high ? RISING : FALLING);
+#else
+    pinMode(pin, high ? INPUT_PULLDOWN : INPUT_PULLUP);
+#endif
+}
 
 extern "C" int bl_impl_sleep_wake(int source, uint64_t value, int pin, int level)
 {
-    if (source != BL_WAKE_TIMER) {
+    switch (source) {
+    case BL_WAKE_TIMER:
+        s_wake_us = value;     /* the timer is set per step (sleep_steps) */
+        return BL_OK;
+    case BL_WAKE_EXT0:
+    case BL_WAKE_GPIO:
+        if (pin < 0 || pin > 32) {
+            return BL_ERR_ARG;          /* pins 0-32 (Snooze's range on Teensy 4.x) */
+        }
+        s_wake_pin = pin;
+        wake_pin(pin, level != 0);
+        return BL_OK;
+    case BL_WAKE_EXT1:      /* level: ESP_EXT1_WAKEUP_ANY_HIGH (1) or ALL_LOW (0, any low here) */
+        s_wake_mask = value;
+        for (int p = 0; p <= 32; p++) {     /* Snooze's range on Teensy 4.x */
+            if (value & (1ULL << p)) {
+                wake_pin(p, level != 0);
+            }
+        }
+        return BL_OK;
+    default:
         return BL_ERR_UNSUPPORTED;
     }
-    s_wake_us = value;
-    return BL_OK;
 }
 
 extern "C" int bl_impl_sleep_disable_wake(int source)
 {
     if (source == BL_WAKE_TIMER || source == BL_WAKE_ALL) {
         s_wake_us = 0;
+#if BL_USE_SNOOZE
+        s_snz_timer.isUsed = false;     /* Snooze keeps a set timer armed otherwise */
+#endif
+    }
+    if (source == BL_WAKE_EXT0 || source == BL_WAKE_GPIO || source == BL_WAKE_ALL) {
+        s_wake_pin = -1;
+    }
+    if (source == BL_WAKE_EXT1 || source == BL_WAKE_ALL) {
+        s_wake_mask = 0;
     }
     return BL_OK;
 }
 
+/* What Snooze returned: a pin number for a pin wake, else the timer. */
+static int cause_of(int who)
+{
+    if (who >= 0 && who < 64 && (s_wake_mask & (1ULL << who))) {
+        s_ext1_status = 1ULL << who;
+        return WAKE_EXT1;
+    }
+    if (who == s_wake_pin && who >= 0) {
+        return WAKE_EXT0;
+    }
+    return WAKE_TIMER;
+}
+
 extern "C" void bl_impl_sleep_deep(void)
 {
-    if (!s_wake_us) {
-        bl_impl_printf("deep sleep without a wake source is not supported on this chip\n");
+    bool pins = s_wake_pin >= 0 || s_wake_mask;
+    if (!s_wake_us && !pins) {
+        bl_impl_printf("deep sleep needs a wake source (a timer or a pin)\n");
         return;
     }
-    bl_sleep_restart(s_wake_us);
+    if (BL_USE_SNOOZE && !pins && s_wake_us < 1000000) {
+        bl_sleep_restart(s_wake_us);    /* below Snooze's 1 s timer step */
+    }
+    Serial.flush();
+    delay(10);
+    int who = sleep_steps(true);
+    bl_sleep_woke(cause_of(who));
+}
+
+extern "C" int bl_impl_sleep_light(void)
+{
+    if (!s_wake_us && s_wake_pin < 0 && !s_wake_mask) {
+        return BL_ERR_STATE;
+    }
+    if (BL_USE_SNOOZE && s_wake_pin < 0 && !s_wake_mask && s_wake_us < 1000000) {
+        delay((uint32_t)(s_wake_us / 1000));
+        s_light_cause = WAKE_TIMER;
+        return BL_OK;
+    }
+    Serial.flush();
+    int who = sleep_steps(false);
+    s_light_cause = cause_of(who);
+    if (s_light_cause == WAKE_EXT0) {
+        s_light_cause = WAKE_GPIO;
+    }
+    return BL_OK;
 }
 
 extern "C" int bl_impl_sleep_wake_cause(void)
 {
-    return bl_wake_cause_code();
+    return s_light_cause ? s_light_cause : bl_wake_cause_code();
+}
+
+extern "C" uint64_t bl_impl_sleep_ext1_status(void)
+{
+    return s_ext1_status;
 }
 
 extern "C" void *bl_impl_rtc_memory(uint32_t *size)

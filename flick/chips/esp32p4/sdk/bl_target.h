@@ -35,6 +35,7 @@
  * that uses something this chip lacks fails to compile with a clear message
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
+#define BL_HAS_LED_STRIP      1       /* WS2812-type LEDs: rgbLedWrite, FastLED.h (RMT or bit-banged) */
 
 #define BL_TARGET_CHIP          "esp32p4"     /* chips/<chip> */
 

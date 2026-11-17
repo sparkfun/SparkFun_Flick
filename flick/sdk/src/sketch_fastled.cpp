@@ -1,7 +1,7 @@
 /* sketch_fastled.cpp - FastLED-compatible API (see baseline_fastled.h). */
 #include "baseline.h"
 
-#if defined(BL_PLATFORM_ESP32)     /* the whole file: boards with this feature only */
+#if defined(BL_HAS_LED_STRIP)      /* the whole file: boards with this feature only */
 
 CFastLED FastLED;
 
@@ -249,4 +249,4 @@ void CFastLED::delay(unsigned long ms)
     ::delay(ms);
 }
 
-#endif /* BL_PLATFORM_ESP32 */
+#endif /* BL_HAS_LED_STRIP */

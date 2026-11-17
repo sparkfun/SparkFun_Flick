@@ -1,13 +1,15 @@
 // 06_led_strip.ino - FastLED rainbow and sparkles on a WS2812 / NeoPixel strip.
-// Ordinary FastLED code. As written it drives the board's own RGB LED; to use
-// a strip, set DATA_PIN to the strip's data pin and NUM_LEDS to its length.
+// Ordinary FastLED code. On a board with its own RGB LED it drives that; on
+// others, a strip's data line on pin 2. Set DATA_PIN and NUM_LEDS for your strip.
 #include <FastLED.h>
 
-#ifndef RGB_BUILTIN
-#error "This board has no built-in RGB LED. Set DATA_PIN below to your strip's data pin."
-#endif
+#ifdef RGB_BUILTIN
 #define DATA_PIN RGB_BUILTIN
 #define NUM_LEDS 1
+#else
+#define DATA_PIN 2
+#define NUM_LEDS 8
+#endif
 
 CRGB leds[NUM_LEDS];
 uint8_t hue;

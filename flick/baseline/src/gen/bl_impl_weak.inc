@@ -279,3 +279,20 @@ extern "C" __attribute__((weak)) int bl_impl_audio_reconnect(int connection) { r
 extern "C" __attribute__((weak)) int bl_impl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) float bl_impl_audio_stat(int what) { return 0; }
 extern "C" __attribute__((weak)) void bl_impl_audio_interrupts(int enable) {}
+extern "C" __attribute__((weak)) int bl_impl_usbh_begin(void) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_info(int kind, int index, bl_usbh_info_t *info) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_key_take(int index, bl_usbh_key_t *ev) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_keyboard_leds(int index, int leds) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_mouse_take(int index, bl_usbh_mouse_t *m) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_joystick_take(int index, bl_usbh_joystick_t *j) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_midi_read(int index, uint8_t *msg) { return -1; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_serial_begin(int index, uint32_t baud, uint32_t format) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_serial_available(int index) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_serial_read(int index, uint8_t *buf, size_t len) { return -1; }
+extern "C" __attribute__((weak)) int bl_impl_usbh_serial_write(int index, const uint8_t *buf, size_t len) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_eth_status(int what) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) uint32_t bl_impl_eth_ip(int which) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_eth_mac(uint8_t *mac) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_eth_maintain(void) { return BL_ERR_UNSUPPORTED; }

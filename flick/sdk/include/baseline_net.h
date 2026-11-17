@@ -9,6 +9,7 @@
 
 #ifdef __cplusplus
 
+#if defined(BL_HAS_WIFI)
 /* ---------------- WiFi ---------------- */
 
 typedef int wl_status_t;
@@ -158,6 +159,11 @@ private:
 
 extern WiFiClass WiFi;
 
+#endif /* BL_HAS_WIFI */
+
+/* Sockets and the HTTP client: any network (WiFi, or Ethernet on a Teensy 4.1).
+ * The class names are Arduino-ESP32's; Ethernet.h adds EthernetClient etc. */
+#if defined(BL_HAS_NET)
 /* ---------------- TCP client ---------------- */
 
 /* Copies share one connection (reference counted), as in Arduino-ESP32. */
@@ -210,6 +216,7 @@ protected:
 };
 typedef WiFiClient NetworkClient;
 
+#if defined(BL_HAS_TLS)        /* HTTPS and TLS sockets: Baseline's mbedTLS (ESP32 family) */
 /* TLS client. With neither setInsecure() nor setCACert(), certificates are
  * checked against Baseline's built-in CA bundle. */
 class WiFiClientSecure : public WiFiClient {
@@ -228,6 +235,8 @@ private:
     const char *ca_ = 0;
 };
 typedef WiFiClientSecure NetworkClientSecure;
+
+#endif /* BL_HAS_TLS */
 
 /* ---------------- TCP server ---------------- */
 
@@ -386,6 +395,11 @@ private:
     String body_;
 };
 
+#endif /* BL_HAS_NET */
+
+/* Web server, captive-portal DNS, mDNS and over-the-air updates: WiFi boards
+ * only for now (not over Ethernet). */
+#if defined(BL_HAS_WIFI)
 /* ---------------- WebServer ---------------- */
 
 typedef int HTTPMethod;
@@ -586,5 +600,6 @@ public:
 
 static BaselineUpdateClass BaselineUpdate __attribute__((unused));   // no state: unused copies cost nothing
 
+#endif /* BL_HAS_WIFI: web server, captive DNS, mDNS, OTA */
 #endif /* __cplusplus */
 #endif /* BASELINE_NET_H */
