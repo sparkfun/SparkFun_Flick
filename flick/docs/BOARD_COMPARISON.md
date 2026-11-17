@@ -1,8 +1,30 @@
 # Board comparison
 
-How the boards Flick supports compare: how long things take, how much flash each one has left, and what each one can't do. Use it to pick a board, or to see why one behaves differently from another.
+How the boards Flick supports compare: how much faster Flick gets a change onto each of them, how long things take, how much flash each one has left, and what each one can't do.
 
-All numbers come from Baseline images built on 2026-10-22 and 23 (versions 0.1.x to 0.2.0, ABI 1.7). Sizes shift a little with each Baseline version. **Measured** numbers were timed on real boards. **Estimated** numbers are worked out from a measured rate and are labeled as such.
+## Edit to running: Arduino IDE versus Flick
+
+The time from saving a change to the sketch running on the board: compile, then upload. The same sketch, [`oled_dashboard`](../benchmarks/oled_dashboard/oled_dashboard.ino) (a live dashboard on SparkFun's 1.3" Qwiic OLED, with SparkFun's Qwiic OLED library), built unchanged both ways, on one board of each group.
+
+<!-- benchmark table: tools/board_benchmark.py -->
+| Boards | Arduino IDE: compile + upload | Flick: compile + upload | Edit to running |
+|---|---|---|---|
+| **ESP32 (classic), USB-serial chip**: IoT RedBoard - ESP32, Thing Plus C, DataLogger IoT, RTK Postcard | 7.1 s + 7.1 s = **14.1 s** | 0.6 s + 0.4 s = **1.0 s** | **14x faster** |
+| **ESP32 with native USB**: Thing Plus S3, C5 and C6, Qwiic Pocket C6, Pro Micro C3, IoT RedBoard - ESP32-P4 | 5.1 s + 6.4 s = **11.5 s** | 0.6 s + 0.3 s = **0.9 s** | **13x faster** |
+| **Teensy 4.x**: Teensy 4.0, Teensy 4.1, MicroMod Teensy | 5.3 s + 6.4 s = **11.7 s** | 0.6 s + 0.4 s = **1.0 s** | **12x faster** |
+
+- ESP32 (classic), USB-serial chip: measured on the SparkFun DataLogger IoT (2026-11-17); the upload is 307,088 bytes with Arduino (.bin image), 13,264 with Flick (.flick).
+- ESP32 with native USB: measured on the SparkFun IoT RedBoard - ESP32-P4 (PoE) (2026-11-17); the upload is 357,488 bytes with Arduino (.bin image), 14,464 with Flick (.flick).
+- Teensy 4.x: measured on the SparkFun MicroMod Teensy (2026-11-17); the upload is 184,397 bytes with Arduino (.hex image), 11,480 with Flick (.flick).
+<!-- end of benchmark table -->
+
+How it's measured (`python flick/tools/board_benchmark.py`, results in [board_benchmark.json](board_benchmark.json)):
+
+- **Arduino IDE** is arduino-cli with the board's usual Arduino board setting and the same Arduino-ESP32 core Baseline is built with (Teensyduino for the Teensys). Its compile is the everyday rebuild after an edit, with the core already compiled and cached; the very first build of a sketch takes much longer (48-140 s on the Thing Plus S3, [BUILD_RESULTS.md](BUILD_RESULTS.md)). Its upload writes the whole application image with esptool or Teensy Loader.
+- **Flick**: `flick build` after the edit for the compile, and `flick upload` after the edit for edit to running (it asks the board which one it is, builds, uploads, and the board restarts into the sketch); the upload is the difference. The sketch is all that's sent: Baseline stays on the board.
+- Medians of 3 runs (2 for Arduino uploads). Measured on one Windows 11 PC.
+
+The rest of this page is about the boards themselves. Numbers in it come from Baseline images built on 2026-10-22 and 23 (versions 0.1.x to 0.2.0, ABI 1.7) unless a row says otherwise; sizes shift a little with each Baseline version. **Measured** numbers were timed on real boards. **Estimated** numbers are worked out from a measured rate and are labeled as such.
 
 ## At a glance
 
@@ -18,6 +40,10 @@ All numbers come from Baseline images built on 2026-10-22 and 23 (versions 0.1.x
 | Thing Plus C (ESP32 WROOM) | ESP32, 2 cores | 16 MB | none | CH340 | dual | 512 KB | 32 KB | 8.9 MB |
 | RTK Postcard | ESP32 (PICO), 2 cores | 8 MB | 2 MB | CH342 | dual | 512 KB | 32 KB | 1.4 MB |
 | IoT RedBoard - ESP32-P4 (PoE) | ESP32-P4, 2 cores | 16 MB | 32 MB | native | dual | 512 KB | 32 KB | 8.9 MB |
+| IoT RedBoard - ESP32-P4 (WiFi BLE) | ESP32-P4, 2 cores, + ESP32-C5 for WiFi 6 and BLE | 16 MB | 32 MB | native | dual | 512 KB | 32 KB | 8.9 MB |
+| Teensy 4.0 | i.MX RT1062, 600 MHz | 2 MB | none | native (Teensy) | Teensy Loader only | 384 KB | **128 KB** | 576 KB |
+| Teensy 4.1 | i.MX RT1062, 600 MHz | 8 MB | optional chips | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 3.75 MB |
+| MicroMod Teensy | i.MX RT1062, 600 MHz | 16 MB | none | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 11.75 MB |
 
 - **Largest sketch** is the size of one sketch slot. A typical sketch is 1–7 KB, so this limit only matters for sketches with big libraries or data.
 - **Sketch RAM** is for the sketch's global and static variables. Larger buffers come from the heap with `malloc` or `new`, and on boards with PSRAM, `ps_malloc` puts them there.
@@ -167,12 +193,20 @@ RISC-V sketches are 5–25 % larger, partly because they're built without linker
 - **Its only LED is the RGB one**, as on the Thing Plus C6. No touch pins, Bluetooth Classic or DAC.
 - **Upsides:** dual-band WiFi 6 (2.4 and 5 GHz), 8 MB of PSRAM, and dual Baseline slots.
 
-### ESP32-P4: IoT RedBoard - ESP32-P4 (PoE)
+### ESP32-P4: IoT RedBoard - ESP32-P4, PoE and WiFi BLE versions
 
-- **No networking yet.** The P4 has no radio, so WiFi, BLE and ESP-NOW calls return errors. Its Ethernet port (DP83825 PHY) isn't supported by Baseline yet, so for now the board can't reach a network at all.
-- **Unreleased board:** it has no product page and isn't on the download page's product links. Its BOOT-button pin for safe mode (GPIO 35) hasn't been confirmed yet.
+- **The PoE version has no networking yet.** The P4 has no radio, so WiFi, BLE and ESP-NOW calls return errors, and Baseline doesn't support its Ethernet port (DP83825 PHY) yet.
+- **The WiFi BLE version** gets WiFi 6 and BLE from an ESP32-C5 beside the P4, over ESP-Hosted. Everything WiFi and BLE works, but there's **no ESP-NOW** (ESP-Hosted doesn't carry it: `<esp_now.h>` stops a sketch at compile time), and GPIO 14-20 belong to the link with the C5.
+- **Unreleased boards:** no product pages yet. The BOOT-button pin for safe mode (GPIO 35) hasn't been confirmed.
 - **No touch support yet:** the chip has touch hardware, but Flick's touch calls don't cover it, so `05_touch_button` doesn't build for it. No DAC.
 - **Upsides:** the most memory by far (32 MB of PSRAM), two fast RISC-V cores with a hardware FPU, 16 MB of flash with dual Baseline slots, and the smallest Baseline (41 % of its slot).
+
+### Teensy 4.x: Teensy 4.0, Teensy 4.1, MicroMod Teensy
+
+- **No WiFi or Bluetooth**, and no over-the-air updates: Baseline goes on with Teensy Loader (the web page offers the `.hex`; it can't flash a Teensy itself yet).
+- **No ESP32 names:** `esp_*`, `ledc*`, `ESP.` and the like don't exist; sketches written for both use `#if defined(BL_PLATFORM_ESP32)`.
+- **Not every Teensy library yet:** the Audio library is built in; USB host (USBHost_t36) and Ethernet (QNEthernet) aren't.
+- **Upsides:** the fastest CPU here (Cortex-M7 at 600 MHz with a double-precision FPU), 128 KB of sketch RAM, sketch code may run real interrupt handlers (`attachInterrupt`, `IntervalTimer`), and the 16 MB MicroMod has the most room for files (11.75 MB).
 
 ## Not measured yet
 

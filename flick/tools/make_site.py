@@ -36,6 +36,21 @@ GROUPS = [("esp32", "ESP32 (classic)"), ("esp32s3", "ESP32-S3"), ("esp32c3", "ES
           ("imxrt1062", "Teensy 4.x (PJRC)")]
 
 
+APP_OFFSET = 0x10000            # every ESP partition table puts Baseline here
+APP_DESC_MAGIC = (0xABCD5432).to_bytes(4, "little")
+
+
+def build_id(image):
+    """The Baseline build in a merged .bin: the first 16 hex digits of the ELF
+    SHA-256 in its app description (esp_app_desc_t.app_elf_sha256, 144 bytes
+    in), as Baseline reports it in INFO build=. None if it isn't there."""
+    data = Path(image).read_bytes()
+    at = data.find(APP_DESC_MAGIC, APP_OFFSET, APP_OFFSET + 0x1000)
+    if at < 0:
+        return None
+    return data[at + 144:at + 152].hex()
+
+
 def board_name(target_dir):
     m = re.search(r'#define\s+BL_BOARD_NAME\s+"([^"]+)"', (target_dir / "sdk" / "bl_board.h").read_text())
     return m.group(1) if m else target_dir.name
@@ -122,6 +137,9 @@ def main():
               file=sys.stderr)
     shutil.copy2(ROOT / "tools" / "site" / "runner.js", out / "runner.js")
     boards = {name: board for board, name, *_ in rows}
+    # What the Flash button compares with INFO build= (a board already running
+    # this Baseline is not flashed again).
+    builds = {name: build_id(image) for _, name, _, _, image, _ in rows if image.suffix == ".bin"}
 
     kit = Path(args.kit) if args.kit else max(dist.glob("flick-kit-*.zip"), default=None,
                                               key=lambda p: p.stat().st_mtime)
@@ -217,7 +235,8 @@ def main():
                               "  <div class=\"card board-card\" id=\"board-card\">", *panels,
                               f"      <p class=\"note-small\" id=\"board-none\">{none}</p>", "  </div>"])
 
-    flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards, "generic": generic, "sparkfun": sparkfun})
+    flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards, "builds": builds, "generic": generic,
+                            "sparkfun": sparkfun})
     kit_button = (f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>'
                   if kit_link else "")
     page = f"""<!doctype html>

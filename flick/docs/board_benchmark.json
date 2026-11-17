@@ -1,0 +1,56 @@
+{
+ "native": {
+  "board": "SparkFun IoT RedBoard - ESP32-P4 (PoE)",
+  "target": "iot_redboard_esp32p4_poe",
+  "date": "2026-11-17",
+  "flick": {
+   "compile": 0.591535900000963,
+   "upload": 0.3240449999975681,
+   "total": 0.9155808999985311,
+   "bytes": 14464
+  },
+  "arduino": {
+   "compile": 5.120248499999434,
+   "upload": 6.423632049999469,
+   "total": 11.543880549998903,
+   "bytes": 357488,
+   "image": ".bin"
+  }
+ },
+ "teensy": {
+  "board": "SparkFun MicroMod Teensy",
+  "target": "teensy_micromod",
+  "date": "2026-11-17",
+  "flick": {
+   "compile": 0.5895774000000529,
+   "upload": 0.40018289999898116,
+   "total": 0.989760299999034,
+   "bytes": 11480
+  },
+  "arduino": {
+   "compile": 5.28991169999972,
+   "upload": 6.363311300000532,
+   "total": 11.653223000000253,
+   "bytes": 184397,
+   "image": ".hex"
+  }
+ },
+ "classic": {
+  "board": "SparkFun DataLogger IoT",
+  "target": "datalogger_iot",
+  "date": "2026-11-17",
+  "flick": {
+   "compile": 0.6358399000000645,
+   "upload": 0.38859299999967334,
+   "total": 1.0244328999997379,
+   "bytes": 13264
+  },
+  "arduino": {
+   "compile": 7.059835100000782,
+   "upload": 7.066909400000441,
+   "total": 14.126744500001223,
+   "bytes": 307088,
+   "image": ".bin"
+  }
+ }
+}

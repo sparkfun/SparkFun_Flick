@@ -8,6 +8,7 @@
 #include "esp_idf_version.h"
 #include "esp_arduino_version.h"
 #include "esp_ota_ops.h"
+#include "esp_app_desc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/stream_buffer.h"
@@ -56,7 +57,7 @@ static void console_sink(const char *text, void *ctx)
 
 static void reply(const char *status, const char *fmt, ...)
 {
-    char buf[400], line[420];       // INFO with a crash summary runs to ~300 characters
+    char buf[512], line[532];       // INFO with a crash summary and coproc= runs to ~450 characters
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -121,9 +122,19 @@ static void cmd_info(void)
     if (bl_hosted_info()) {
         snprintf(coproc, sizeof(coproc), " coproc=\"%s\"", bl_hosted_info());
     }
-    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d update=%s "
-       "bpart=%s core=%s idf=%d.%d.%d%s crash=\"%s\"",
-       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
+    // build: this exact Baseline image (the first 8 bytes of the ELF SHA-256 IDF
+    // keeps in the app description). The download page reads the same bytes
+    // from its .bin and skips flashing a board that already runs it. Formatted
+    // here: esp_app_get_elf_sha256() stops at CONFIG_APP_RETRIEVE_LEN_ELF_SHA
+    // (9 characters by default).
+    char build[17];
+    const uint8_t *sha = esp_app_get_description()->app_elf_sha256;
+    for (int i = 0; i < 8; i++) {
+        snprintf(build + 2 * i, 3, "%02x", sha[i]);
+    }
+    OK("baseline=%s build=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d "
+       "update=%s bpart=%s core=%s idf=%d.%d.%d%s crash=\"%s\"",
+       BASELINE_VERSION, build, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
        (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), bl_update_mode_name(),
        esp_ota_get_running_partition()->label, ESP_ARDUINO_VERSION_STR,
