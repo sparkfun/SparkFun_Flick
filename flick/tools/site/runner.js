@@ -762,6 +762,155 @@ async function flashBoard(btn) {
   }
 }
 
+// ------------------------------------------------------------------ flashing a Teensy
+//
+// Teensy 4.x: Baseline is a .hex for PJRC's bootloader (HalfKay), which is a
+// USB HID device (16C0:0478) taking 1088-byte output reports: a 3-byte block
+// offset, padding to 64 bytes, then 1 KB of the image. The first block is always
+// sent (the bootloader erases then); blank blocks after it are skipped; FF FF FF
+// with no data restarts the Teensy. A running Teensy is sent to its bootloader by
+// opening its serial port at 134 baud. Two choosers: the serial port, then the
+// bootloader (the browser opens a chooser only right after a click).
+
+const HALFKAY = { vendorId: 0x16c0, productId: 0x0478 };
+const TEENSY_BLOCK = 1024;
+
+// The .hex as a flat image from 0x60000000 (FlexSPI), and which blocks hold data.
+function teensyImage(hex, codeSize) {
+  const image = new Uint8Array(codeSize).fill(0xff);
+  const used = new Uint8Array(Math.ceil(codeSize / TEENSY_BLOCK));
+  let ext = 0;
+  for (const raw of hex.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line.startsWith(":")) continue;
+    const bytes = line.slice(1).match(/../g).map((h) => parseInt(h, 16));
+    const [len, hi, lo, type] = bytes;
+    const data = bytes.slice(4, 4 + len);
+    if (type === 0x00) {
+      let at = ext + ((hi << 8) | lo);
+      for (const b of data) {
+        if (at < 0 || at >= codeSize) throw new Error(`the .hex has data outside this board's flash (0x${at.toString(16)})`);
+        image[at] = b;
+        if (b !== 0xff) used[Math.floor(at / TEENSY_BLOCK)] = 1;
+        at++;
+      }
+    } else if (type === 0x02) {
+      ext = ((data[0] << 8) | data[1]) << 4;
+    } else if (type === 0x04) {
+      ext = ((data[0] << 8) | data[1]) * 0x10000;
+      if (ext >= 0x60000000 && ext < 0x60000000 + codeSize) ext -= 0x60000000;
+    } else if (type === 0x01) {
+      break;
+    }
+  }
+  return { image, used };
+}
+
+async function halfkayWrite(dev, report, timeoutMs) {
+  const end = performance.now() + timeoutMs;
+  for (;;) {
+    try {
+      await dev.sendReport(0, report);
+      return;
+    } catch (e) {
+      if (performance.now() > end) throw new Error(`the bootloader stopped answering (${e.message})`);
+      await sleep(10);
+    }
+  }
+}
+
+async function flashTeensy(btn) {
+  const target = btn.dataset.target, codeSize = Number(btn.dataset.codeSize);
+  const status = btn.parentElement.querySelector(".flash-status");
+  const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
+  if (!needs("hid") || !needs("serial")) return;
+  if (state.busy) { say("Busy: wait for the upload or flash in progress to finish.", "bad"); return; }
+  if (state.link) await disconnect();
+  // 1. A Teensy already in its bootloader (its button pressed) skips the reboot.
+  let dev = (await navigator.hid.getDevices()).find((d) => d.vendorId === HALFKAY.vendorId && d.productId === HALFKAY.productId);
+  let port = null;
+  if (!dev) {
+    try {
+      port = await navigator.serial.requestPort({ filters: [{ usbVendorId: PJRC }] });
+    } catch (e) {
+      say("No port picked. If the Teensy runs no Baseline yet, press the button on it, then Flash again and pick nothing here (press Cancel).");
+      port = null;
+    }
+    if (port) {
+      say("Restarting the Teensy into its bootloader...");
+      try {
+        await port.open({ baudRate: 134 });     // Teensyduino's request to reboot into HalfKay
+        await sleep(300);
+        await port.close();
+      } catch (e) {
+        say(`Can't open the port (${e.message}). Close other programs using it, or press the button on the Teensy.`, "bad");
+        return;
+      }
+      await sleep(1500);
+    }
+    // 2. The bootloader: a second chooser, which needs a click of its own.
+    dev = await new Promise((resolve) => {
+      say("Now choose the Teensy's bootloader (\"HalfKay\"). If it isn't listed: close the Teensy Loader app if it is open (it takes the bootloader for itself), press the button on the Teensy, then choose. ");
+      const go = document.createElement("button");
+      go.className = "choice";
+      go.textContent = "Choose the Teensy bootloader";
+      go.onclick = async () => {
+        try {
+          const [d] = await navigator.hid.requestDevice({ filters: [HALFKAY] });
+          resolve(d || null);
+        } catch (e) {
+          resolve(null);
+        }
+      };
+      const cancel = document.createElement("button");
+      cancel.className = "choice";
+      cancel.textContent = "Cancel";
+      cancel.onclick = () => resolve(null);
+      status.append(go, " ", cancel);
+    });
+    if (!dev) { say("Not flashed: no bootloader chosen."); return; }
+  }
+  state.busy = true;
+  render();
+  for (const b of document.querySelectorAll("button.flash, button.teensy-flash")) b.disabled = true;
+  try {
+    say("Downloading Baseline...");
+    const hexUrl = new URL(`firmware/${target}/baseline-${target}.hex`, location.href);
+    const res = await fetch(hexUrl, FRESH);
+    if (!res.ok) throw new Error(`can't download the .hex (${res.status})`);
+    const { image, used } = teensyImage(await res.text(), codeSize);
+    if (!dev.opened) await dev.open();
+    const blocks = [];
+    for (let b = 0; b < used.length; b++) if (b === 0 || used[b]) blocks.push(b);
+    const t0 = performance.now();
+    for (let i = 0; i < blocks.length; i++) {
+      const addr = blocks[i] * TEENSY_BLOCK;
+      const report = new Uint8Array(TEENSY_BLOCK + 64);
+      report[0] = addr & 0xff;
+      report[1] = (addr >> 8) & 0xff;
+      report[2] = (addr >> 16) & 0xff;
+      report.set(image.subarray(addr, addr + TEENSY_BLOCK), 64);
+      await halfkayWrite(dev, report, i < 5 ? 45000 : 2000);     // the first blocks wait for the erase
+      if (i % 16 === 0) say(`Writing ${Math.floor((i / blocks.length) * 100)}%`);
+    }
+    const boot = new Uint8Array(TEENSY_BLOCK + 64);
+    boot[0] = boot[1] = boot[2] = 0xff;
+    try { await dev.sendReport(0, boot); } catch (e) {}           // it restarts at once
+    try { await dev.close(); } catch (e) {}
+    const secs = ((performance.now() - t0) / 1000).toFixed(0);
+    let done = `Done in ${secs} s.`;
+    say(done + " Connecting...", "good");
+    const ok = port ? await connectAfterFlash(port) : false;
+    say(done + (ok ? " Connected: its examples are below." : " Press Connect below to try the examples."), "good");
+  } catch (e) {
+    say(`Failed: ${e.message}`, "bad");
+  } finally {
+    state.busy = false;
+    for (const b of document.querySelectorAll("button.flash, button.teensy-flash")) b.disabled = false;
+    render();
+  }
+}
+
 // ---- browser check -------------------------------------------------------
 
 // Flashing and running examples are tested only in desktop Chrome and Edge.
@@ -860,7 +1009,6 @@ async function init() {
   $("clear").onclick = () => { $("console").textContent = ""; };
   for (const b of document.querySelectorAll("button.flash")) b.onclick = () => flashBoard(b);
   for (const b of document.querySelectorAll("button.teensy-flash")) b.onclick = () => flashTeensy(b);
-  for (const b of document.querySelectorAll("button.teensy-reboot")) b.onclick = () => rebootTeensy(b);
   try {
     state.examples = (await (await fetch("examples/examples.json", FRESH)).json()).examples;
   } catch (e) {

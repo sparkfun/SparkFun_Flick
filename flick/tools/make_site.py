@@ -163,8 +163,13 @@ def main():
             elif t["chip"] == "esp32s3":
                 notes.append("For modules with quad PSRAM (R2) or none. With octal PSRAM (R8), pick the octal entry.")
         if image.suffix == ".hex":
-            install = ('<p class="note-small">Open the .hex in <a href="https://www.pjrc.com/teensy/loader.html">Teensy Loader</a> '
-                       'and press the button on the Teensy. This page can not flash a Teensy yet.</p>')
+            # Teensyduino's code_size: the flash Teensy's bootloader writes (teensy_loader_cli).
+            code_size = {2: 2031616, 8: 8126464, 16: 16515072}[flash_mb]
+            install = (f'<button class="teensy-flash" data-target="{name}" data-code-size="{code_size}">Flash</button>'
+                       '<div class="flash-status"></div>'
+                       '<p class="note-small">Chrome or Edge, with the Teensy Loader app closed (it takes the '
+                       'bootloader for itself). Or open the .hex in '
+                       '<a href="https://www.pjrc.com/teensy/loader.html">Teensy Loader</a>.</p>')
         else:
             install = (f'<button class="flash" data-target="{name}" data-chip="{fam}" data-flash-mb="{flash_mb}">Flash</button>'
                        '<div class="flash-status"></div>')
@@ -277,7 +282,7 @@ def main():
   .board-title {{ font-weight: 600; font-size: 17px; }}
   .facts {{ color: var(--mute); font-size: 14px; margin: 2px 0 8px; }}
   .board .note-small {{ margin: 0 0 8px; }}
-  .board button.flash {{ margin-top: 4px; }}
+  .board button.flash, .board button.teensy-flash {{ margin-top: 4px; }}
   .flash-status {{ font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 420px; }}
   .flash-found {{ font-size: 13px; color: var(--ink); margin-top: 6px; max-width: 420px; font-weight: 600; }}
   .flash-status button.choice {{ font-size: 13px; padding: 4px 10px; margin: 6px 6px 0 0; }}
