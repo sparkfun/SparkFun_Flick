@@ -539,6 +539,19 @@ function foundLine(status, text) {
   el.hidden = !text;
 }
 
+// An Auto-detect panel, once it knows the board: that board's title (product
+// link) and facts line. showBoard() puts the Auto-detect ones back.
+function showAs(panel, target) {
+  const board = [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === target);
+  if (!panel || !board || panel === board) return;
+  for (const cls of ["board-title", "facts"]) {
+    const mine = panel.querySelector("." + cls), theirs = board.querySelector("." + cls);
+    if (!mine || !theirs) continue;
+    if (mine.dataset.auto === undefined) mine.dataset.auto = mine.innerHTML;
+    mine.innerHTML = theirs.innerHTML;
+  }
+}
+
 // Buttons in the status line, one per board; resolves to the one pressed, or
 // null for Cancel.
 function askWhich(status, text, choices) {
@@ -585,6 +598,7 @@ async function flashBoard(btn) {
       if (board) {
         target = board.target; family = board.chip; need = board.flash_mb;
         notes.push(`The board's Baseline says it is a ${board.name}.`);
+        showAs(btn.closest("div.board"), board.target);
       }
     }
     say("Loading the flasher...");
@@ -650,6 +664,7 @@ async function flashBoard(btn) {
           }
           target = pick.target; family = pick.chip; need = pick.flash_mb;
           foundLine(status, `Found: ${module}, ${what.replace(/^[^,]*, /, "")}. Installing Baseline for ${pick.name}.`);
+          showAs(btn.closest("div.board"), pick.target);
           say(`Downloading Baseline for ${pick.name}...`);
           notes.push(`Flashed ${pick.name}.`);
           files = await baselineParts(target);
@@ -796,6 +811,7 @@ function showBoard(target) {
   for (const d of document.querySelectorAll("div.board")) d.hidden = d.dataset.target !== pick.value;
   for (const st of document.querySelectorAll(".flash-status")) { st.textContent = ""; st.className = "flash-status"; }
   for (const f of document.querySelectorAll(".flash-found")) f.hidden = true;
+  for (const el of document.querySelectorAll("[data-auto]")) { el.innerHTML = el.dataset.auto; delete el.dataset.auto; }
   $("board-none").hidden = !!pick.value;
   state.picked = pick.value.startsWith("auto-") ? "" : pick.value;
   try { localStorage.setItem("flick-board", pick.value); } catch (e) {}
