@@ -491,7 +491,41 @@ async function flashBoard(btn) {
   }
 }
 
+// ---- browser check -------------------------------------------------------
+
+// Flashing and running examples are tested only in desktop Chrome and Edge.
+// Other browsers either lack Web Serial (Firefox, Safari, DuckDuckGo) or ship
+// it turned off or behind a flag (Brave, some Chromium builds), so anything
+// that doesn't identify as Chrome or Edge gets a warning.
+function supportedBrowser() {
+  if (!("serial" in navigator)) return false;
+  if (navigator.duckduckgo || navigator.brave) return false;
+  const ua = navigator.userAgentData;
+  if (!ua || ua.mobile) return false;
+  const brands = (ua.brands || []).map((b) => b.brand);
+  return brands.includes("Google Chrome") || brands.includes("Microsoft Edge");
+}
+
+function browserCheck() {
+  if (supportedBrowser()) return;
+  try { if (sessionStorage.getItem("flick-browser-ok")) return; } catch (e) {}
+  const dlg = $("browser-warn");
+  if (!dlg) return;
+  if (!("serial" in navigator)) $("browser-why").textContent =
+    "This browser can't talk to USB serial ports (Web Serial), so the Flash and Run buttons won't work here.";
+  $("browser-copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(location.href); $("browser-copy").textContent = "Link copied"; }
+    catch (e) { $("browser-copy").textContent = location.href; }
+  };
+  $("browser-close").onclick = () => {
+    try { sessionStorage.setItem("flick-browser-ok", "1"); } catch (e) {}
+    if (dlg.close) dlg.close(); else dlg.removeAttribute("open");
+  };
+  if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+}
+
 async function init() {
+  browserCheck();
   $("connect").onclick = connect;
   $("send-form").onsubmit = sendInput;
   $("clear").onclick = () => { $("console").textContent = ""; };

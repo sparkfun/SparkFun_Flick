@@ -202,6 +202,13 @@ def main():
   .step p {{ margin: 0; color: var(--mute); font-size: 14px; }}
   .step code {{ word-break: break-all; }}
   footer {{ color: var(--mute); font-size: 13px; margin-top: 40px; }}
+  #browser-warn {{ max-width: 440px; width: calc(100% - 32px); border: 1px solid var(--line); border-radius: 10px;
+                  background: var(--card); color: var(--ink); padding: 20px 22px; }}
+  #browser-warn::backdrop {{ background: rgba(0, 0, 0, .55); }}
+  #browser-warn h2 {{ margin: 0 0 8px; }}
+  #browser-warn p {{ margin: 0 0 12px; color: var(--mute); }}
+  #browser-warn .bar {{ margin: 16px 0 0; justify-content: flex-end; }}
+  #browser-close {{ background: var(--code); color: var(--ink); }}
 </style>
 </head>
 <body>
@@ -262,6 +269,14 @@ def main():
   <footer>Baseline {version} · ABI {'.'.join(abi)} · <a href="{args.repo}">source</a></footer>
 </main>
 <script>window.FLICK = {flick_cfg};</script>
+<dialog id="browser-warn" aria-labelledby="browser-title">
+  <h2 id="browser-title">Please use Chrome or Edge</h2>
+  <p id="browser-why">Flashing Baseline and running examples talk to the board over USB (Web Serial),
+  which is supported only in Google Chrome and Microsoft Edge on a computer.</p>
+  <p>Open this page in Chrome or Edge to continue.</p>
+  <div class="bar"><button id="browser-copy" type="button">Copy page link</button>
+  <button id="browser-close" type="button">Continue anyway</button></div>
+</dialog>
 <script type="module" src="runner.js"></script>
 </body>
 </html>
