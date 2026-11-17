@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include "gen/bl_impl.h"
 #include "bl_port.h"
+#include "bl_ledc.h"
 
 /* ---- analog / PWM / RGB ---- */
 
@@ -21,6 +22,7 @@ extern "C" int bl_impl_pwm_write(int pin, int value)
     if (!bl_pin_usable(pin) || !GPIO_IS_VALID_OUTPUT_GPIO(pin)) {
         return BL_ERR_ARG;
     }
+    bl_ledc_settle(pin);
     analogWrite(pin, constrain(value, 0, 255));
     return BL_OK;
 }

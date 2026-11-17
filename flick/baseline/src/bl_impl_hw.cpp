@@ -7,6 +7,7 @@
 #include "soc/soc_caps.h"
 #include "gen/bl_impl.h"
 #include "bl_port.h"
+#include "bl_ledc.h"
 #include "sketch_loader.h"
 
 static bool output_pin_ok(int pin)
@@ -204,7 +205,11 @@ extern "C" int bl_impl_ledc_attach(int pin, uint32_t freq, int resolution)
 
 extern "C" int bl_impl_ledc_write(int pin, uint32_t duty)
 {
-    return output_pin_ok(pin) && ledcWrite((uint8_t)pin, duty) ? 1 : 0;
+    if (!output_pin_ok(pin)) {
+        return 0;
+    }
+    bl_ledc_settle(pin);
+    return ledcWrite((uint8_t)pin, duty) ? 1 : 0;
 }
 
 extern "C" int bl_impl_ledc_detach(int pin)
@@ -214,7 +219,11 @@ extern "C" int bl_impl_ledc_detach(int pin)
 
 extern "C" uint32_t bl_impl_ledc_write_tone(int pin, uint32_t freq)
 {
-    return output_pin_ok(pin) ? ledcWriteTone((uint8_t)pin, freq) : 0;
+    if (!output_pin_ok(pin)) {
+        return 0;
+    }
+    bl_ledc_settle(pin);
+    return ledcWriteTone((uint8_t)pin, freq);
 }
 
 extern "C" uint32_t bl_impl_ledc_change_frequency(int pin, uint32_t freq, int resolution)
