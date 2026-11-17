@@ -26,8 +26,17 @@
 #include <hardware/structs/scb.h>
 #include <hardware/structs/systick.h>
 #include "bl_rp2.h"
+#if __has_include("bl_build_id.h")
+#include "bl_build_id.h"                /* written by flick: a hash of the build's inputs */
+#else
+#define BL_BUILD_ID "-"
+#endif
 
 #define LINE_MAX        1600
+
+/* INFO build=. The "BLBUILD=" prefix lets the download page find the same ID
+   in a .uf2, or in a board's flash through the boot ROM. */
+static const char s_build[] = "BLBUILD=" BL_BUILD_ID;
 #define DATA_MAX        1024        /* decoded bytes per DATA line */
 #define RX_SIZE         2048        /* console bytes buffered for the sketch */
 #define TRIAL_MS        10000       /* a new sketch that runs this long is kept */
@@ -667,7 +676,7 @@ static void *s_sink_ctx;
 
 static void reply(const char *status, const char *fmt, ...)
 {
-    char buf[420];
+    char buf[512];                      /* INFO with a crash line, as on the ESP Baselines */
     int n = snprintf(buf, sizeof(buf), "@BSK %s ", status);
     va_list ap;
     va_start(ap, fmt);
@@ -793,9 +802,9 @@ static void cmd_info(void)
     if (bl_last_crash_text(crash, sizeof(crash)) <= 0) {
         strcpy(crash, "-");
     }
-    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=0 reset=%d update=none "
-       "bpart=- core=%s crash=\"%s\"",
-       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + s_ps.active,
+    OK("baseline=%s build=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=0 reset=%d "
+       "update=none bpart=- core=%s crash=\"%s\"",
+       BASELINE_VERSION, s_build + 8, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + s_ps.active,
        s_name[0] ? s_name : "-", s_status, s_safe ? "yes" : "no", bl_reset_reason_code(), ARDUINO_PICO_VERSION_STR,
        crash);
 }

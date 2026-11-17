@@ -1530,7 +1530,6 @@ def build_baseline_rp2(target, flash, port=None):
         wanted[Path(name)] = gen / name
     if target.get("ca_bundle"):
         wanted[Path("bl_ca_bundle.h")] = ca_bundle_header(ROOT / target["ca_bundle"], BUILD_ROOT / "rp2-ca")
-    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
     build_path = baseline_build_path(target["name"])
     board = header_defines(target["dir"] / "sdk" / "bl_board.h")
     chip = header_defines(target["chip_dir"] / "sdk" / "bl_target.h")
@@ -1545,6 +1544,23 @@ def build_baseline_rp2(target, flash, port=None):
         # The heap ends where Baseline's kept 4 KB start, below the sketch RAM window.
         f"build.ram_length={(chip['BL_RP2_KEEP_BASE'] - ram_base) // 1024}k",
     ]
+    # INFO build= (the download page skips flashing a board that already runs
+    # this image): a hash of everything the build reads from Flick, so the same
+    # sources give the same ID. chip.json names the core and compiler versions.
+    h = hashlib.sha256()
+    inputs = sorted(wanted.items()) + sorted(
+        (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
+    for rel, src in inputs:
+        h.update(str(rel).replace("\\", "/").encode() + b"\0" + src.read_bytes())
+    h.update("\0".join([target["fqbn"], *props]).encode())
+    h.update((target["chip_dir"] / "chip.json").read_bytes())
+    id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
+    text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
+    if not id_header.exists() or id_header.read_text() != text:
+        id_header.parent.mkdir(parents=True, exist_ok=True)
+        id_header.write_text(text)
+    wanted[Path("bl_build_id.h")] = id_header
+    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
     # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
     # The staging folder too: arduino-cli does not copy .inc files into its build folder.
     inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))

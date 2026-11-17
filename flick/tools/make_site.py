@@ -45,6 +45,15 @@ def build_id(image):
     SHA-256 in its app description (esp_app_desc_t.app_elf_sha256, 144 bytes
     in), as Baseline reports it in INFO build=. None if it isn't there."""
     data = Path(image).read_bytes()
+    if Path(image).suffix == ".uf2":
+        # RP2040/RP2350: flick compiles "BLBUILD=<16 hex>" into Baseline (bl_rp2_loader.cpp).
+        # The payloads (256 bytes each, after a 32-byte header) in address order, so the
+        # string is found even where it crosses from one block into the next.
+        blocks = sorted((int.from_bytes(data[i + 12:i + 16], "little"),
+                         data[i + 32:i + 32 + int.from_bytes(data[i + 16:i + 20], "little")])
+                        for i in range(0, len(data) - 511, 512))
+        m = re.search(rb"BLBUILD=([0-9a-f]{16})\0", b"".join(d for _, d in blocks))
+        return m.group(1).decode() if m else None
     at = data.find(APP_DESC_MAGIC, APP_OFFSET, APP_OFFSET + 0x1000)
     if at < 0:
         return None
@@ -137,9 +146,9 @@ def main():
               file=sys.stderr)
     shutil.copy2(ROOT / "tools" / "site" / "runner.js", out / "runner.js")
     boards = {name: board for board, name, *_ in rows}
-    # What the Flash button compares with INFO build= (a board already running
+    # What the Flash buttons compare with INFO build= (a board already running
     # this Baseline is not flashed again).
-    builds = {name: build_id(image) for _, name, _, _, image, _ in rows if image.suffix == ".bin"}
+    builds = {name: build_id(image) for _, name, _, _, image, _ in rows if image.suffix in (".bin", ".uf2")}
 
     kit = Path(args.kit) if args.kit else max(dist.glob("flick-kit-*.zip"), default=None,
                                               key=lambda p: p.stat().st_mtime)
@@ -213,9 +222,18 @@ def main():
     auto_text = ("Not sure which ESP module you've got? Auto-detect will check and load the correct Baseline for your "
                  "board. If you've got a SparkFun board, auto-detect will attempt to select the right one and display "
                  "the supported examples.")
+    # RP2040/RP2350 (flashRp2()): the target a Baseline on the board reports,
+    # else the chip from the boot ROM, asking when several boards have it.
+    rp2 = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb}
+           for board, name, t, flash_mb, image, _ in sorted(rows, key=sort_key) if image.suffix == ".uf2"]
+    rp2_text = ("Not sure which RP2040 or RP2350 board you've got? Auto-detect asks the board, or reads the chip "
+                "from its boot ROM and asks you when two SparkFun boards share it. The first time, hold the BOOTSEL "
+                "button while you plug the board in.")
     auto_option = []
-    for key, label, have in (("auto-sparkfun", "SparkFun ESP32 board - Auto-detect", sparkfun),
-                             ("auto-generic", "Generic ESP32 board - Auto-detect", generic)):
+    for key, label, have, text, cls in (
+            ("auto-sparkfun", "SparkFun ESP32 board - Auto-detect", sparkfun, auto_text, "flash"),
+            ("auto-generic", "Generic ESP32 board - Auto-detect", generic, auto_text, "flash"),
+            ("auto-rp2", "SparkFun RP2040 / RP2350 board - Auto-detect", rp2, rp2_text, "flash rp2")):
         if not have:
             continue
         chips = sorted({g["chip"] for g in have}, key=lambda c: list(CHIP_FAMILY.values()).index(c))
@@ -223,8 +241,8 @@ def main():
         panels.insert(len(auto_option) - 1, f"""      <div class="board" data-target="{key}" hidden>
         <div class="board-title">{html.escape(label)}</div>
         <div class="facts">{' · '.join(chips)}</div>
-        <p class="note-small">{html.escape(auto_text)}</p>
-        <button class="flash" data-target="{key}" data-chip="" data-flash-mb="0">Flash</button>
+        <p class="note-small">{html.escape(text)}</p>
+        <button class="{cls}" data-target="{key}" data-chip="" data-flash-mb="0">Flash</button>
         <div class="flash-status"></div>
       </div>""")
     none = ("Pick a board above. SparkFun boards come first in each group; for another board, pick the generic entry "
@@ -236,7 +254,7 @@ def main():
                               f"      <p class=\"note-small\" id=\"board-none\">{none}</p>", "  </div>"])
 
     flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards, "builds": builds, "generic": generic,
-                            "sparkfun": sparkfun})
+                            "sparkfun": sparkfun, "rp2": rp2})
     kit_button = (f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>'
                   if kit_link else "")
     page = f"""<!doctype html>
