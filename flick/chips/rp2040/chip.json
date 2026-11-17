@@ -1,0 +1,55 @@
+{
+    "description": "Raspberry Pi RP2040 (2x Cortex-M0+ 133 MHz, no FPU, 264 KB RAM)",
+    "baseline_source": "chips/rp2350/baseline",
+    "baseline_source_note": "One Baseline source for the RP2040 and the RP2350 (arduino-pico runs both); PICO_RP2040 picks the differences.",
+    "builder": "rp2",
+    "ca_bundle": "chips/rp2350/cacrt_all.pem",
+    "ca_bundle_note": "Mozilla's CA list (curl's cacert.pem, the one ESP-IDF ships): flick turns it into bl_ca_bundle.h, the TLS trust store of boards with WiFi.",
+    "core_version": "6.3.2",
+    "core_note": "arduino-pico (Earle Philhower's core), the version releases are built with.",
+    "gcc": "arm-none-eabi-gcc",
+    "gcc_package": "rp2040/tools/pqt-gcc",
+    "gcc_note": "arduino-pico's own toolchain (pqt-gcc), the one Baseline is built with: the same libc, libm and libstdc++.",
+    "gcc_download": {
+        "release": "pqt-gcc-5.0.0-9576866",
+        "url": "https://github.com/earlephilhower/pico-quick-toolchain/releases/download/5.0.0/{file}",
+        "files": {
+            "x86_64-w64-mingw32": "x86_64-w64-mingw32.arm-none-eabi-78c24be.260719.zip",
+            "x86_64-linux-gnu": "x86_64-linux-gnu.arm-none-eabi-78c24be.260719.tar.gz",
+            "aarch64-linux-gnu": "aarch64-linux-gnu.arm-none-eabi-78c24be.260719.tar.gz",
+            "x86_64-apple-darwin": "x86_64-apple-darwin20.4.arm-none-eabi-78c24be.260719.tar.gz",
+            "aarch64-apple-darwin": "aarch64-apple-darwin20.4.arm-none-eabi-78c24be.260719.tar.gz"
+        }
+    },
+    "gcc_download_note": "For flick setup (no Arduino IDE): the pqt-gcc build arduino-pico 6.3.2 installs (its package index, tool pqt-gcc 5.0.0-9576866).",
+    "cflags": [
+        "-mthumb",
+        "-mcpu=cortex-m0plus"
+    ],
+    "cflags_note": "As arduino-pico builds Baseline (soft float).",
+    "ldflags": [
+        "-mthumb",
+        "-mcpu=cortex-m0plus",
+        "-Wl,--no-warn-rwx-segments"
+    ],
+    "ldflags_note": "Code and rodata share one address window, so the sketch's one flash segment is RWX by design.",
+    "libs": [
+        "-lc"
+    ],
+    "libs_note": "The RP2040 boot ROM's C functions are not used: newlib supplies memcpy, strlen, ... (the SDK's malloc/printf come first).",
+    "defines": [
+        "-DARDUINO=10812",
+        "-DFLICK_ARCH_RP2"
+    ],
+    "defines_note": "Not ARDUINO_ARCH_RP2040: libraries would pick code paths for a core the SDK does not have.",
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": [],
+    "usb_vids": [
+        "2E8A",
+        "1B4F"
+    ],
+    "usb_vids_note": "Raspberry Pi and SparkFun: arduino-pico's USB serial uses the board's own IDs.",
+    "stop_detect": true,
+    "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) instead of letting the watchdog roll it back (flick test step 4).",
+    "status": "bring-up"
+}

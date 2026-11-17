@@ -2,7 +2,8 @@
 # (flick/tools/ci/build_baseline.sh). Runs when the firmware's sources change, and
 # is called by release.yml. The result is one artifact, "baselines":
 # <target>/baseline-<target>.bin (flash at 0x0) and .bsu (OTA) for every ESP
-# target, <target>/baseline-<target>.hex (Teensy Loader) for every Teensy target.
+# target, <target>/baseline-<target>.hex (Teensy Loader) for every Teensy target,
+# <target>/baseline-<target>.uf2 (the boot ROM's drive) for every RP2040/RP2350 target.
 #
 # Builds are cached by the files they read (flick/tools/ci/baseline_keys.py):
 # one entry per target, and one holding every target. When nothing changed,
@@ -46,6 +47,7 @@ jobs:
     outputs:
       list: ${{ steps.keys.outputs.list }}
       teensy: ${{ steps.keys.outputs.teensy }}
+      rp2: ${{ steps.keys.outputs.rp2 }}
       keys: ${{ steps.keys.outputs.keys }}
       all: ${{ steps.keys.outputs.all }}
       all_hit: ${{ steps.all.outputs.cache-hit }}
@@ -56,6 +58,7 @@ jobs:
           python3 flick/tools/ci/baseline_keys.py > keys.json
           echo "list=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["esp"]))')" >> "$GITHUB_OUTPUT"
           echo "teensy=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["teensy"]))')" >> "$GITHUB_OUTPUT"
+          echo "rp2=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["rp2"]))')" >> "$GITHUB_OUTPUT"
           echo "keys=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["keys"]))')" >> "$GITHUB_OUTPUT"
           echo "all=$(python3 -c 'import json; print(json.load(open("keys.json"))["all"])')" >> "$GITHUB_OUTPUT"
       - name: Is every Baseline already built from these sources?
@@ -140,12 +143,53 @@ jobs:
           path: flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.hex
           if-no-files-found: error
 
+  # RP2040 / RP2350 targets: arduino-pico through arduino-cli (flick baseline build).
+  build-rp2:
+    needs: plan
+    if: needs.plan.outputs.all_hit != 'true' && needs.plan.outputs.rp2 != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.plan.outputs.rp2) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reuse a Baseline built from the same sources
+        id: built
+        uses: actions/cache@v6
+        with:
+          path: flick/dist/${{ matrix.target }}
+          key: ${{ fromJson(needs.plan.outputs.keys)[matrix.target] }}
+      - name: Cache arduino-pico
+        if: steps.built.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: arduino-pico-6.3.2-${{ runner.os }}
+      - uses: arduino/setup-arduino-cli@v2
+        if: steps.built.outputs.cache-hit != 'true'
+      - name: arduino-pico 6.3.2 (chips/rp2350/chip.json core_version)
+        if: steps.built.outputs.cache-hit != 'true'
+        run: |
+          url=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core update-index --additional-urls "$url"
+          arduino-cli core install rp2040:rp2040@6.3.2 --additional-urls "$url"
+      - name: Build Baseline for ${{ matrix.target }}
+        if: steps.built.outputs.cache-hit != 'true'
+        run: python3 flick.py baseline build -t ${{ matrix.target }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: baseline-${{ matrix.target }}
+          path: flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.uf2
+          if-no-files-found: error
+
   bundle:
-    needs: [plan, build, build-teensy]
+    needs: [plan, build, build-teensy, build-rp2]
     if: >-
       always() && needs.plan.result == 'success' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
-      (needs.build-teensy.result == 'success' || needs.build-teensy.result == 'skipped')
+      (needs.build-teensy.result == 'success' || needs.build-teensy.result == 'skipped') &&
+      (needs.build-rp2.result == 'success' || needs.build-rp2.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Every Baseline, from the cache

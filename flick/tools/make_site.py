@@ -7,7 +7,8 @@ Reads targets/*/target.json and the built images in dist/<target>/
 (flick baseline build), and writes a static site:
   index.html                  boards, "Flash" buttons (runner.js + esptool-js, Chrome/Edge), downloads
   manifests/<target>.json     what each Flash button writes (ESP Web Tools' manifest format)
-  firmware/<target>/          baseline-<target>.bin (USB/web flash at 0x0) and .bsu (over the air)
+  firmware/<target>/          baseline-<target>.bin (USB/web flash at 0x0) and .bsu (over the air);
+                              .uf2 for RP2040/RP2350 boards, .hex for Teensy
   downloads/                  the sketch kit zip
   examples/, runner.js        the examples, ready to run from the page over Web Serial
                               (DIR from tools/ci/build_examples.py --out; default dist/examples)
@@ -27,10 +28,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CHIP_FAMILY = {"esp32": "ESP32", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3", "esp32c5": "ESP32-C5",
-               "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4", "imxrt1062": "Teensy 4.x"}
+               "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4", "imxrt1062": "Teensy 4.x", "rp2350": "RP2350",
+               "rp2040": "RP2040"}
 # Groups in the board menu, in this order (by chip family).
 GROUPS = [("esp32", "ESP32 (classic)"), ("esp32s3", "ESP32-S3"), ("esp32c3", "ESP32-C3"), ("esp32c5", "ESP32-C5"),
-          ("esp32c6", "ESP32-C6"), ("esp32p4", "ESP32-P4"), ("imxrt1062", "Teensy 4.x (PJRC)")]
+          ("esp32c6", "ESP32-C6"), ("esp32p4", "ESP32-P4"), ("rp2350", "RP2350"), ("rp2040", "RP2040"),
+          ("imxrt1062", "Teensy 4.x (PJRC)")]
 
 
 def board_name(target_dir):
@@ -66,17 +69,19 @@ def main():
         bin_ = dist / name / f"baseline-{name}.bin"
         bsu = dist / name / f"baseline-{name}.bsu"
         hex_ = dist / name / f"baseline-{name}.hex"
+        uf2 = dist / name / f"baseline-{name}.uf2"
         board = board_name(tdir)
         flash_mb = int(t["flash_size"].rstrip("MB"))
         if t["chip"] not in CHIP_FAMILY:
             print(f"skipping {name}: no download page support for chip {t['chip']}", file=sys.stderr)
             continue
         if not bin_.exists():
-            if hex_.exists():                   # Teensy: download only, flashed with Teensy Loader
+            other = hex_ if hex_.exists() else uf2 if uf2.exists() else None
+            if other:                           # Teensy (.hex, Teensy Loader) or RP2040/RP2350 (.uf2, flashRp2())
                 fw = out / "firmware" / name
                 fw.mkdir(parents=True)
-                shutil.copy2(hex_, fw / hex_.name)
-                rows.append((board, name, t, flash_mb, hex_, bsu))
+                shutil.copy2(other, fw / other.name)
+                rows.append((board, name, t, flash_mb, other, bsu))
             else:
                 print(f"skipping {name}: {bin_} not built", file=sys.stderr)
             continue
@@ -147,6 +152,12 @@ def main():
         if image.suffix == ".hex":
             install = ('<p class="note-small">Open the .hex in <a href="https://www.pjrc.com/teensy/loader.html">Teensy Loader</a> '
                        'and press the button on the Teensy. This page can not flash a Teensy yet.</p>')
+        elif image.suffix == ".uf2":
+            drive = "RP2350" if t["chip"] == "rp2350" else "RPI-RP2"
+            install = ('<p class="note-small">The first time, hold the BOOTSEL button while you plug the board in: '
+                       f'it shows a drive named {drive}. After that, Flash restarts the board into that mode by itself.</p>'
+                       f'<button class="flash rp2" data-target="{name}" data-chip="{fam}" data-flash-mb="{flash_mb}">Flash</button>'
+                       '<div class="flash-status"></div>')
         else:
             install = (f'<button class="flash" data-target="{name}" data-chip="{fam}" data-flash-mb="{flash_mb}">Flash</button>'
                        '<div class="flash-status"></div>')

@@ -145,12 +145,34 @@ def cmd_targets(args):
 
 # ---------------------------------------------------------------- toolchain
 
+def package_gcc(target):
+    """The Arduino core's own compiler, the one Baseline is built with: e.g.
+    arduino-pico's pqt-gcc (chip.json "gcc_package"), installed by the Arduino
+    IDE or arduino-cli. Same libc and libstdc++. None if it isn't installed."""
+    exe = target["gcc"] + (".exe" if os.name == "nt" else "")
+    for r in arduino_data_dirs():
+        hits = sorted(glob.glob(str(r / "packages" / target["gcc_package"] / "*" / "bin" / exe)),
+                      key=lambda h: version_key(Path(h).parents[1].name))
+        if hits:
+            return hits[-1]
+    return None
+
+
 def find_gcc(target):
     env = os.environ.get("FLICK_GCC")
     if env:
         return env
     gcc_name = target["gcc"]
     exe = gcc_name + (".exe" if os.name == "nt" else "")
+    if target.get("gcc_package"):
+        found = package_gcc(target)
+        if found:
+            return found
+        dl = target.get("gcc_download")
+        hits = sorted(glob.glob(str(TOOLS_HOME / dl["release"] / "**" / "bin" / exe), recursive=True)) if dl else []
+        if hits:
+            return hits[0]          # flick setup
+        sys.exit(f"error: {gcc_name} not found. Run: {FLICK_CMD} setup")
     hits = sorted(glob.glob(str(TOOLS_HOME / "*" / "*" / "bin" / exe)))     # flick setup
     if hits:
         return hits[-1]
@@ -307,8 +329,12 @@ def load_config(proj):
             if "=" in line:
                 k, v = (s.strip() for s in line.split("=", 1))
                 cfg[k] = v
-    if len(cfg["name"].encode()) > 31:
-        sys.exit("error: sketch name must be at most 31 bytes")
+    # The image header holds 31 bytes of name (char name[32], sketch_abi.h): the
+    # label `flick info` shows. A longer name is cut there; files keep the whole name.
+    label = cfg["name"].encode()[:31].decode(errors="ignore")
+    if label != cfg["name"]:
+        print(f"note: the sketch name is longer than 31 bytes; the board shows it as {label}")
+    cfg["label"] = label
     return cfg
 
 
@@ -387,22 +413,69 @@ def _blank_comments_and_strings(text):
     return "".join(out)
 
 
+COND_RE = re.compile(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b")
+
+
+def _conditionals(text):
+    """For each line of text: the #if groups open there, outermost first, each
+    as the directive lines seen so far in its group (["#ifdef X", "#else"])."""
+    stack, per_line = [], []
+    for line in text.split("\n"):
+        per_line.append([list(g) for g in stack])
+        m = COND_RE.match(line)
+        if not m:
+            continue
+        kind = m.group(1)
+        if kind in ("if", "ifdef", "ifndef"):
+            stack.append([line.strip()])
+        elif kind in ("elif", "else") and stack:
+            stack[-1].append(line.strip())
+        elif kind == "endif" and stack:
+            stack.pop()
+    return per_line
+
+
 def ino_with_prototypes(src):
-    """The .ino's text with prototypes added, or None if it needs none."""
+    """The .ino's text with prototypes added, or None if it needs none. A
+    function defined inside #if/#ifdef gets its prototype inside the same
+    conditions, so two versions of one function (#ifdef USE_SPI ... #else ...)
+    declare only the one that is compiled, as with the Arduino IDE."""
     text = src.read_text(errors="ignore")
+    conds = _conditionals(text)
     clean = _blank_comments_and_strings(text)
     # Top level only: blank out everything inside braces (keeping the braces).
+    # Only one branch of an #if group is compiled, so each #elif/#else branch
+    # starts at the brace depth its #if had, and after #endif the depth is the
+    # first branch's (two branches that each open a function body, as in
+    # "#ifdef X / void f(A a) { / #else / void f(B b) { / #endif", count once).
     flat, depth = [], 0
-    for ch in clean:
-        if ch == "{":
-            flat.append(ch if depth == 0 else " ")
-            depth += 1
-        elif ch == "}":
-            depth = max(0, depth - 1)
-            flat.append(ch if depth == 0 else " ")
-        else:
-            flat.append(ch if depth == 0 or ch == "\n" else " ")
-    flat = "".join(flat)
+    groups = []             # per open #if group: [depth at #if, depth after the first branch]
+    src_lines = text.split("\n")
+    for ln, line in enumerate(clean.split("\n")):
+        m = COND_RE.match(src_lines[ln]) if ln < len(src_lines) else None
+        if m:
+            kind = m.group(1)
+            if kind in ("if", "ifdef", "ifndef"):
+                groups.append([depth, None])
+            elif kind in ("elif", "else") and groups:
+                if groups[-1][1] is None:
+                    groups[-1][1] = depth
+                depth = groups[-1][0]
+            elif kind == "endif" and groups:
+                start, first = groups.pop()
+                if first is not None:
+                    depth = first
+        for ch in line:
+            if ch == "{":
+                flat.append(ch if depth == 0 else " ")
+                depth += 1
+            elif ch == "}":
+                depth = max(0, depth - 1)
+                flat.append(ch if depth == 0 else " ")
+            else:
+                flat.append(ch if depth == 0 else " ")
+        flat.append("\n")
+    flat = "".join(flat)[:len(clean)]
     protos, first = [], None
     for m in FUNC_DEF_RE.finditer(flat):
         sig, name, args = m.group(1), m.group(2), m.group(3)
@@ -413,7 +486,11 @@ def ino_with_prototypes(src):
             first = m.start(1)          # prototypes go before the first function, even setup()
         if name in PROTO_DECLARED or "=" in args:
             continue                    # already declared / default arguments may not be repeated
-        protos.append(" ".join(sig.split()) + ";")
+        proto = " ".join(sig.split()) + ";"
+        groups = conds[text.count("\n", 0, m.start(2))]
+        if groups:
+            proto = "\n".join([*(d for g in groups for d in g), proto, *["#endif"] * len(groups)])
+        protos.append(proto)
     if not protos:
         return None
     line = text.count("\n", 0, first) + 1
@@ -542,9 +619,11 @@ FEATURE_NAMES = [
     (r"dacWrite", "a DAC", "BL_HAS_DAC"),
     (r"USB\w*", "USB device mode in this Baseline", "BL_HAS_USB_DEVICE"),
     (r"esp_\w+|ESP_\w+|ESP|EspClass|ledc\w+|ps_(m|c|re)alloc|psramFound|temperatureRead|analogReadMilliVolts|"
-     r"analogSet(Pin)?Attenuation|rgbLedWrite|neopixelWrite|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
-     r"hw_timer_t|I2SClass|SD_MMC|getLocalTime|getCpuFrequencyMhz|log_[ewidv]|gpio_num_t|GPIO_NUM_\w+|FastLED|CRGB",
+     r"analogSet(Pin)?Attenuation|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
+     r"hw_timer_t|I2SClass|SD_MMC|getLocalTime|getCpuFrequencyMhz|log_[ewidv]|gpio_num_t|GPIO_NUM_\w+",
      "an ESP32 API", "BL_PLATFORM_ESP32"),
+    (r"rgbLedWrite|neopixelWrite|FastLED|CRGB|CHSV", "a WS2812 API (ESP32 and RP2040/RP2350 boards)",
+     ("BL_PLATFORM_ESP32", "BL_PLATFORM_RP2")),
     (r"IntervalTimer|elapsedMicros|elapsedMillis|Audio\w+|extmem_\w+|analogWrite(Frequency|Resolution)|tempmonGetTemp|"
      r"BUILTIN_SDCARD|digital(Write|Read|Toggle)Fast", "a Teensy API", "BL_PLATFORM_TEENSY"),
 ]
@@ -555,13 +634,16 @@ UNDECLARED = re.compile(r"'([A-Za-z_]\w*)' (?:was not declared in this scope|doe
 def missing_feature_hints(output, target, sketch):
     """One line per missing feature: from an #error "This board has no ..." or an undeclared name."""
     board = f"{target['board_name']} ({target['name']})"
+    # The chip's features, and the board's (an RP2350 board with a radio module sets BL_HAS_WIFI).
     have = set(header_defines(target["chip_dir"] / "sdk" / "bl_target.h"))
+    have |= set(header_defines(target["dir"] / "sdk" / "bl_board.h"))
     hints = []
     for m in re.finditer(r'#error "(This (?:board|chip) has no [^"]*)"', output):
         hints.append(f"flick: {sketch} can't run on {board}: {m.group(1)}")
     for name in dict.fromkeys(UNDECLARED.findall(output)):
         for pattern, what, macro in FEATURE_NAMES:
-            if re.fullmatch(pattern, name) and macro not in have:
+            macros = (macro,) if isinstance(macro, str) else macro
+            if re.fullmatch(pattern, name) and not any(m in have for m in macros):
                 hints.append(f"flick: {name} is {what}; {board} doesn't have it.")
                 break
     return list(dict.fromkeys(hints))
@@ -603,7 +685,7 @@ def build(proj, target_name=None):
     if target.get("builder") == "teensy":
         # Last on the path, after the SDK's own headers: Teensy's register definitions (imxrt.h).
         inc += ["-idirafter", str(teensy_core_dir(gcc))]
-    defs = [f'-DBL_SKETCH_NAME="{cfg["name"]}"', f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
+    defs = [f'-DBL_SKETCH_NAME="{cfg["label"]}"',f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
 
     def compile_one(src, obj, extra_defs=(), quiet=False):
         if src.suffix == ".ino":
@@ -777,6 +859,7 @@ def find_port(port=None):
 
 ESPRESSIF_VID = 0x303A
 PJRC_VID = 0x16C0       # Teensy: native USB serial, like Espressif's
+RP2_VIDS = (0x2E8A, 0x1B4F)     # arduino-pico's USB serial: Raspberry Pi's IDs, or SparkFun's on its boards
 USB_SERIAL_JTAG_PID = 0x1001
 
 
@@ -789,6 +872,12 @@ def is_tinyusb_port(port):
     return False
 
 
+def is_rp2_port(port):
+    """arduino-pico's USB serial (Baseline on an RP2040 or RP2350)."""
+    serial = import_serial()
+    return any(p.device == port and p.vid in RP2_VIDS for p in serial.tools.list_ports.comports())
+
+
 def open_port(port, baud):
     serial = import_serial()
     s = serial.Serial()
@@ -797,7 +886,9 @@ def open_port(port, baud):
     # (CH340/CP210x wire them to EN/IO0; USB-Serial-JTAG resets on them too).
     # A TinyUSB serial port is the exception: Arduino's USBCDC discards output
     # until the host raises DTR, and DTR alone never resets the chip there.
-    s.dtr = is_tinyusb_port(port)
+    # arduino-pico's USB serial (RP2040/RP2350) does the same; it reboots into
+    # the boot ROM only on 1200 baud, which flick never uses.
+    s.dtr = is_tinyusb_port(port) or is_rp2_port(port)
     s.rts = False
     s.open()
     return s
@@ -816,7 +907,8 @@ _baud_cache = {}
 
 def is_native_usb_port(port):
     serial = import_serial()
-    return any(p.device == port and p.vid in (ESPRESSIF_VID, PJRC_VID) for p in serial.tools.list_ports.comports())
+    return any(p.device == port and p.vid in (ESPRESSIF_VID, PJRC_VID, *RP2_VIDS)
+               for p in serial.tools.list_ports.comports())
 
 
 def console_baud(port, baud=None):
@@ -1404,6 +1496,81 @@ def build_baseline_teensy(target, flash):
              "-p", teensy_bootloader_port(), "-l", "teensy", str(sketch)])
 
 
+def ca_bundle_header(pem, out_dir):
+    """bl_ca_bundle.h from a PEM bundle: the certificates as DER, each after its
+    2-byte big-endian length, for Baseline's flash trust store. Rewritten only
+    when the PEM changes, so arduino-cli's build cache holds."""
+    ders = [base64.b64decode("".join(m.group(1).split()))
+            for m in re.finditer(r"-----BEGIN CERTIFICATE-----(.*?)-----END CERTIFICATE-----", pem.read_text(), re.S)]
+    blob = b"".join(len(d).to_bytes(2, "big") + d for d in ders)
+    lines = [f"/* {len(ders)} CA certificates from {pem.name} (Mozilla's list), as DER. Made by flick. */",
+             "#pragma once", "#include <stdint.h>", f"#define BL_CA_BUNDLE_COUNT {len(ders)}",
+             "static const uint8_t bl_ca_bundle[] = {"]
+    for i in range(0, len(blob), 24):
+        lines.append("    " + ",".join(str(b) for b in blob[i:i + 24]) + ",")
+    lines.append("};\n")
+    text = "\n".join(lines)
+    out = out_dir / "bl_ca_bundle.h"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if not out.exists() or out.read_text() != text:
+        out.write_text(text)
+    return out
+
+
+def build_baseline_rp2(target, flash, port=None):
+    """Baseline for the RP2350 / RP2040: an Arduino sketch built with arduino-pico
+    through arduino-cli. Staged from chips/<chip>/baseline plus the generated API
+    table. The target's bl_board.h decides the flash layout and the chip's
+    bl_target.h where the heap ends (below the sketch RAM window); they reach
+    arduino-pico's linker script as the build properties its Flash Size menu
+    would set. The image is a .uf2 for the boot ROM's USB drive."""
+    gen = ROOT / "baseline" / "src" / "gen"
+    wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
+    for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
+        wanted[Path(name)] = gen / name
+    if target.get("ca_bundle"):
+        wanted[Path("bl_ca_bundle.h")] = ca_bundle_header(ROOT / target["ca_bundle"], BUILD_ROOT / "rp2-ca")
+    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
+    build_path = baseline_build_path(target["name"])
+    board = header_defines(target["dir"] / "sdk" / "bl_board.h")
+    chip = header_defines(target["chip_dir"] / "sdk" / "bl_target.h")
+    ram_base = 0x20000000
+    props = [
+        f"build.flash_total={board['BL_BOARD_FLASH_SIZE']}",
+        f"build.flash_length={board['BL_BOARD_BASELINE_MAX']}",
+        f"upload.maximum_size={board['BL_BOARD_BASELINE_MAX']}",
+        f"build.fs_start={board['BL_BOARD_FS_START']}",
+        f"build.fs_end={board['BL_BOARD_FS_END']}",
+        f"build.eeprom_start={board['BL_BOARD_EEPROM_START']}",
+        # The heap ends where Baseline's kept 4 KB start, below the sketch RAM window.
+        f"build.ram_length={(chip['BL_RP2_KEEP_BASE'] - ram_base) // 1024}k",
+    ]
+    # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
+    # The staging folder too: arduino-cli does not copy .inc files into its build folder.
+    inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))
+    # An empty sketchbook: only arduino-pico's own libraries go into Baseline, never
+    # whatever the user installed (another SdFat or WiFi library would win).
+    user_dir = BUILD_ROOT / "rp2-sketchbook"
+    (user_dir / "libraries").mkdir(parents=True, exist_ok=True)
+    os.environ["ARDUINO_DIRECTORIES_USER"] = str(user_dir)
+    cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"], "--build-path", str(build_path),
+           "--build-property", f"compiler.c.extra_flags={inc}",
+           "--build-property", f"compiler.cpp.extra_flags={inc}"]
+    for prop in props:
+        cmd += ["--build-property", prop]
+    run(cmd + ["--warnings", "default", str(sketch)])
+    uf2 = build_path / "baseline.ino.uf2"
+    out = DIST / target["name"] / f"baseline-{target['name']}.uf2"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(uf2, out)
+    print(f"Baseline image: {out.relative_to(WORK)} (UF2: drop it on the board's USB drive in BOOTSEL mode)")
+    if flash:
+        # arduino-pico's uploader opens the port at 1200 baud: its USB serial (Baseline's
+        # console) then reboots into the boot ROM, and the .uf2 is copied to its drive.
+        run([find_arduino_cli(), "upload", "--fqbn", target["fqbn"], "--input-dir", str(build_path),
+             "-p", find_port(port), str(sketch)])
+
+
 def find_arduino_cli():
     env = os.environ.get("FLICK_ARDUINO_CLI")
     if env:
@@ -1842,9 +2009,29 @@ def board_target(port=None):
     return LEGACY_TARGETS.get(board, board)
 
 
+def unpack(url, dest):
+    """Download an archive (kept in ~/.flick/downloads until unpacked) and unpack it into dest."""
+    archive = FLICK_HOME / "downloads" / url.rsplit("/", 1)[1]
+    if not archive.exists():
+        print(f"downloading {archive.name}")
+        download(url, archive)
+    print(f"unpacking into {dest}")
+    if archive.name.endswith(".zip"):
+        import zipfile
+        with zipfile.ZipFile(archive) as z:
+            z.extractall(dest)
+    else:
+        import tarfile
+        with tarfile.open(archive) as t:
+            # "tar" filter: keep the toolchain's symlinks, refuse paths outside dest
+            t.extractall(dest, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
+    archive.unlink()
+
+
 def cmd_setup(args):
-    """Download the compiler for the targets' chips (Xtensa: ESP32, S3; RISC-V: the rest).
-    Without -t: for the plugged-in board, else for every chip. Installs pyserial if missing."""
+    """Download the compiler for the targets' chips (Espressif's Xtensa or RISC-V GCC for the
+    ESP32 family; arduino-pico's for the RP2040/RP2350). Without -t: for the plugged-in
+    board, else for every chip. Installs pyserial if missing."""
     try:
         import serial  # noqa: F401
     except ImportError:
@@ -1860,33 +2047,32 @@ def cmd_setup(args):
             print("no board with Baseline answered, so installing the compilers for every chip "
                   "(or plug in the board and run setup again)")
             names = target_names()
-    needed = sorted({"xtensa-esp-elf" if load_target(t)["gcc"].startswith("xtensa") else "riscv32-esp-elf"
-                     for t in names})
+    targets = [load_target(t) for t in names]
     host, ext = toolchain_host()
+    # Espressif's GCC (the ESP32 family)
+    esp = sorted({"xtensa-esp-elf" if t["gcc"].startswith("xtensa") else "riscv32-esp-elf"
+                  for t in targets if t["gcc"].startswith(("xtensa", "riscv32-esp"))})
     dest = TOOLS_HOME / TOOLCHAIN_RELEASE
-    for name in needed:
+    for name in esp:
         if (dest / name / "bin").is_dir():
             print(f"{name}: already installed in {dest / name}")
             continue
-        url = TOOLCHAIN_URL.format(rel=TOOLCHAIN_RELEASE, name=name, host=host, ext=ext)
-        archive = FLICK_HOME / "downloads" / url.rsplit("/", 1)[1]
-        if not archive.exists():
-            print(f"downloading {name} ({url.rsplit('/', 1)[1]})")
-            download(url, archive)
-        print(f"unpacking into {dest}")
-        if ext == "zip":
-            import zipfile
-            with zipfile.ZipFile(archive) as z:
-                z.extractall(dest)
-        else:
-            import tarfile
-            with tarfile.open(archive) as t:
-                # "tar" filter: keep the toolchain's symlinks, refuse paths outside dest
-                t.extractall(dest, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
-        archive.unlink()
-    for t in names:
-        target = load_target(t)
-        print(f"  {t}: {find_gcc(target)}")
+        unpack(TOOLCHAIN_URL.format(rel=TOOLCHAIN_RELEASE, name=name, host=host, ext=ext), dest)
+    # An Arduino core's own GCC (chip.json "gcc_download"), unless that core is installed
+    for t in {t["chip"]: t for t in targets if t.get("gcc_download")}.values():
+        dl = t["gcc_download"]
+        if package_gcc(t) or (TOOLS_HOME / dl["release"]).is_dir():
+            print(f"{t['gcc']} for {t['chip']}: already installed")
+            continue
+        if host not in dl["files"]:
+            sys.exit(f"error: no {t['gcc']} download for this computer ({host}). Install the Arduino core "
+                     f"for {t['chip']} with the Arduino IDE instead.")
+        unpack(dl["url"].format(file=dl["files"][host]), TOOLS_HOME / dl["release"])
+    for t in targets:
+        try:
+            print(f"  {t['name']}: {find_gcc(t)}")
+        except SystemExit as e:     # a compiler setup can't download (Teensyduino's)
+            print(f"  {t['name']}: {e}")
     print(f"done: try  {FLICK_CMD} upload examples/01_basics/01_hello_flick -m")
 
 
@@ -2164,6 +2350,8 @@ def cmd_baseline(args):
     print(f"target {target['name']}: {target['description']}")
     if target.get("builder") == "teensy":
         return build_baseline_teensy(target, args.action == "flash")
+    if target.get("builder") == "rp2":
+        return build_baseline_rp2(target, args.action == "flash", args.port)
     core = esp32_core_for(target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)

@@ -92,7 +92,11 @@ static inline void esp_deep_sleep_start(void) { bl_sleep_deep(); for (;;) {} }
 static inline void esp_deep_sleep(uint64_t time_in_us) { esp_sleep_enable_timer_wakeup(time_in_us); esp_deep_sleep_start(); }
 static inline esp_err_t esp_light_sleep_start(void) { return bl_to_esp(bl_sleep_light()); }
 
+#endif /* BL_PLATFORM_ESP32 */
+
 /* ---------------- time and NTP ---------------- */
+/* Arduino-ESP32's names, kept where they work: every board that keeps the date and time. */
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
 
 /* Start NTP (WiFi must be connected) and set the time zone by offsets, or by a
  * POSIX TZ string such as "EST5EDT,M3.2.0,M11.1.0". */
@@ -111,7 +115,7 @@ static inline void configTzTime(const char *tz, const char *server1, const char 
 #endif /* BL_HAS_WIFI */
 /* Wait up to ms for the clock to be set, then fill info with the local time. */
 bool getLocalTime(struct tm *info, uint32_t ms = 5000);
-#endif /* BL_PLATFORM_ESP32 */
+#endif /* BL_PLATFORM_ESP32 || BL_PLATFORM_RP2 */
 
 /* ---------------- timers ---------------- */
 

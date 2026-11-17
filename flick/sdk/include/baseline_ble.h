@@ -22,6 +22,9 @@
 typedef int esp_err_t;      /* also in baseline_system.h and baseline_espnow.h */
 #define ESP_OK 0
 #endif
+#ifndef ESP_FAIL
+#define ESP_FAIL (-1)              /* BLEDevice::setMTU() returns these, as in Arduino-ESP32 */
+#endif
 
 #define BLE_ADDR_PUBLIC 0
 #define BLE_ADDR_RANDOM 1

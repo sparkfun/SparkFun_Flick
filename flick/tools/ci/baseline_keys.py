@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Cache keys for CI's Baseline builds (.github/workflows/baseline.yml).
 
-Prints JSON: {"targets": [...], "esp": [...], "teensy": [...], "keys": {target: key},
-"all": key}. "esp" and "teensy" split the targets by builder. A target's
+Prints JSON: {"targets": [...], "esp": [...], "teensy": [...], "rp2": [...], "keys": {target: key},
+"all": key}. "esp", "teensy" and "rp2" split the targets by builder. A target's
 key hashes every file its Baseline build reads: the shared sources and tools,
 plus its own targets/<target>/ folder. "all" hashes every target's key, so one
 cache entry can hold every Baseline and a run where nothing changed restores
@@ -46,8 +46,9 @@ def main():
         chip = json.loads((ROOT / "targets" / t / "target.json").read_text())["chip"]
         return json.loads((ROOT / "chips" / chip / "chip.json").read_text()).get("builder")
     teensy = [t for t in targets if builder(t) == "teensy"]
-    esp = [t for t in targets if t not in teensy]
-    print(json.dumps({"targets": targets, "esp": esp, "teensy": teensy, "keys": keys,
+    rp2 = [t for t in targets if builder(t) == "rp2"]
+    esp = [t for t in targets if t not in teensy and t not in rp2]
+    print(json.dumps({"targets": targets, "esp": esp, "teensy": teensy, "rp2": rp2, "keys": keys,
                       "all": f"baseline-{VERSION}-all-{every}"}))
 
 

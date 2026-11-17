@@ -155,26 +155,35 @@ WRAPPER_PREFIX_REQUIRES = [
     (("touch_",), "BL_HAS_TOUCH"),
     (("dac_",), "BL_HAS_DAC"),
     (("usb_",), "BL_HAS_USB_DEVICE"),
-    (("i2s_", "rgb_", "led_strip_"), "BL_PLATFORM_ESP32"),
+    (("i2s_",), "BL_PLATFORM_ESP32"),
+    (("rgb_", "led_strip_"), ("BL_PLATFORM_ESP32", "BL_PLATFORM_RP2")),    # WS2812s: RMT, or PIO
     (("audio_",), "BL_HAS_AUDIO"),
     (("isr_", "dma_channel_"), "BL_TARGET_SKETCH_ISR"),
 ]
 # Arduino-ESP32 names (not bl_*) that would mislead elsewhere.
 WRAPPER_NAME_REQUIRES = {
-    "analogReadMilliVolts": "BL_PLATFORM_ESP32", "rgbLedWrite": "BL_PLATFORM_ESP32",
+    "analogReadMilliVolts": "BL_PLATFORM_ESP32",
+    "rgbLedWrite": ("BL_PLATFORM_ESP32", "BL_PLATFORM_RP2"),     # works on any WS2812 there, so the name is kept
     "ps_malloc": "BL_PLATFORM_ESP32", "ps_calloc": "BL_PLATFORM_ESP32", "ps_realloc": "BL_PLATFORM_ESP32",
     "temperatureRead": "BL_PLATFORM_ESP32",
 }
+
+
+def requires_expr(macros):
+    """A macro, or a tuple of macros any one of which will do, as a #if expression."""
+    if isinstance(macros, str):
+        macros = (macros,)
+    return " || ".join(f"defined({m})" for m in macros)
 
 
 def wrapper_requires(e):
     if e.field == "usb_devices":
         return None     # for Baseline's INFO, not a sketch feature
     if e.wrapper in WRAPPER_NAME_REQUIRES:
-        return f"defined({WRAPPER_NAME_REQUIRES[e.wrapper]})"
+        return requires_expr(WRAPPER_NAME_REQUIRES[e.wrapper])
     for prefixes, macro in WRAPPER_PREFIX_REQUIRES:
         if e.field.startswith(prefixes):
-            return f"defined({macro})"
+            return requires_expr(macro)
     return None
 
 

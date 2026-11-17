@@ -366,7 +366,7 @@ static inline int analogRead(int pin) { return BL->adc_read(pin); }
 /* Read a pin's voltage in millivolts, or BL_ERR_*. */
 static inline int analogReadMilliVolts(int pin) { return BL->adc_read_mv(pin); }
 #endif
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
 /* Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. */
 static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL->rgb_write(pin, red, green, blue); }
 #endif
@@ -1026,7 +1026,7 @@ static inline int bl_i2s_write(const uint8_t *data, size_t len) { return BL->i2s
 /* Read samples. Returns bytes read. */
 static inline int bl_i2s_read(uint8_t *buf, size_t size) { return BL->i2s_read(buf, size); }
 #endif
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
 /* Send bytes (already in the strip's color order) to a WS2812-type strip (BL_STRIP_*). */
 static inline int bl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len) { return BL->led_strip_write(pin, chipset, data, len); }
 #endif

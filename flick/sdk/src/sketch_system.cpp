@@ -311,7 +311,10 @@ bool esp_timer_is_active(esp_timer_handle_t h)
     return h && bl_timer_active(FROM_HANDLE(h)->h);
 }
 
+#endif /* BL_PLATFORM_ESP32 */
+
 /* ---- time ---- */
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
 
 bool getLocalTime(struct tm *info, uint32_t ms)
 {
@@ -327,7 +330,7 @@ bool getLocalTime(struct tm *info, uint32_t ms)
     return true;
 }
 
-#endif /* BL_PLATFORM_ESP32 */
+#endif /* BL_PLATFORM_ESP32 || BL_PLATFORM_RP2 */
 /* ---- tone ---- */
 
 static uint64_t s_tone_pins;    // pins tone() attached to LEDC

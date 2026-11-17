@@ -57,7 +57,7 @@ This folder is all you need, whether you downloaded this repository or the small
 
 ### 1. Put Baseline on the board, and try it (once)
 
-Open **[the Flick web page](https://sparkfun.github.io/SparkFun_Flick/)** in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. You'll only do this again when you want a newer Baseline. The same page runs the examples on your board with nothing installed: start with **01_hello_flick**.
+Open **[the Flick web page](https://sparkfun.github.io/SparkFun_Flick/)** in Chrome or Edge, plug in the board, pick it from the list and press **Flash**. You'll only do this again when you want a newer Baseline. On an RP2040 or RP2350 board, hold the **BOOTSEL** button while you plug it in the first time; later updates don't need it. The same page runs the examples on your board with nothing installed: start with **01_hello_flick**.
 
 ### 2. Open this folder in VS Code
 
@@ -72,7 +72,7 @@ Install **[Python 3](https://www.python.org/downloads/)** (on Windows, tick "Add
 
 ### 3. Install the compiler (once)
 
-With the board plugged in, press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then **Setup: install the compiler (once)**. It downloads Espressif's compiler for your board's chip (170 to 670 MB) into `~/.flick`. If you already have the Arduino IDE with the ESP32 boards installed, Flick can use that compiler instead and you can skip this step.
+With the board plugged in, press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then **Setup: install the compiler (once)**. It downloads the compiler for your board's chip into `~/.flick`: Espressif's for the ESP32 boards (170 to 670 MB), arduino-pico's for the RP2040 and RP2350 boards (130 MB). If you already have the Arduino IDE with your board's core installed (ESP32 or Raspberry Pi Pico/RP2040/RP2350), Flick can use that compiler instead and you can skip this step.
 
 ### 4. Try an example
 
@@ -185,7 +185,7 @@ Every sketch records the ABI it was built for. If you load a sketch onto a Basel
 
 ## License
 
-Flick's own code is in the public domain ([the Unlicense](LICENSE)). The Baseline firmware images also contain ESP-IDF, Arduino-ESP32 and other projects under their own licenses: see [THIRD_PARTY_NOTICES.md](flick/THIRD_PARTY_NOTICES.md).
+Flick's own code is in the public domain ([the Unlicense](LICENSE)). The Baseline firmware images also contain ESP-IDF, Arduino-ESP32, arduino-pico and other projects under their own licenses: see [THIRD_PARTY_NOTICES.md](flick/THIRD_PARTY_NOTICES.md).
 
 ## Working on Flick itself
 

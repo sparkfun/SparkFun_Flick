@@ -1,7 +1,9 @@
 // runner.js - flash Baseline and run Flick's examples from the browser (Web Serial, Chrome/Edge).
 //
 // Flash buttons (button.flash, data-target/-chip/-flash-mb) write the parts in
-// manifests/<target>.json with esptool-js; see flashBoard().
+// manifests/<target>.json with esptool-js; see flashBoard(). On RP2040/RP2350
+// boards (button.flash.rp2) they write firmware/<target>/baseline-<target>.uf2
+// through the boot ROM; see flashRp2().
 //
 // Running an example:
 // Speaks the same line protocol as `flick upload` (baseline/src/loader_proto.h):
@@ -23,6 +25,7 @@ const UPLOAD_BAUD = 921600;    // a UART console runs at this for an upload (@BS
 const ESPRESSIF = 0x303a, USB_SERIAL_JTAG = 0x1001;
 const USB_SERIAL_CHIPS = [0x1a86, 0x10c4, 0x0403];     // CH340, CP210x, FTDI (the classic ESP32 boards)
 const PJRC = 0x16c0;                                   // Teensy (its USB serial while Baseline runs)
+const RP2_VIDS = [0x2e8a, 0x1b4f];                     // Raspberry Pi, SparkFun: RP2040/RP2350 boards running Baseline
 const GROUPS = {
   "01_basics": "Basics", "02_hardware": "Hardware", "03_wifi": "WiFi", "04_bluetooth": "Bluetooth",
   "05_storage": "Storage", "06_power_and_usb": "Power and USB", "07_updates": "Updates",
@@ -45,11 +48,12 @@ class Link {
   async open(baud) {
     await this.port.open({ baudRate: baud, bufferSize: 65536 });
     // Release RTS before DTR, so the reset circuit never sees RTS alone (that resets
-    // the chip). A TinyUSB port (S3 in USB device mode) needs DTR to send anything.
+    // the chip). A TinyUSB port (S3 in USB device mode) and an RP2040/RP2350's USB
+    // serial (arduino-pico) need DTR to send anything.
     const info = this.port.getInfo();
     const tinyusb = info.usbVendorId === ESPRESSIF && info.usbProductId !== USB_SERIAL_JTAG;
     await this.port.setSignals({ requestToSend: false });
-    await this.port.setSignals({ dataTerminalReady: tinyusb });
+    await this.port.setSignals({ dataTerminalReady: tinyusb || RP2_VIDS.includes(info.usbVendorId) });
     this.writer = this.port.writable.getWriter();
     this.reader = this.port.readable.getReader();
     this.done = this.readLoop();
@@ -176,7 +180,7 @@ async function connect() {
   let port;
   try {
     port = await navigator.serial.requestPort({
-      filters: [ESPRESSIF, ...USB_SERIAL_CHIPS, PJRC].map((v) => ({ usbVendorId: v })),
+      filters: [ESPRESSIF, ...USB_SERIAL_CHIPS, PJRC, ...RP2_VIDS].map((v) => ({ usbVendorId: v })),
     });
   } catch (e) {
     chooserError(e, setStatus);
@@ -738,6 +742,292 @@ async function flashBoard(btn) {
   }
 }
 
+// ---- RP2040 / RP2350 -----------------------------------------------------
+//
+// The boot ROM (BOOTSEL mode) shows a USB drive and, next to it, PICOBOOT: a
+// vendor interface picotool uses. The page writes the .uf2's blocks to flash
+// through it with WebUSB: erase, write and read back each run of 4 KB sectors,
+// then reboot. A board that runs Baseline (arduino-pico) gets there without
+// the button: its USB serial reboots into the boot ROM when the port is opened
+// at 1200 baud and closed. Where WebUSB can't open the device (the RP2040's
+// boot ROM on Windows has no driver for it), the page saves the .uf2 onto the
+// boot drive instead.
+
+const RP2_BOOT = { 0x0003: { chip: "RP2040", family: 0xe48bff56 }, 0x000f: { chip: "RP2350", family: 0xe48bff59 } };
+const UF2_ABSOLUTE = 0xe48bff57;       // RP2350 erratum E10 workaround block: not part of the image
+const PICOBOOT_MAGIC = 0x431fd10b;
+
+function uf2Blocks(buf) {
+  const v = new DataView(buf), blocks = [];
+  for (let i = 0; i + 512 <= buf.byteLength; i += 512) {
+    if (v.getUint32(i, true) !== 0x0a324655 || v.getUint32(i + 4, true) !== 0x9e5d5157) {
+      throw new Error("the .uf2 is damaged (bad block magic)");
+    }
+    const flags = v.getUint32(i + 8, true), size = v.getUint32(i + 16, true);
+    if (flags & 1) continue;                               // "not main flash"
+    blocks.push({
+      addr: v.getUint32(i + 12, true),
+      family: flags & 0x2000 ? v.getUint32(i + 28, true) : 0,
+      data: new Uint8Array(buf, i + 32, size),
+    });
+  }
+  return blocks;
+}
+
+class Picoboot {
+  constructor(dev) { this.dev = dev; this.token = 1; }
+
+  async open() {
+    const dev = this.dev;
+    await dev.open();
+    if (!dev.configuration) await dev.selectConfiguration(1);
+    for (const itf of dev.configuration.interfaces) {
+      const alt = itf.alternates[0];
+      if (alt.interfaceClass === 0xff && alt.endpoints.length === 2) {
+        this.itf = itf.interfaceNumber;
+        this.epOut = alt.endpoints.find((e) => e.direction === "out").endpointNumber;
+        this.epIn = alt.endpoints.find((e) => e.direction === "in").endpointNumber;
+      }
+    }
+    if (this.itf === undefined) throw new Error("the boot ROM has no PICOBOOT interface");
+    await dev.claimInterface(this.itf);
+    await dev.controlTransferOut({ requestType: "vendor", recipient: "interface", request: 0x41, value: 0, index: this.itf });
+  }
+
+  // One command: a 32-byte header, an optional data phase, then the zero-length ack.
+  async cmd(id, args = [], data = null, inLength = 0) {
+    const head = new DataView(new ArrayBuffer(32));
+    head.setUint32(0, PICOBOOT_MAGIC, true);
+    head.setUint32(4, this.token++, true);
+    head.setUint8(8, id);
+    head.setUint8(9, args.length * 4);
+    head.setUint32(12, data ? data.length : inLength, true);
+    args.forEach((a, i) => head.setUint32(16 + 4 * i, a >>> 0, true));
+    const check = (r, what) => {
+      if (r.status !== "ok") throw new Error(`PICOBOOT ${what} (command 0x${id.toString(16)}): ${r.status}`);
+      return r;
+    };
+    check(await this.dev.transferOut(this.epOut, head.buffer), "header");
+    let result = null;
+    if (data) check(await this.dev.transferOut(this.epOut, data), "data");
+    if (id & 0x80) {
+      result = new Uint8Array(check(await this.dev.transferIn(this.epIn, inLength), "read").data.buffer);
+      check(await this.dev.transferOut(this.epOut, new Uint8Array(0)), "ack");
+    } else {
+      check(await this.dev.transferIn(this.epIn, 1), "ack");
+    }
+    return result;
+  }
+
+  exclusive() { return this.cmd(0x01, [2]); }          // exclusive, and eject the drive
+  exitXip() { return this.cmd(0x06); }
+  erase(addr, size) { return this.cmd(0x03, [addr, size]); }
+  write(addr, bytes) { return this.cmd(0x05, [addr, bytes.length], bytes); }
+  read(addr, size) { return this.cmd(0x84, [addr, size], null, size); }
+  async reboot(chip) {
+    try {
+      if (chip === "RP2350") await this.cmd(0x0a, [0, 200, 0, 0]);    // REBOOT2: normal boot, 200 ms
+      else await this.cmd(0x02, [0, 0, 200]);                        // REBOOT: pc 0 = normal boot
+    } catch (e) {}   // the ack can be lost to the reboot itself
+  }
+}
+
+// The image as runs of whole 4 KB sectors: [{ addr, bytes }].
+function uf2Runs(blocks) {
+  const sectors = new Map();
+  for (const b of blocks) {
+    for (let off = 0; off < b.data.length;) {
+      const a = b.addr + off, base = a & ~0xfff;
+      if (!sectors.has(base)) sectors.set(base, new Uint8Array(4096).fill(0xff));
+      const n = Math.min(b.data.length - off, base + 4096 - a);
+      sectors.get(base).set(b.data.subarray(off, off + n), a - base);
+      off += n;
+    }
+  }
+  const runs = [];
+  for (const base of [...sectors.keys()].sort((x, y) => x - y)) {
+    const last = runs[runs.length - 1];
+    if (last && last.addr + last.sectors.length * 4096 === base) last.sectors.push(sectors.get(base));
+    else runs.push({ addr: base, sectors: [sectors.get(base)] });
+  }
+  return runs;
+}
+
+async function picobootFlash(dev, blocks, wantChip, say) {
+  const boot = RP2_BOOT[dev.productId];
+  if (!boot) throw new Error("that isn't an RP2040 or RP2350 boot ROM");
+  if (boot.chip !== wantChip) {
+    throw new Error(`this board is an ${boot.chip}, and this Baseline is for an ${wantChip}. Pick your board in the menu.`);
+  }
+  const image = blocks.filter((b) => b.family !== UF2_ABSOLUTE);
+  if (image.some((b) => b.family && b.family !== boot.family)) throw new Error(`the .uf2 isn't for an ${boot.chip}`);
+  const pb = new Picoboot(dev);
+  await pb.open();
+  try {
+    await pb.exclusive();
+    if (boot.chip === "RP2040") await pb.exitXip();
+    const runs = uf2Runs(image);
+    const total = runs.reduce((n, r) => n + r.sectors.length, 0);
+    let done = 0;
+    const t0 = performance.now();
+    for (const run of runs) {
+      await pb.erase(run.addr, run.sectors.length * 4096);
+      for (let i = 0; i < run.sectors.length; i++) {
+        const addr = run.addr + i * 4096;
+        await pb.write(addr, run.sectors[i]);
+        const back = await pb.read(addr, 4096);
+        if (!back || back.length !== 4096 || back.some((x, k) => x !== run.sectors[i][k])) {
+          throw new Error(`flash at 0x${addr.toString(16)} doesn't read back what was written`);
+        }
+        say(`Writing ${Math.floor((++done / total) * 100)}%`);
+      }
+    }
+    say("Restarting the board...");
+    await pb.reboot(boot.chip);
+    return ((performance.now() - t0) / 1000).toFixed(0);
+  } finally {
+    try { await dev.close(); } catch (e) {}
+  }
+}
+
+// A board that runs Baseline: open its port at 1200 baud and drop DTR.
+async function rebootToBootRom(port) {
+  await port.open({ baudRate: 1200 });
+  try {
+    await port.setSignals({ dataTerminalReady: true });
+    await sleep(50);
+    await port.setSignals({ dataTerminalReady: false });
+  } finally {
+    try { await port.close(); } catch (e) {}
+  }
+}
+
+// A boot ROM this page may already use (allowed before), plugged in now.
+async function knownBootRom() {
+  if (!("usb" in navigator)) return null;
+  const devs = await navigator.usb.getDevices();
+  return devs.find((d) => d.vendorId === 0x2e8a && RP2_BOOT[d.productId]) || null;
+}
+
+// A button in the status line, and Cancel: true when pressed. A USB chooser
+// needs a click of its own.
+async function askButton(status, text, label) {
+  return !!(await askWhich(status, text, [{ name: label }]));
+}
+
+// No WebUSB (or the device can't be opened): save the .uf2 onto the boot drive.
+async function saveUf2(status, name, buf, chip) {
+  const drive = chip === "RP2350" ? "RP2350" : "RPI-RP2";
+  if (!await askButton(status, `This browser can't write to the board directly. Save the .uf2 onto the ${drive} ` +
+                       "drive that the board shows in BOOTSEL mode; the board installs it and restarts.", "Save the .uf2...")) {
+    return false;
+  }
+  const blob = new Blob([buf], { type: "application/octet-stream" });
+  if (window.showSaveFilePicker) {
+    const handle = await window.showSaveFilePicker({ suggestedName: name });
+    const w = await handle.createWritable();
+    await w.write(blob);
+    await w.close();
+  } else {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+  }
+  return true;
+}
+
+async function flashRp2(btn) {
+  const target = btn.dataset.target, chip = btn.dataset.chip;
+  const status = btn.parentElement.querySelector(".flash-status");
+  const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
+  if (!needs("serial")) return;
+  if (state.busy) { say("Busy: wait for the upload or flash in progress to finish.", "bad"); return; }
+  if (state.link) await disconnect();
+  state.busy = true;
+  render();
+  for (const b of document.querySelectorAll("button.flash")) b.disabled = true;
+  let port = null;
+  try {
+    const name = `baseline-${target}.uf2`;
+    const resp = await fetch(`firmware/${target}/${name}`);
+    if (!resp.ok) throw new Error(`can't download ${name} (${resp.status})`);
+    const buf = await resp.arrayBuffer();
+    const blocks = uf2Blocks(buf);
+
+    let dev = await knownBootRom();
+    if (!dev) {
+      // Running Baseline: pick its port and it restarts into the boot ROM.
+      say("Pick the board's port. Not listed? Hold BOOTSEL while you plug the board in, then press Cancel.");
+      try {
+        port = await navigator.serial.requestPort({ filters: RP2_VIDS.map((v) => ({ usbVendorId: v })) });
+      } catch (e) {
+        if (e && e.name !== "NotFoundError") throw e;
+      }
+      if (port) {
+        say("Restarting the board into its boot ROM...");
+        try {
+          await rebootToBootRom(port);
+        } catch (e) {
+          throw new Error(`can't open the port (${e.message}). Close any other tab or program using it, then Flash again.`);
+        }
+        // A boot ROM this page was allowed before comes back by itself; else the user picks it.
+        const allowed = "usb" in navigator && (await navigator.usb.getDevices()).some((d) => RP2_BOOT[d.productId]);
+        for (let i = 0; i < (allowed ? 10 : 3) && !dev; i++) {
+          await sleep(500);
+          dev = await knownBootRom();
+        }
+      }
+    }
+    if (!dev && "usb" in navigator) {
+      if (!await askButton(status, port ? "The board is in its boot ROM now." :
+                           "Hold BOOTSEL while you plug the board in (or hold BOOTSEL and press RESET).", "Choose the board")) {
+        say("Cancelled.");
+        return;
+      }
+      try {
+        dev = await navigator.usb.requestDevice({ filters: Object.keys(RP2_BOOT).map((p) => ({ vendorId: 0x2e8a, productId: Number(p) })) });
+      } catch (e) {
+        if (e && e.name === "NotFoundError") { say("No board picked. Is it in BOOTSEL mode (a drive named RP2350 or RPI-RP2)?"); return; }
+        throw e;
+      }
+    }
+    let secs = null;
+    if (dev) {
+      say("Writing Baseline...");
+      try {
+        secs = await picobootFlash(dev, blocks, chip, say);
+      } catch (e) {
+        if (!/SecurityError|Access denied|Unable to claim|open/i.test(`${e.name} ${e.message}`)) throw e;
+        log(`--- WebUSB can't use the boot ROM (${e.message}): saving the .uf2 instead`, "note");
+        dev = null;
+      }
+    }
+    if (!dev) {
+      if (!await saveUf2(status, name, buf, chip)) { say("Cancelled."); return; }
+      say("Saved. The board installs it and restarts in a few seconds.", "good");
+    } else {
+      say(`Done in ${secs} s. Connecting...`, "good");
+    }
+    showBoard(target);
+    const line = [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === target)
+      .querySelector(".flash-status");
+    const msg = dev ? `Done in ${secs} s.` : "Saved: the board installs it and restarts.";
+    let ok = false;
+    if (port) ok = await connectAfterFlash(port);
+    line.textContent = `${msg} ${ok ? "Connected: its examples are below." : "Press Connect below to try the examples."}`;
+    line.className = "flash-status good";
+  } catch (e) {
+    if (e && e.name === "AbortError") say("Cancelled.");      // the save dialog was closed
+    else say(`Failed: ${e.message}`, "bad");
+  } finally {
+    state.busy = false;
+    for (const b of document.querySelectorAll("button.flash")) b.disabled = false;
+    render();
+  }
+}
+
 // ---- browser check -------------------------------------------------------
 
 // Flashing and running examples are tested only in desktop Chrome and Edge.
@@ -834,7 +1124,7 @@ async function init() {
   $("connect").onclick = connect;
   $("send-form").onsubmit = sendInput;
   $("clear").onclick = () => { $("console").textContent = ""; };
-  for (const b of document.querySelectorAll("button.flash")) b.onclick = () => flashBoard(b);
+  for (const b of document.querySelectorAll("button.flash")) b.onclick = () => (b.classList.contains("rp2") ? flashRp2(b) : flashBoard(b));
   for (const b of document.querySelectorAll("button.teensy-flash")) b.onclick = () => flashTeensy(b);
   for (const b of document.querySelectorAll("button.teensy-reboot")) b.onclick = () => rebootTeensy(b);
   try {

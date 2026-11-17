@@ -390,7 +390,7 @@ extern EspClass ESP;
 /* sleep, time/NTP, Ticker / hw_timer / esp_timer, tone */
 #include "baseline_system.h"
 /* FastLED-compatible LED strips */
-#if defined(BL_PLATFORM_ESP32)
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
 #include "baseline_fastled.h"
 #endif
 /* USB keyboard / mouse / gamepad / media keys / MIDI (ESP32-S3) */
