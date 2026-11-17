@@ -48,5 +48,6 @@ jobs:
           python flick/tools/ci/build_examples.py
           thing_plus_esp32 thing_plus_esp32s3 pro_micro_esp32c3
           thing_plus_esp32c6 thing_plus_esp32c5 iot_redboard_esp32p4_poe
+          iot_redboard_esp32p4_wifi
       - name: Sketch kit
         run: python flick.py package

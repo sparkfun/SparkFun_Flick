@@ -110,7 +110,8 @@ a line from flick saying why. Compat headers for a missing feature stop with
 |---|---|---|
 | `BL_PLATFORM_ESP32` | every ESP32 chip | Arduino-ESP32 / ESP-IDF names: `esp_*` (sleep, timer, random, restart, reset reason, ESP-NOW), `ESP`, `ESP_LOGx`/`log_x`, `ledc*`, `hw_timer`, `ps_malloc`, `psramFound`, `temperatureRead`, `analogReadMilliVolts`, attenuation, I2S, `SD_MMC`, `rgbLedWrite`, FastLED |
 | `BL_PLATFORM_TEENSY` | Teensy 4.0, 4.1 | Teensyduino names (below) |
-| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6 | WiFi, HTTP, web server, DNS, mDNS, MQTT, ESP-NOW, WiFi OTA, NTP |
+| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE) | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
+| `BL_HAS_ESPNOW` | ESP32, S3, C3, C5, C6 (not through ESP-Hosted) | ESP-NOW |
 | `BL_HAS_BLE` | ESP32, S3, C3, C5, C6 | `BLESerial`, the BLE library |
 | `BL_HAS_BT_CLASSIC` | classic ESP32 | `BluetoothSerial` |
 | `BL_HAS_TOUCH` | ESP32, S3 | `touchRead`, `T0`... |

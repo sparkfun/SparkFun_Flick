@@ -1,0 +1,11 @@
+{
+    "chip": "esp32p4",
+    "description": "SparkFun IoT RedBoard - ESP32-P4 (WiFi BLE): Arduino R3 form factor, ESP32-P4 rev 3, 16 MB flash, 32 MB PSRAM, ESP32-C5 co-processor for WiFi 6 and BLE (ESP-Hosted over SDIO), native USB",
+    "flash_size": "16MB",
+    "idf_dependencies": {
+        "espressif/esp_hosted": "==2.12.11",
+        "espressif/esp_wifi_remote": "==1.6.3"
+    },
+    "idf_dependencies_note": "Exactly the versions Arduino-ESP32 3.3.11's P4 libraries were built with (tools/esp32p4-libs/3.3.11/versions.txt): its hosted glue (esp32-hal-hosted.c) is written for them. Change together with core_version.",
+    "status": "bring-up"
+}

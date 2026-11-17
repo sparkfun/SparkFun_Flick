@@ -44,7 +44,9 @@
 #include "bl_state.h"
 #include "bl_update.h"
 #include "sketch_loader.h"
-#if SOC_WIFI_SUPPORTED
+#include "bl_radio.h"
+#include "bl_hosted.h"
+#if BL_RADIO_WIFI
 #include <WiFi.h>
 #endif
 
@@ -732,7 +734,10 @@ static void confirm_cb(void *arg)
 
 static bool wifi_up(void)
 {
-#if SOC_WIFI_SUPPORTED
+#if BL_RADIO_WIFI
+    if (!bl_hosted_ready()) {
+        return false;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.begin();       // the network the WiFi driver saved when the sketch connected
     uint32_t start = millis();

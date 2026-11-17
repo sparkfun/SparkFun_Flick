@@ -6,6 +6,7 @@
 #include "bl_update.h"
 #include "sketch_loader.h"
 #include "gen/bl_impl.h"
+#include "bl_hosted.h"
 
 void bl_main(void)
 {
@@ -19,6 +20,7 @@ void bl_main(void)
     digitalWrite(BL_BOARD_EN_3V3_SW, HIGH);
 #endif
     bl_usb_boot(bl_state_safe_mode_reason() != NULL);     // USB device mode, if the sketch asked for it
+    bl_hosted_start();      // the WiFi/BLE co-processor's link, on boards that have one
 
     BLOG_I("Baseline %s, ABI %d.%d, %s (%s), reset reason %d, free heap %u",
            BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP_NAME, BL_BOARD_NAME, (int)esp_reset_reason(),

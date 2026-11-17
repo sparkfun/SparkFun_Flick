@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "bl_hosted.h"
 #include "sdkconfig.h"
 #include "esp_system.h"
 #include "esp_idf_version.h"
@@ -115,13 +116,18 @@ static void cmd_info(void)
     if (bl_impl_last_crash(crash, sizeof(crash)) <= 0) {
         strcpy(crash, "-");
     }
+    // coproc: the WiFi/BLE co-processor's chip and firmware, on boards with one.
+    char coproc[64] = "";
+    if (bl_hosted_info()) {
+        snprintf(coproc, sizeof(coproc), " coproc=\"%s\"", bl_hosted_info());
+    }
     OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=%u reset=%d update=%s "
-       "bpart=%s core=%s idf=%d.%d.%d crash=\"%s\"",
+       "bpart=%s core=%s idf=%d.%d.%d%s crash=\"%s\"",
        BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + bl_state_active_slot(),
        sketch_name()[0] ? sketch_name() : "-", sketch_status(), safe ? "yes" : "no",
        (unsigned)bl_impl_usb_devices(), bl_impl_reset_reason(), bl_update_mode_name(),
        esp_ota_get_running_partition()->label, ESP_ARDUINO_VERSION_STR,
-       ESP_IDF_VERSION_MAJOR, ESP_IDF_VERSION_MINOR, ESP_IDF_VERSION_PATCH, crash);
+       ESP_IDF_VERSION_MAJOR, ESP_IDF_VERSION_MINOR, ESP_IDF_VERSION_PATCH, coproc, crash);
 }
 
 static void cmd_begin(char *args)

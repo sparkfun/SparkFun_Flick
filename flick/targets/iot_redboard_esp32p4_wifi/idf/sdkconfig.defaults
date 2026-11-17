@@ -1,0 +1,40 @@
+# iot_redboard_esp32p4_wifi, on top of the chip's sdkconfig.defaults.
+# Arduino's generic P4 variant: its microSD power settings (slot 0, on-chip LDO
+# channel 4, power switch on GPIO 45 active low) match this board. Baseline
+# takes its default pins from sdk/bl_board.h.
+CONFIG_ARDUINO_VARIANT="esp32p4"
+
+# WiFi and BLE come from the ESP32-C5 beside the P4, over ESP-Hosted on SDIO
+# slot 1 (4-bit; slot 0 is the microSD card). Pins from the board's schematic.
+CONFIG_ESP_HOSTED_ENABLED=y
+CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE=y
+CONFIG_SLAVE_IDF_TARGET_ESP32C5=y
+CONFIG_ESP_HOSTED_CP_TARGET_ESP32C5=y
+CONFIG_ESP_HOSTED_SDIO_SLOT_1=y
+CONFIG_ESP_HOSTED_SDIO_4_BIT_BUS=y
+CONFIG_ESP_HOSTED_SDIO_PIN_CLK=16
+CONFIG_ESP_HOSTED_SDIO_PIN_CMD=17
+CONFIG_ESP_HOSTED_SDIO_PIN_D0=15
+CONFIG_ESP_HOSTED_SDIO_PIN_D1=14
+CONFIG_ESP_HOSTED_SDIO_PIN_D2=19
+CONFIG_ESP_HOSTED_SDIO_PIN_D3=18
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CLK_SLOT_1=16
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_CMD_SLOT_1=17
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D0_SLOT_1=15
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D1_4BIT_BUS_SLOT_1=14
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D2_4BIT_BUS_SLOT_1=19
+CONFIG_ESP_HOSTED_PRIV_SDIO_PIN_D3_4BIT_BUS_SLOT_1=18
+# GPIO 20 high pulls the C5's EN low through a transistor (Q4), so the C5 runs
+# while GPIO 20 is low. ESP-Hosted calls the running level "active": low here.
+# (Espressif's dev board wires its reset pin straight to EN: active high.)
+# CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_HIGH is not set
+CONFIG_ESP_HOSTED_SDIO_RESET_ACTIVE_LOW=y
+CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE=20
+CONFIG_ESP_HOSTED_GPIO_SLAVE_RESET_SLAVE=20
+
+# BLE: NimBLE on the P4, the controller on the C5 (HCI over ESP-Hosted), as
+# Arduino-ESP32 builds it. The chip's defaults leave Bluetooth out.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_CONTROLLER_DISABLED=y
+CONFIG_ESP_HOSTED_ENABLE_BT_NIMBLE=y

@@ -3,8 +3,9 @@
 #include <Arduino.h>
 #include "soc/soc_caps.h"
 
-#if !SOC_WIFI_SUPPORTED
-/* no WiFi on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "bl_radio.h"
+#if !BL_RADIO_ESPNOW
+/* no ESP-NOW (an ESP32-P4: none of its own, and ESP-Hosted doesn't carry it): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
 #include "gen/bl_impl.h"
 #define BL_STUB_ESPNOW 1
 #include "gen/bl_impl_stubs.inc"
@@ -125,4 +126,4 @@ extern "C" int bl_impl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size)
     return (int)n;
 }
 
-#endif /* SOC_WIFI_SUPPORTED */
+#endif /* BL_RADIO_ESPNOW */

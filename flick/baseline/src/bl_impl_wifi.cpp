@@ -2,14 +2,16 @@
 #include <Arduino.h>
 #include "soc/soc_caps.h"
 
-#if !SOC_WIFI_SUPPORTED
-/* no WiFi on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "bl_radio.h"
+#if !BL_RADIO_WIFI
+/* no WiFi (an ESP32-P4 without a co-processor): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
 #include "gen/bl_impl.h"
 #define BL_STUB_WIFI 1
 #include "gen/bl_impl_stubs.inc"
 #else
 
 #include <WiFi.h>
+#include "bl_hosted.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_mac.h"
@@ -25,6 +27,9 @@ static_assert(BL_WIFI_CONNECTED == WL_CONNECTED && BL_WIFI_DISCONNECTED == WL_DI
 
 extern "C" int bl_impl_wifi_begin(const char *ssid, const char *password)
 {
+    if (!bl_hosted_ready()) {
+        return BL_ERR_FAIL;     // the WiFi co-processor doesn't answer
+    }
     if (!ssid || !*ssid) {
         return BL_ERR_ARG;
     }
@@ -289,6 +294,9 @@ static_assert(BL_WIFI_MODE_OFF == WIFI_MODE_NULL && BL_WIFI_MODE_STA == WIFI_MOD
 
 extern "C" int bl_impl_wifi_set_mode(int mode)
 {
+    if (!bl_hosted_ready()) {
+        return BL_ERR_FAIL;     // the WiFi co-processor doesn't answer
+    }
     if (mode < BL_WIFI_MODE_OFF || mode > BL_WIFI_MODE_AP_STA) {
         return BL_ERR_ARG;
     }
@@ -302,6 +310,9 @@ extern "C" int bl_impl_wifi_get_mode(void)
 
 extern "C" int bl_impl_wifi_softap(const char *ssid, const char *password, int channel, int hidden, int max_clients)
 {
+    if (!bl_hosted_ready()) {
+        return BL_ERR_FAIL;     // the WiFi co-processor doesn't answer
+    }
     if (!ssid || !*ssid || (password && *password && strlen(password) < 8)) {
         return BL_ERR_ARG;
     }
@@ -334,6 +345,9 @@ extern "C" uint32_t bl_impl_wifi_ip(int which)
 
 extern "C" int bl_impl_wifi_scan(void)
 {
+    if (!bl_hosted_ready()) {
+        return BL_ERR_FAIL;     // the WiFi co-processor doesn't answer
+    }
     WdtPause wdt;
     int n = WiFi.scanNetworks();
     return n >= 0 ? n : BL_ERR_FAIL;
@@ -419,4 +433,4 @@ extern "C" int bl_impl_wifi_event_take(void)
     return xQueueReceive(s_events, &e, 0) == pdTRUE ? e : -1;
 }
 
-#endif /* SOC_WIFI_SUPPORTED */
+#endif /* BL_RADIO_WIFI */

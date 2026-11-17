@@ -6,12 +6,14 @@
 #include <Arduino.h>
 #include "soc/soc_caps.h"
 
-#if !SOC_BT_SUPPORTED
-/* no Bluetooth on this chip (ESP32-P4): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
+#include "bl_radio.h"
+#if !BL_RADIO_BLE
+/* no Bluetooth (an ESP32-P4 without a co-processor): every call reports BL_ERR_UNSUPPORTED or "nothing there". */
 #include "gen/bl_impl.h"
 #define BL_STUB_BLE 1
 #include "gen/bl_impl_stubs.inc"
 #else
+#include "bl_hosted.h"
 
 #include "esp_heap_caps.h"
 #include <atomic>
@@ -88,6 +90,9 @@ static bool ensure_init(const char *name)
 {
     if (s_inited) {
         return true;
+    }
+    if (!bl_hosted_ready()) {
+        return false;           // the BLE co-processor doesn't answer
     }
     if (!s_events) {
         s_events = xQueueCreate(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t));
@@ -825,4 +830,4 @@ extern "C" int bl_impl_ble_event_take(bl_ble_event_t *ev)
     return (ev && s_events && xQueueReceive(s_events, ev, 0) == pdTRUE) ? 1 : 0;
 }
 
-#endif /* SOC_BT_SUPPORTED */
+#endif /* BL_RADIO_BLE */

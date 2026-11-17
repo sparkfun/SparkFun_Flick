@@ -118,7 +118,7 @@ static inline long random(long howbig) { return howbig > 0 ? (long)(bl_random() 
 static inline long random(long howsmall, long howbig) { return howsmall >= howbig ? howsmall : howsmall + random(howbig - howsmall); }
 
 #include "baseline_string.h"
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_ESPNOW)
 #include "baseline_espnow.h"
 #endif
 

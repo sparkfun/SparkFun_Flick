@@ -18,6 +18,11 @@
 
 #ifdef __cplusplus
 
+#ifndef ESP_OK
+typedef int esp_err_t;      /* also in baseline_system.h and baseline_espnow.h */
+#define ESP_OK 0
+#endif
+
 #define BLE_ADDR_PUBLIC 0
 #define BLE_ADDR_RANDOM 1
 

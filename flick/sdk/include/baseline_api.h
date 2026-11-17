@@ -424,15 +424,15 @@ static inline int bl_ble_serial_available(void) { return BL->ble_serial_availabl
 /* Read one received byte, or -1. */
 static inline int bl_ble_serial_read(void) { return BL->ble_serial_read(); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_ESPNOW)
 /* Start ESP-NOW (puts WiFi in station mode if needed). */
 static inline int bl_espnow_begin(void) { return BL->espnow_begin(); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_ESPNOW)
 /* Send up to 250 bytes. mac NULL = broadcast. Returns 0 or BL_ERR_*. */
 static inline int bl_espnow_send(const uint8_t *mac, const uint8_t *data, size_t len) { return BL->espnow_send(mac, data, len); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_ESPNOW)
 /* Take the next received packet: copies sender MAC (6 bytes, may be NULL) and data. Returns length, 0 if none. */
 static inline int bl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return BL->espnow_receive(mac, data, size); }
 #endif
@@ -440,7 +440,7 @@ static inline int bl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { 
 /* HTTP(S) request. headers: "Name: value\r\n" lines or NULL. *response gets a malloc'd NUL-terminated body (free with bl_free); may be NULL. Returns HTTP status or BL_ERR_*. */
 static inline int bl_http_request(const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char * *response, size_t *response_len) { return BL->http_request(method, url, headers, body, body_len, response, response_len); }
 #endif
-#if defined(BL_HAS_WIFI)
+#if defined(BL_HAS_ESPNOW)
 /* Take the next delivery report: copies the peer MAC; returns 1 delivered, 0 failed, -1 none pending. */
 static inline int bl_espnow_send_status(uint8_t *mac) { return BL->espnow_send_status(mac); }
 #endif

@@ -23,12 +23,21 @@ static inline bool bl_pin_usable(int pin)
     if (pin == 24 || pin == 25) {
         return false;   // USB-Serial-JTAG: console and sketch upload
     }
+#if CONFIG_ESP_HOSTED_SDIO_HOST_INTERFACE
+    // The SDIO link to the WiFi/BLE co-processor, and its reset line.
+    if (pin == CONFIG_ESP_HOSTED_SDIO_PIN_CLK || pin == CONFIG_ESP_HOSTED_SDIO_PIN_CMD ||
+        pin == CONFIG_ESP_HOSTED_SDIO_PIN_D0 || pin == CONFIG_ESP_HOSTED_SDIO_PIN_D1 ||
+        pin == CONFIG_ESP_HOSTED_SDIO_PIN_D2 || pin == CONFIG_ESP_HOSTED_SDIO_PIN_D3 ||
+        pin == CONFIG_ESP_HOSTED_SDIO_GPIO_RESET_SLAVE) {
+        return false;
+    }
+#endif
     return true;
 }
 
 static inline bool bl_pin_is_adc(int pin)
 {
-    // ADC1: GPIO 16-23; ADC2: GPIO 49-54 (no radio on the P4, so both work)
+    // ADC1: GPIO 16-23; ADC2: GPIO 49-54 (the P4 has no radio of its own, so both work)
     return ((pin >= 16 && pin <= 23) || (pin >= 49 && pin <= 54)) && bl_pin_usable(pin);
 }
 

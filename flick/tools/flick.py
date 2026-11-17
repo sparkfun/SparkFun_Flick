@@ -535,7 +535,7 @@ def teensy_core_dir(gcc):
 FEATURE_NAMES = [
     (r"BLE\w*|BLESerial(Class)?", "Bluetooth LE", "BL_HAS_BLE"),
     (r"BluetoothSerial", "Bluetooth Classic", "BL_HAS_BT_CLASSIC"),
-    (r"esp_now_\w+|ESP_NOW_\w+", "ESP-NOW (the WiFi radio)", "BL_HAS_WIFI"),
+    (r"esp_now_\w+|ESP_NOW_\w+", "ESP-NOW", "BL_HAS_ESPNOW"),
     (r"WiFi\w*|HTTPClient|WebServer|DNSServer|MDNS|PubSubClient|Network\w*|ArduinoOTA|configT(z)?ime|WL_\w+",
      "WiFi", "BL_HAS_WIFI"),
     (r"touch\w+|T[0-9]+", "capacitive touch", "BL_HAS_TOUCH"),
@@ -1596,7 +1596,13 @@ def stage_idf(target, core_dir, libs_dir):
         sync_tree(core_dir / part, arduino / part, skip={"examples"})
     for f in ("CMakeLists.txt", "Kconfig.projbuild"):
         shutil.copy2(core_dir / f, arduino / f)
-    shutil.copy2(idf_src / "arduino_component.yml", arduino / "idf_component.yml")
+    # A target can add components ("idf_dependencies": {"espressif/esp_hosted":
+    # "^2.9.2"}), e.g. the WiFi co-processor driver of a P4 board.
+    manifest = (idf_src / "arduino_component.yml").read_text()
+    for comp, version in target.get("idf_dependencies", {}).items():
+        manifest += f'  {comp}:\n    version: "{version}"\n    require: public\n'
+    if not (arduino / "idf_component.yml").exists() or (arduino / "idf_component.yml").read_text() != manifest:
+        (arduino / "idf_component.yml").write_text(manifest)
 
     # Prebuilt components (idf/prebuilt/<name>): headers and library from
     # Arduino's precompiled libs, Kconfig symbols from its sdkconfig.

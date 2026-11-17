@@ -148,7 +148,8 @@ def fnptr(e, name):
 # Field prefix -> required macro. (ledc_, ps_ and sleep_ stay: the SDK builds
 # Servo, tone() and the Teensy names on them.)
 WRAPPER_PREFIX_REQUIRES = [
-    (("wifi_", "http_", "net_", "tcp_", "udp_", "web_", "mdns_", "mqtt_", "dns_", "ota_", "espnow_"), "BL_HAS_WIFI"),
+    (("wifi_", "http_", "net_", "tcp_", "udp_", "web_", "mdns_", "mqtt_", "dns_", "ota_"), "BL_HAS_WIFI"),
+    (("espnow_",), "BL_HAS_ESPNOW"),
     (("ble_",), "BL_HAS_BLE"),
     (("bt_",), "BL_HAS_BT_CLASSIC"),
     (("touch_",), "BL_HAS_TOUCH"),
