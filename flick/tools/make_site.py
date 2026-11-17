@@ -260,6 +260,7 @@ def main():
   .board .note-small {{ margin: 0 0 8px; }}
   .board button.flash {{ margin-top: 4px; }}
   .flash-status {{ font-size: 12px; color: var(--mute); margin-top: 4px; max-width: 420px; }}
+  .flash-found {{ font-size: 13px; color: var(--ink); margin-top: 6px; max-width: 420px; font-weight: 600; }}
   .flash-status button.choice {{ font-size: 13px; padding: 4px 10px; margin: 6px 6px 0 0; }}
   .flash-status.good {{ color: var(--good); }}
   .flash-status.bad {{ color: var(--bad); }}

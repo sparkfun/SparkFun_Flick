@@ -182,18 +182,24 @@ async function connect() {
     chooserError(e, setStatus);
     return;
   }
+  await attach(port);
+}
+
+// Talk to Baseline on a port the user picked. quiet: no error message when
+// the board doesn't answer (the retries after a flash). True when connected.
+async function attach(port, quiet) {
   setStatus("Connecting...");
   let r;
   try {
     r = await openLink(port);
   } catch (e) {
-    setStatus(`Can't open the port: ${e.message}. Is another program (or the Flash dialog) using it?`, "bad");
-    return;
+    if (!quiet) setStatus(`Can't open the port: ${e.message}. Is another program (or the Flash dialog) using it?`, "bad");
+    return false;
   }
   if (!r) {
-    setStatus("The board doesn't answer. Flash Baseline first (step 1), then connect again.", "bad");
+    if (!quiet) setStatus("The board doesn't answer. Flash Baseline first (step 1), then connect again.", "bad");
     try { await port.close(); } catch (e) {}
-    return;
+    return false;
   }
   state.port = port;
   state.link = r.link;
@@ -211,6 +217,25 @@ async function connect() {
   $("connect").textContent = "Disconnect";
   render();
   watch();
+  return true;
+}
+
+// After a flash the board restarts into Baseline: connect to it without asking
+// again (the browser remembers the port), so its examples show at once. A
+// native USB board comes back as a new port object with the same IDs.
+async function connectAfterFlash(port) {
+  const ids = port.getInfo();
+  for (let i = 0; i < 20 && !state.link; i++) {
+    await sleep(500);
+    const ports = await navigator.serial.getPorts();
+    const again = ports.find((p) => p === port) || ports.find((p) => {
+      const n = p.getInfo();
+      return n.usbVendorId === ids.usbVendorId && n.usbProductId === ids.usbProductId;
+    });
+    if (again && await attach(again, true)) return true;
+  }
+  setStatus("Flashed. Press Connect to try the examples.");
+  return false;
 }
 
 async function disconnect() {
@@ -350,9 +375,26 @@ function render() {
     return;
   }
   list.textContent = "";
-  const target = (state.board && state.board.target) || state.picked;
+  const connected = state.board && state.board.target;
+  const target = connected || state.picked;
+  // Connected: only what runs on this board from here. The page's images are
+  // built without anyone's WiFi network, so WiFi examples come from the kit.
+  const shown = connected
+    ? state.examples.filter((ex) => ex.targets.includes(target) && !ex.wifi)
+    : state.examples;
+  if (connected) {
+    const fit = state.examples.filter((ex) => ex.targets.includes(target));
+    const wifi = fit.filter((ex) => ex.wifi).length;
+    const other = state.examples.length - fit.length;
+    const note = document.createElement("p");
+    note.className = "note-small";
+    note.textContent = `${shown.length} examples run on this board.` +
+      (wifi ? ` ${wifi} more need your WiFi network: build them from the kit.` : "") +
+      (other ? ` ${other} are for other boards.` : "");
+    list.appendChild(note);
+  }
   let group = null, ul = null;
-  for (const ex of state.examples) {
+  for (const ex of shown) {
     if (ex.group !== group) {
       group = ex.group;
       const h = document.createElement("h3");
@@ -366,14 +408,8 @@ function render() {
     const btn = document.createElement("button");
     btn.textContent = "Run";
     const fits = !target || ex.targets.includes(target);
-    // Not disabled while unconnected: a press then says what is missing.
     btn.disabled = state.busy || !fits || ex.wifi;
-    btn.onclick = () => {
-      show(ex);
-      if (!needs("serial")) return;
-      if (!state.link) { setStatus("Press Connect first and pick the board's port, then Run.", "bad"); return; }
-      run(ex);
-    };
+    btn.onclick = () => runPressed(ex);
     const name = document.createElement("a");
     name.href = "#";
     name.textContent = ex.name;
@@ -385,6 +421,22 @@ function render() {
     li.append(btn, " ", name, title);
     ul.appendChild(li);
   }
+}
+
+// Run without a connection: connect first (the port chooser opens), then run
+// the example if it is for the board that answered.
+async function runPressed(ex) {
+  show(ex);
+  if (!needs("serial")) return;
+  if (!state.link) {
+    await connect();
+    if (!state.link) return;                     // no port picked, or no Baseline: connect() said why
+    if (!ex.targets.includes(state.board.target)) {
+      setStatus(`${ex.name} is not for this board: pick one from the list.`, "bad");
+      return;
+    }
+  }
+  run(ex);
 }
 
 async function sendInput(e) {
@@ -474,6 +526,19 @@ async function baselineTarget(port) {
   return r.info.target || null;
 }
 
+// The "Found: ..." line above a Flash button's status: what the chip
+// reported, kept while the status line shows the progress.
+function foundLine(status, text) {
+  let el = status.previousElementSibling;
+  if (!el || !el.classList.contains("flash-found")) {
+    el = document.createElement("div");
+    el.className = "flash-found";
+    status.parentElement.insertBefore(el, status);
+  }
+  el.textContent = text;
+  el.hidden = !text;
+}
+
 // Buttons in the status line, one per board; resolves to the one pressed, or
 // null for Cancel.
 function askWhich(status, text, choices) {
@@ -559,6 +624,9 @@ async function flashBoard(btn) {
         }
         const found = loader.chip.CHIP_NAME;
         const have = await flashSizeMb(loader);      // 0: not readable
+        let module = found;
+        try { module = await loader.chip.getChipDescription(loader); } catch (e) {}
+        foundLine(status, `Found: ${module}, ${have ? `${have} MB flash` : "flash size not readable"}`);
         if (auto && !files) {
           let pick, what;
           if (auto === "sparkfun") {
@@ -581,8 +649,9 @@ async function flashBoard(btn) {
             }
           }
           target = pick.target; family = pick.chip; need = pick.flash_mb;
-          say(`Found ${what}. Downloading ${pick.name}...`);
-          notes.push(`Found ${what}: flashed ${pick.name}.`);
+          foundLine(status, `Found: ${module}, ${what.replace(/^[^,]*, /, "")}. Installing Baseline for ${pick.name}.`);
+          say(`Downloading Baseline for ${pick.name}...`);
+          notes.push(`Flashed ${pick.name}.`);
           files = await baselineParts(target);
         }
         if (found !== family) {
@@ -622,15 +691,21 @@ async function flashBoard(btn) {
         await loader.after("hard_reset");
         await transport.disconnect();
         const secs = ((performance.now() - t0) / 1000).toFixed(0);
-        const done = [...notes, `Done in ${secs} s. Now try the examples below: press Connect.`].join(" ");
+        let done = [...notes, `Done in ${secs} s. Connecting...`].join(" ");
         say(done, "good");
         if (auto) {
           // Show the board that was flashed, with this message, and its examples.
+          const foundText = status.previousElementSibling && status.previousElementSibling.textContent;
           showBoard(target);
           const panel = [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === target);
           const s2 = panel && panel.querySelector(".flash-status");
-          if (s2) { s2.textContent = done; s2.className = "flash-status good"; }
+          if (s2) { s2.textContent = done; s2.className = "flash-status good"; foundLine(s2, foundText || ""); }
         }
+        const shown = auto ? [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === target) : null;
+        const line = (shown && shown.querySelector(".flash-status")) || status;
+        const ok = await connectAfterFlash(port);
+        done = done.replace("Connecting...", ok ? "Connected: its examples are below." : "Press Connect below to try the examples.");
+        line.textContent = done;
         return;
       } catch (e) {
         try { await transport.disconnect(); } catch (e2) {}
@@ -720,6 +795,7 @@ function showBoard(target) {
   if ([...pick.options].some((o) => o.value === target)) pick.value = target;
   for (const d of document.querySelectorAll("div.board")) d.hidden = d.dataset.target !== pick.value;
   for (const st of document.querySelectorAll(".flash-status")) { st.textContent = ""; st.className = "flash-status"; }
+  for (const f of document.querySelectorAll(".flash-found")) f.hidden = true;
   $("board-none").hidden = !!pick.value;
   state.picked = pick.value.startsWith("auto-") ? "" : pick.value;
   try { localStorage.setItem("flick-board", pick.value); } catch (e) {}
