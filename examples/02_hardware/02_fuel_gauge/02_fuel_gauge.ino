@@ -11,7 +11,7 @@ void setup()
     Wire.begin();
     if (!lipo.begin()) {
         Serial.println("MAX17048 not found on I2C");
-        return;
+        while (1);              // stop here: flick info shows where
     }
     lipo.quickStart();          // fresh estimate
     lipo.setThreshold(20);      // alert below 20 %

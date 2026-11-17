@@ -24,6 +24,8 @@ bool        sketch_is_current_task(void);
  * take the sketch task off the watchdog while they run. */
 bool        sketch_wdt_pause(void);             /* returns whether it paused */
 void        sketch_wdt_resume(bool paused);
+/* Feed the task watchdog for the sketch task (delay(), after each loop()). */
+void        sketch_wdt_feed(void);
 
 #ifdef __cplusplus
 }

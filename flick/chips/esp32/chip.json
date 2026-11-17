@@ -20,5 +20,7 @@
         "1A86",
         "10C4",
         "0403"
-    ]
+    ],
+    "stop_detect": true,
+    "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) (sketch_loader.c, a supervisor checks the stalled PC) instead of letting the watchdog roll it back (flick test step 4)."
 }

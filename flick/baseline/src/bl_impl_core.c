@@ -35,7 +35,7 @@ void bl_impl_delay_ms(uint32_t ms)
         vTaskDelay(ticks ? ticks : 1);
         ms -= step;
         if (feed) {
-            esp_task_wdt_reset();
+            sketch_wdt_feed();
         }
     }
 }

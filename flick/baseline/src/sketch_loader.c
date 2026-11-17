@@ -3,6 +3,7 @@
  * The chip-specific MMU work is in the target's bl_port_mmu.c.
  */
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "esp_attr.h"
@@ -45,6 +46,88 @@ static bl_sketch_header_t s_hdr;
 static bl_sketch_callbacks_t s_cb;
 static TaskHandle_t s_task;
 static const char *s_status = "not loaded";
+
+/* ---- while (1); stops the sketch ---------------------------------------
+ * An empty while (1); (or for (;;);) is the classic Arduino way to stop. The
+ * task watchdog would call it a hang and roll the sketch back, so a
+ * supervisor looks first: when the sketch hasn't fed the watchdog for
+ * STOP_CHECK_MS, it suspends the task, reads the PC it was interrupted at
+ * (RISC-V: mepc, the first word of the saved frame; Xtensa: pc, the second)
+ * and, if the instruction there jumps to itself, leaves the task suspended
+ * and off the watchdog: no crash, no rollback, uploads still work. Anything
+ * else is resumed at once, and the watchdog decides as before. */
+#define STOP_CHECK_MS       2500        /* the task watchdog fires at 5 s */
+#define STOP_POLL_MS        500
+#define STOP_TASK_STACK     3072
+
+static volatile int64_t s_fed_us;       /* last watchdog feed by the sketch */
+static volatile int s_wdt_paused;       /* Baseline calls in progress that paused it */
+static char s_stop_status[48];
+
+void sketch_wdt_feed(void)
+{
+    s_fed_us = esp_timer_get_time();
+    esp_task_wdt_reset();
+}
+
+/* The PC a suspended task stopped at: the TCB starts with pxTopOfStack, which
+ * points at the frame the port saved when the task was switched out. */
+static uint32_t saved_pc(TaskHandle_t task)
+{
+    const uint32_t *frame = *(const uint32_t *const *)task;
+#if __riscv
+    return frame[0];        /* RvExcFrame.mepc */
+#else
+    return frame[1];        /* XtExcFrame.pc */
+#endif
+}
+
+/* Whether the sketch instruction at pc is a jump to itself, read through the
+ * data window (the instruction bus can't be read as data on every chip). */
+static bool jumps_to_itself(uint32_t pc)
+{
+    if (pc < BL_SKETCH_IBUS_BASE || pc + 4 > BL_SKETCH_IBUS_BASE + s_hdr.image_size) {
+        return false;
+    }
+    uint32_t d = pc - BL_SKETCH_IBUS_BASE + BL_SKETCH_DBUS_BASE;
+    const volatile uint32_t *w = (const volatile uint32_t *)(d & ~3u);
+    uint64_t two = ((uint64_t)w[1] << 32) | w[0];
+    uint32_t at = (uint32_t)(two >> ((d & 3) * 8));    /* the 4 bytes from pc */
+#if __riscv
+    if ((at & 3) != 3) {
+        return (at & 0xffff) == 0xa001;                 /* c.j . */
+    }
+    return at == 0x0000006f;                            /* j . (jal x0, 0) */
+#else
+    return (at & 0xffffff) == 0xffff06;                 /* j . (J, offset -4) */
+#endif
+}
+
+static void stop_watch_task(void *arg)
+{
+    int64_t checked = 0;
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(STOP_POLL_MS));
+        TaskHandle_t task = s_task;
+        int64_t fed = s_fed_us;
+        if (!task || s_wdt_paused || strcmp(s_status, "running") != 0 || fed == checked ||
+            esp_timer_get_time() - fed < (int64_t)STOP_CHECK_MS * 1000) {
+            continue;
+        }
+        checked = fed;              /* look once per stall */
+        vTaskSuspend(task);
+        vTaskDelay(2);              /* the other core switches it out (dual-core chips) */
+        uint32_t pc = saved_pc(task);
+        if (s_fed_us == fed && jumps_to_itself(pc)) {
+            esp_task_wdt_delete(task);
+            snprintf(s_stop_status, sizeof(s_stop_status), "stopped: while(1) at 0x%08lx", (unsigned long)pc);
+            s_status = s_stop_status;
+            BLOG_I("sketch stopped: while(1) at 0x%08lx (uploads still work)", (unsigned long)pc);
+        } else {
+            vTaskResume(task);
+        }
+    }
+}
 
 const esp_partition_t *sketch_slot_partition(int slot)
 {
@@ -173,12 +256,13 @@ static void sketch_task(void *arg)
         esp_timer_start_once(timer, (uint64_t)BL_STABLE_AFTER_MS * 1000);
     }
     esp_task_wdt_add(NULL);     // a loop() that never returns trips the task watchdog
+    sketch_wdt_feed();
     s_status = "running";
 
     s_cb.setup();
     for (;;) {
         s_cb.loop();
-        esp_task_wdt_reset();
+        sketch_wdt_feed();
     }
 }
 
@@ -227,6 +311,10 @@ esp_err_t sketch_start(int slot)
         BLOG_E("%s", s_status);
         return ESP_ERR_NO_MEM;
     }
+    static bool watching;
+    if (!watching) {
+        watching = xTaskCreate(stop_watch_task, "bl_stopwatch", STOP_TASK_STACK, NULL, SKETCH_PRIORITY + 2, NULL) == pdPASS;
+    }
     return ESP_OK;
 }
 
@@ -240,6 +328,7 @@ bool sketch_wdt_pause(void)
     if (!sketch_is_current_task()) {
         return false;
     }
+    s_wdt_paused++;
     esp_task_wdt_delete(NULL);
     return true;
 }
@@ -248,6 +337,8 @@ void sketch_wdt_resume(bool paused)
 {
     if (paused) {
         esp_task_wdt_add(NULL);
+        s_wdt_paused--;
+        sketch_wdt_feed();
     }
 }
 
