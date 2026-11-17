@@ -1293,8 +1293,20 @@ def monitor(s, port, baud, link=None, follow=True):
 
 def cmd_monitor(args):
     port = find_port(args.port)
-    baud = console_baud(port, args.baud)
-    monitor(open_port(port, baud), port, baud, follow=not args.port)
+    # A native USB board that just restarted (after an upload) is gone from
+    # USB for a moment: wait for its port instead of failing.
+    serial = import_serial()
+    deadline = time.time() + 5
+    while True:
+        try:
+            baud = console_baud(port, args.baud)
+            s = open_port(port, baud)
+            break
+        except serial.SerialException:
+            if time.time() > deadline:
+                sys.exit(f"error: can't open {port}: is the board plugged in, and no other program using it?")
+            time.sleep(0.25)
+    monitor(s, port, baud, follow=not args.port)
 
 
 # ---------------------------------------------------------------- baseline firmware

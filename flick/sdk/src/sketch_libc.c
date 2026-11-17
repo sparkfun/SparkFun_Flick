@@ -201,6 +201,27 @@ int fflush(FILE *f)
     return 0;
 }
 
+#if defined(FLICK_ARCH_IMXRT)
+/* Teensy sketches link newlib. A library that names stderr pulls in newlib's
+ * stream table, which reaches fclose() and from there fflush.o (__sflush_r),
+ * an object that also defines fflush: a duplicate of the one above. Defining
+ * its other two symbols here keeps fflush.o out. No stream is ever a real
+ * newlib FILE, so there is nothing to flush. */
+int _fflush_r(struct _reent *r, FILE *f)
+{
+    (void)r;
+    (void)f;
+    return 0;
+}
+
+int __sflush_r(struct _reent *r, FILE *f)
+{
+    (void)r;
+    (void)f;
+    return 0;
+}
+#endif
+
 /* ---- pthread locks: the sketch is a single task ----
  * Parts of libgcc/libstdc++ guard shared state with these; with one task
  * there is nothing to lock. */

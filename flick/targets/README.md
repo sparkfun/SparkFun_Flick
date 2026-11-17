@@ -44,6 +44,7 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `thing_plus_esp32c5` | esp32c5 | SparkFun Thing Plus - ESP32-C5 | not run on hardware |
 | `teensy40` | imxrt1062 | PJRC Teensy 4.0 (Baseline built with Teensyduino, `chips/imxrt1062/baseline`) | tested: `flick test` 24/0/5, sketch interrupts 7/7, Audio 8/8 (2026-10-24) |
 | `teensy41` | imxrt1062 | PJRC Teensy 4.1 (8 MB flash, PSRAM pads, SDIO microSD) | builds; not run on hardware |
+| `teensy_micromod` | imxrt1062 | SparkFun MicroMod Teensy Processor (16 MB flash, no PSRAM; Teensyduino's `teensyMM`, model 0x26; Serial2 on 16/17) | `flick test` 25/0/5 (2026-11-17) |
 
 **Generic boards** (not run on hardware): `<chip>_generic_<N>mb` for any board on that chip with N MB of flash, with the pins of Arduino-ESP32's generic variant for the chip (`esp32`, `esp32s3`, `esp32c3`, `esp32c6`, `esp32c5`):
 

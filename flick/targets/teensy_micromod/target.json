@@ -1,0 +1,8 @@
+{
+    "chip": "imxrt1062",
+    "description": "SparkFun MicroMod Teensy Processor: i.MX RT1062 at 600 MHz, 16 MB flash, 1 MB RAM, native USB, on any MicroMod carrier board",
+    "flash_size": "16MB",
+    "product_url": "https://www.sparkfun.com/sparkfun-micromod-teensy-processor.html",
+    "fqbn": "teensy:avr:teensyMM:usb=serialmidiaudio,speed=600,opt=o2std",
+    "status": "bring-up"
+}
