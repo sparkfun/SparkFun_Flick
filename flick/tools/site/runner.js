@@ -866,7 +866,9 @@ async function flashTeensy(btn) {
     }
     // 2. The bootloader: a second chooser, which needs a click of its own.
     dev = await new Promise((resolve) => {
-      say("Now choose the Teensy's bootloader (\"HalfKay\"). If it isn't listed: close the Teensy Loader app if it is open (it takes the bootloader for itself), press the button on the Teensy, then choose. ");
+      say("Now choose the Teensy's bootloader: the browser lists it as \"Unknown Device (16C0:0478)\" " +
+          "(it has no name of its own). If it isn't listed: close the Teensy Loader app if it is open " +
+          "(it takes the bootloader for itself), press the button on the Teensy, then choose. ");
       const go = document.createElement("button");
       go.className = "choice";
       go.textContent = "Choose the Teensy bootloader";
