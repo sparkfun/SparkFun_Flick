@@ -30,7 +30,6 @@
     ],
     "stop_detect": true,
     "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) instead of letting the watchdog roll it back (flick test step 4).",
-    "ci": false,
-    "ci_note": "CI builds in Espressif's ESP-IDF image, which has no Teensyduino: baseline.yml and build_examples.py --out leave these targets out until a job installs it.",
+    "ci_note": "CI builds these targets with arduino-cli and Teensyduino teensy_core (baseline.yml build-teensy, release.yml examples-build), not in the ESP-IDF image.",
     "status": "bring-up"
 }

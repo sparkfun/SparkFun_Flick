@@ -1,7 +1,8 @@
 # Release: push a tag vX.Y.Z (matching BASELINE_VERSION in flick/baseline/src/bl_main.h).
 #   1. Baseline for every target (baseline.yml)
 #   2. the sketch kit (flick package)
-#   3. every example for every board, for the page's example runner (flick/tools/ci/build_examples.py --out)
+#   3. every example for every board, for the page's example runner (flick/tools/ci/build_examples.py --out;
+#      cached, and built per chip in parallel when something changed)
 #   4. a GitHub release with the images, the .bsu updates and the kit
 #   5. the download page with "Flash" buttons and the example runner on GitHub Pages (flick/tools/make_site.py)
 # Run it by hand (workflow_dispatch) to rebuild the page without a release.
@@ -43,8 +44,36 @@ jobs:
           path: dist/kit/*.zip
           if-no-files-found: error
 
-  examples:
+  # Example images for the page's runner. Cached by the files they're built
+  # from; when those changed, each chip's boards build in parallel and the
+  # parts are joined (build_examples.py --merge).
+  examples-plan:
     runs-on: ubuntu-latest
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      hit: ${{ steps.cached.outputs.cache-hit }}
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: key
+        run: echo "key=examples-v1-${{ hashFiles('examples/**', 'flick/sdk/**', 'flick/chips/*/sdk/**', 'flick/chips/*/chip.json', 'flick/targets/*/sdk/**', 'flick/targets/*/target.json', 'flick/tools/flick.py', 'flick/tools/ci/build_examples.py') }}" >> "$GITHUB_OUTPUT"
+      - id: cached
+        uses: actions/cache/restore@v6
+        with:
+          path: dist/examples
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+      - id: groups
+        run: echo "groups=$(python3 flick/tools/ci/build_examples.py --groups)" >> "$GITHUB_OUTPUT"
+
+  examples-build:
+    needs: examples-plan
+    if: needs.examples-plan.outputs.hit != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        group: ${{ fromJson(needs.examples-plan.outputs.groups) }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -57,8 +86,57 @@ jobs:
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
       - run: pip install -r requirements.txt
       - run: python flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
-      - name: Every example for every board
-        run: python flick/tools/ci/build_examples.py --out dist/examples
+        if: matrix.group.chip != 'imxrt1062'
+      - name: Cache Teensyduino
+        if: matrix.group.chip == 'imxrt1062'
+        uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: teensyduino-1.62.0-${{ runner.os }}
+      - uses: arduino/setup-arduino-cli@v2
+        if: matrix.group.chip == 'imxrt1062'
+      - name: Teensyduino 1.62.0 (chips/imxrt1062/chip.json teensy_core)
+        if: matrix.group.chip == 'imxrt1062'
+        run: |
+          url=https://www.pjrc.com/teensy/package_teensy_index.json
+          arduino-cli core update-index --additional-urls "$url"
+          arduino-cli core install teensy:avr@1.62.0 --additional-urls "$url"
+      - name: Every example for the ${{ matrix.group.chip }} boards
+        run: python flick/tools/ci/build_examples.py --out dist/part ${{ matrix.group.targets }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: examples-part-${{ matrix.group.chip }}
+          path: dist/part
+          if-no-files-found: error
+
+  examples:
+    needs: [examples-plan, examples-build]
+    if: always() && needs.examples-plan.result == 'success' && (needs.examples-build.result == 'success' || needs.examples-build.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: The examples, from the cache
+        if: needs.examples-plan.outputs.hit == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: dist/examples
+          key: ${{ needs.examples-plan.outputs.key }}
+          fail-on-cache-miss: true
+      - name: The parts, from the build runners
+        if: needs.examples-plan.outputs.hit != 'true'
+        uses: actions/download-artifact@v8
+        with:
+          pattern: examples-part-*
+          path: parts
+      - name: Join the parts
+        if: needs.examples-plan.outputs.hit != 'true'
+        run: python3 flick/tools/ci/build_examples.py --merge dist/examples parts/*
+      - name: Keep them for the next run
+        if: needs.examples-plan.outputs.hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: dist/examples
+          key: ${{ needs.examples-plan.outputs.key }}
       - uses: actions/upload-artifact@v7
         with:
           name: examples
@@ -67,6 +145,9 @@ jobs:
 
   publish:
     needs: [baseline, kit, examples]
+    # Explicit results: a cache hit skips build jobs further up, and the default
+    # condition would skip this job too.
+    if: always() && needs.baseline.result == 'success' && needs.kit.result == 'success' && needs.examples.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -83,7 +164,16 @@ jobs:
           fi
       - uses: actions/download-artifact@v8
         with:
-          path: dist        # dist/<target>/baseline-<target>.bin/.bsu, dist/kit/*.zip, dist/examples/
+          name: baselines
+          path: dist        # dist/<target>/baseline-<target>.bin/.bsu
+      - uses: actions/download-artifact@v8
+        with:
+          name: kit
+          path: dist/kit
+      - uses: actions/download-artifact@v8
+        with:
+          name: examples
+          path: dist/examples
       - name: Download page
         run: python flick/tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
       - name: GitHub release
@@ -110,7 +200,7 @@ jobs:
 
   deploy:
     needs: publish
-    if: ${{ !github.event.repository.private }}
+    if: always() && needs.publish.result == 'success' && !github.event.repository.private
     runs-on: ubuntu-latest
     environment:
       name: github-pages
