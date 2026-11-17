@@ -1,0 +1,16 @@
+# Flick partition table - ESP32-S3, 16 MB flash.
+# flick stages the table matching the target's flash_size as main/partitions.csv.
+# The bootloader is at 0x0 and Baseline slot 0 at 0x10000.
+# Two Baseline slots (ota_0/ota_1): an update over WiFi goes to the slot not
+# running, and IDF rolls back to the other if the new Baseline does not
+# confirm itself (baseline/src/bl_update.cpp). Sketch slots must be 64 KB
+# aligned (flash MMU page).
+# Name,       Type, SubType,  Offset,    Size
+nvs,          data, nvs,      0x9000,    0x5000
+otadata,      data, ota,      0xE000,    0x2000
+baseline_0,   app,  ota_0,    0x10000,   0x300000
+baseline_1,   app,  ota_1,    0x310000,  0x300000
+sketch_a,     data, 0x40,     0x610000,  0x80000
+sketch_b,     data, 0x40,     0x690000,  0x80000
+userfs,       data, spiffs,   0x710000,  0x8E0000
+coredump,     data, coredump, 0xFF0000,  0x10000

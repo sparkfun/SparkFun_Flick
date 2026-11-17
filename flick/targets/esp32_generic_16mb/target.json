@@ -1,0 +1,8 @@
+{
+    "chip": "esp32",
+    "description": "Generic ESP32, 16 MB flash: any ESP32 board with 16 MB of flash (ESP32-WROVER-E 16 MB); PSRAM found at runtime",
+    "flash_size": "16MB",
+    "generic": true,
+    "examples": "ESP32-WROVER-E 16 MB",
+    "status": "not run on hardware"
+}

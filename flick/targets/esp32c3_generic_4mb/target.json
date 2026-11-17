@@ -1,0 +1,8 @@
+{
+    "chip": "esp32c3",
+    "description": "Generic ESP32-C3, 4 MB flash: any ESP32-C3 board with 4 MB of flash (C3 Super Mini, ESP32-C3-DevKitC-02); no PSRAM",
+    "flash_size": "4MB",
+    "generic": true,
+    "examples": "C3 Super Mini, ESP32-C3-DevKitC-02",
+    "status": "not run on hardware"
+}

@@ -44,6 +44,19 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `teensy40` | imxrt1062 | PJRC Teensy 4.0 (Baseline built with Teensyduino, `chips/imxrt1062/baseline`) | tested: `flick test` 24/0/5, sketch interrupts 7/7, Audio 8/8 (2026-10-24) |
 | `teensy41` | imxrt1062 | PJRC Teensy 4.1 (8 MB flash, PSRAM pads, SDIO microSD) | builds; not run on hardware |
 
+**Generic boards** (not run on hardware): `<chip>_generic_<N>mb` for any board on that chip with N MB of flash, with the pins of Arduino-ESP32's generic variant for the chip (`esp32`, `esp32s3`, `esp32c3`, `esp32c6`, `esp32c5`):
+
+| Chip | Targets | Notes |
+|---|---|---|
+| esp32 | `esp32_generic_4mb`, `_8mb`, `_16mb` | PSRAM found at runtime; the IoT RedBoard's no-PSRAM memory settings |
+| esp32s3 | `esp32s3_generic_4mb`, `_8mb`, `_16mb` | quad PSRAM (R2) or none |
+| esp32s3 | `esp32s3_generic_8mb_octal`, `_16mb_octal` | octal PSRAM (N8R8, N16R8): `CONFIG_SPIRAM_MODE_OCT`, GPIO 33-37 refused |
+| esp32c3 | `esp32c3_generic_4mb` | native USB boards only (the console is USB-Serial-JTAG) |
+| esp32c6 | `esp32c6_generic_4mb`, `_8mb` | native USB port |
+| esp32c5 | `esp32c5_generic_8mb` | native USB port |
+
+PSRAM needs no image of its own: Baseline looks for it at boot and runs without it. The flash size does (it picks the partition table), and so does the S3's PSRAM type (quad and octal are wired differently). A board with more flash than its image works, with the extra flash unused.
+
 The classic ESP32 targets need chip revision 3.0 or later (`esptool flash-id` shows it).
 
 ## The rules

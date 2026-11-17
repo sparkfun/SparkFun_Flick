@@ -22,6 +22,11 @@ static inline bool bl_pin_usable(int pin)
     if (pin >= 26 && pin <= 32) {
         return false;   // SPI flash + PSRAM
     }
+#if CONFIG_SPIRAM_MODE_OCT
+    if (pin >= 33 && pin <= 37) {
+        return false;   // octal PSRAM data lines and DQS
+    }
+#endif
     if (pin == 19 || pin == 20) {
         return false;   // native USB: console and sketch upload
     }

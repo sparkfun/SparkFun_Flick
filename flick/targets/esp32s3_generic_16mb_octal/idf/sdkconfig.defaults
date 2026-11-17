@@ -1,0 +1,8 @@
+# esp32s3_generic_16mb_octal, on top of the chip's sdkconfig.defaults.
+# Arduino's generic pin variant for this chip (pins_arduino.h).
+CONFIG_ARDUINO_VARIANT="esp32s3"
+
+# Octal PSRAM (ESP32-S3R8 inside N8R8/N16R8 modules). On a board without
+# PSRAM, Arduino's psramInit() finds none and Baseline runs without it.
+# CONFIG_SPIRAM_MODE_QUAD is not set
+CONFIG_SPIRAM_MODE_OCT=y

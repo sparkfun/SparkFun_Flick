@@ -1,0 +1,8 @@
+{
+    "chip": "esp32",
+    "description": "Generic ESP32, 4 MB flash: any ESP32 board with 4 MB of flash (ESP32-WROOM-32 DevKits); PSRAM found at runtime",
+    "flash_size": "4MB",
+    "generic": true,
+    "examples": "ESP32-WROOM-32 DevKits",
+    "status": "not run on hardware"
+}

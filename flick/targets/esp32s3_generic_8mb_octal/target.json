@@ -1,0 +1,8 @@
+{
+    "chip": "esp32s3",
+    "description": "Generic ESP32-S3, 8 MB flash, octal PSRAM: any ESP32-S3 board with 8 MB of flash (N8R8); octal PSRAM",
+    "flash_size": "8MB",
+    "generic": true,
+    "examples": "N8R8",
+    "status": "not run on hardware"
+}

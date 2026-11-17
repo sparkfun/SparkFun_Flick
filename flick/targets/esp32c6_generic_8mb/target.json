@@ -1,0 +1,8 @@
+{
+    "chip": "esp32c6",
+    "description": "Generic ESP32-C6, 8 MB flash: any ESP32-C6 board with 8 MB of flash (ESP32-C6-DevKitC-1 N8); no PSRAM",
+    "flash_size": "8MB",
+    "generic": true,
+    "examples": "ESP32-C6-DevKitC-1 N8",
+    "status": "not run on hardware"
+}

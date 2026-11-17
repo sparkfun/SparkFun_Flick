@@ -1,0 +1,8 @@
+{
+    "chip": "esp32s3",
+    "description": "Generic ESP32-S3, 4 MB flash: any ESP32-S3 board with 4 MB of flash (N4, N4R2, S3 Super Mini); quad PSRAM found at runtime",
+    "flash_size": "4MB",
+    "generic": true,
+    "examples": "N4, N4R2, S3 Super Mini",
+    "status": "not run on hardware"
+}
