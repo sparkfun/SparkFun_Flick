@@ -171,14 +171,21 @@ WRAPPER_NAME_REQUIRES = {
 }
 
 
+def requires_expr(macros):
+    """A macro, or a tuple of macros any one of which will do, as a #if expression."""
+    if isinstance(macros, str):
+        macros = (macros,)
+    return " || ".join(f"defined({m})" for m in macros)
+
+
 def wrapper_requires(e):
     if e.field == "usb_devices":
         return None     # for Baseline's INFO, not a sketch feature
     if e.wrapper in WRAPPER_NAME_REQUIRES:
-        return f"defined({WRAPPER_NAME_REQUIRES[e.wrapper]})"
+        return requires_expr(WRAPPER_NAME_REQUIRES[e.wrapper])
     for prefixes, macro in WRAPPER_PREFIX_REQUIRES:
         if e.field.startswith(prefixes):
-            return f"defined({macro})"
+            return requires_expr(macro)
     return None
 
 

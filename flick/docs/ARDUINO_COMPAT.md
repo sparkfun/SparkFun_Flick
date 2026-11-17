@@ -110,9 +110,10 @@ a line from flick saying why. Compat headers for a missing feature stop with
 |---|---|---|
 | `BL_PLATFORM_ESP32` | every ESP32 chip | Arduino-ESP32 / ESP-IDF names: `esp_*` (sleep, timer, random, restart, reset reason, ESP-NOW), `ESP`, `ESP_LOGx`/`log_x`, `ledc*`, `hw_timer`, `ps_malloc`, `psramFound`, `temperatureRead`, `analogReadMilliVolts`, attenuation, I2S, `SD_MMC`, `rgbLedWrite`, FastLED |
 | `BL_PLATFORM_TEENSY` | Teensy 4.0, 4.1 | Teensyduino names (below) |
-| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE) | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
+| `BL_PLATFORM_RP2` | RP2040 and RP2350 boards | `rgbLedWrite`, FastLED (below) |
+| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE); the Thing Plus - RP2350 | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
 | `BL_HAS_ESPNOW` | ESP32, S3, C3, C5, C6 (not through ESP-Hosted) | ESP-NOW |
-| `BL_HAS_BLE` | ESP32, S3, C3, C5, C6 | `BLESerial`, the BLE library |
+| `BL_HAS_BLE` | ESP32, S3, C3, C5, C6; the Thing Plus - RP2350 | `BLESerial`, the BLE library |
 | `BL_HAS_BT_CLASSIC` | classic ESP32 | `BluetoothSerial` |
 | `BL_HAS_TOUCH` | ESP32, S3 | `touchRead`, `T0`... |
 | `BL_HAS_DAC` | classic ESP32 | `dacWrite` |
@@ -154,6 +155,47 @@ work on every board.
   `esp_*` and `ESP.` don't exist here. Examples: `examples/08_teensy`.
 - **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
 - **No WiFi, BLE or ESP-NOW:** those calls return errors.
+
+## RP2040 and RP2350 (`pro_micro_rp2040`, `thing_plus_rp2040`, `pro_micro_rp2350`, `thing_plus_rp2350`)
+
+Baseline for these boards is built on arduino-pico (Earle Philhower's core);
+sketches use the same classic Arduino names as on the ESP32.
+
+- **Putting Baseline on:** the first time, hold BOOTSEL while plugging the
+  board in (it shows a drive named RP2350 or RPI-RP2), then use the web page's
+  Flash button or copy the `.uf2` onto the drive. After that, the Flash button
+  and `python flick.py baseline flash` restart the board into that mode
+  themselves.
+- **Memory:** sketch globals up to 64 KB (RP2350) or 32 KB (RP2040), code up to
+  512 KB. On the boards with PSRAM (both RP2350 boards, 8 MB), `malloc()` of
+  more than 4 KB is served from PSRAM, as on an ESP32 with PSRAM.
+- **Ports:** `Serial1`, `Serial2`, `Wire`/`Wire1` and `SPI` take any pins the
+  chip allows for them: Baseline picks the I2C, SPI or UART controller from
+  the pins you pass. `analogWrite()`, `tone()` and `Servo` each keep their own
+  frequency per pin (the `ledc*` names are Arduino-ESP32's and don't exist
+  here). LittleFS is 8 MB; Preferences are files in it. microSD is on SPI.
+- **LEDs:** `rgbLedWrite()` and FastLED drive WS2812s through a PIO state
+  machine on any pin.
+- **WiFi** (Thing Plus - RP2350, on its RM2 radio): `WiFi`, `WiFiClient`,
+  `WiFiClientSecure` (checked against Mozilla's CA list, the same as on the
+  ESP32), `HTTPClient`, `WebServer`, `WiFiUDP`, `DNSServer`, `PubSubClient`,
+  `MDNS`, `ArduinoOTA` and `configTime()`. Differences: `MDNS.queryHost()`
+  finds nothing; `configTime()` uses the first two servers; `WiFi.onEvent()`
+  reports start, connect, got IP, disconnect, scan done and the access point's
+  stations, not every Arduino-ESP32 event. WiFi uploads (`flick upload --host`)
+  are served while the sketch calls `loop()` or `delay()`.
+- **BLE** (Thing Plus - RP2350): `BLESerial` and the BLE library (server,
+  advertising, scan, client), on arduino-pico's BLE library and BTstack.
+  Differences: one central at a time, and the board advertises again after
+  any disconnect; all services together hold about eight 128-bit
+  characteristics; descriptors other than 2901 (user description) and 2902
+  aren't supported; one client connection; a remote read returns one packet
+  (MTU - 1 bytes, at least 244 once the MTU is negotiated); after
+  `BLEDevice::deinit()` the radio stays on.
+- **Not here:** ESP-NOW, Bluetooth Classic (`BluetoothSerial`), touch, the DAC, USB device mode,
+  and the Arduino-ESP32 names (`esp_*`, `ESP.`, `ps_malloc`,
+  `temperatureRead`, `SD_MMC`).
+- **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
 
 ## Differences from plain Arduino
 

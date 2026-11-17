@@ -10,7 +10,7 @@ baseline/                Baseline source shared by every chip (Arduino-ESP32 + E
 sdk/                     sketch SDK shared by every target (headers, C/C++ runtime, linker script)
 idf/                     the ESP-IDF project template, shared sdkconfig changes, prebuilt components
 examples/                sketches; the same source builds for any target
-chips/<chip>/            one per chip: esp32, esp32s3, esp32c3, esp32c5, esp32c6
+chips/<chip>/            one per chip: esp32, esp32s3, esp32c3, esp32c5, esp32c6, esp32p4, imxrt1062, rp2040, rp2350
   chip.json              IDF target, sketch compiler and flags, USB IDs
   sdk/bl_target.h        chip ID, fixed sketch addresses (ABI); includes the target's bl_board.h
   sdk/rom.ld             ROM functions sketches may call directly
@@ -46,6 +46,10 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | `teensy41` | imxrt1062 | PJRC Teensy 4.1 (8 MB flash, PSRAM pads, SDIO microSD, Ethernet with NativeEthernet) | `flick test` 26/0/4 (2026-11-17); Ethernet HTTP not yet run |
 | `teensy40_hid`, `teensy41_hid`, `teensy_micromod_hid` | imxrt1062 | The same boards with USB type Serial + Keyboard + Mouse + Joystick instead of Serial + MIDI + Audio (`variant_of` in target.json; bl_board.h includes the base's) | MicroMod: enumerates, mouse moves the cursor (2026-11-17) |
 | `teensy_micromod` | imxrt1062 | SparkFun MicroMod Teensy Processor (16 MB flash, no PSRAM; Teensyduino's `teensyMM`, model 0x26; Serial2 on 16/17) | `flick test` 25/0/5 (2026-11-17) |
+| `pro_micro_rp2350` | rp2350 | SparkFun Pro Micro - RP2350 (16 MB flash, 8 MB PSRAM; Baseline built with arduino-pico, `chips/rp2350/baseline`) | tested: `flick test` 30/0/4, LED by eye (2026-11-17) |
+| `thing_plus_rp2350` | rp2350 | SparkFun Thing Plus - RP2350 (RM2 radio: WiFi and BLE) | tested: `flick test` 37/0/1 with WiFi and BLE, microSD, fuel gauge, BMI270 + OLED, LEDs (2026-11-17) |
+| `thing_plus_rp2040` | rp2040 | SparkFun Thing Plus - RP2040 (16 MB flash; same Baseline source as the RP2350) | tested: `flick test` 27/0/3 (microSD, fuel gauge), LEDs (2026-11-17) |
+| `pro_micro_rp2040` | rp2040 | SparkFun Pro Micro - RP2040 (16 MB flash) | tested: `flick test` 25/0/5, BMI270 + OLED (2026-11-17) |
 
 **Generic boards** (not run on hardware): `<chip>_generic_<N>mb` for any board on that chip with N MB of flash, with the pins of Arduino-ESP32's generic variant for the chip (`esp32`, `esp32s3`, `esp32c3`, `esp32c6`, `esp32c5`):
 
@@ -104,6 +108,8 @@ This needs a new Baseline source folder next to `baseline/` (for example `baseli
 - the generated API table
 - the SDK
 
-The MMU mapping does not. On a Cortex-M, flash is directly executable at a fixed address, so the "mapping" step disappears: the sketch is linked at its slot's flash address.
+The MMU mapping does not. On a Cortex-M, flash is directly executable at a fixed address, so the chip needs another way to show the active slot at one address: the i.MX RT1062 has FlexSPI's address remap, the RP2350 the QMI's address translation (the last 4 MB of its flash window, ATRANS3), and the RP2040, which has neither, a window that is a flash region of its own, into which Baseline copies the active slot (`BL_TARGET_COPIED_WINDOW`).
+
+**RP2040 and RP2350** (`chips/rp2040`, `chips/rp2350`): one Baseline source, `chips/rp2350/baseline`, built with arduino-pico (Earle Philhower's core) through arduino-cli (`"builder": "rp2"`). Install it once: `arduino-cli core install rp2040:rp2040 --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json`. Sketches build with arduino-pico's own compiler (`"gcc_package"`), for the float ABI Baseline uses (soft on the RP2040, softfp on the RP2350). The target's `bl_board.h` gives the flash layout (Baseline, LittleFS, EEPROM sector, slots), which flick passes to arduino-pico as the build properties of its Flash Size menu; the heap ends at the chip's sketch RAM window (`build.ram_length`). The sketch's `setup()`/`loop()` run on the process stack (PSP), sized by the sketch header (PSPLIM catches an overflow on the RP2350). The image is a `.uf2`; `flick baseline flash` uses arduino-pico's uploader (1200 baud reboots the board into its boot ROM).
 
 **ATmega328 and other 8-bit AVRs** are a poor fit. With 32 KB of flash and 2 KB of RAM, there is no room for a meaningful precompiled blob, and the 185-entry function table alone would use 370 bytes. Arduino's normal build is already fast on those chips.

@@ -45,7 +45,7 @@ static Saved *saved;
 #define SKIP(name, why) do { Serial.printf("SKIP  %s (%s)\n", name, why); saved->skipped++; } while (0)
 
 // External RAM on the data bus: classic ESP32 0x3F800000-0x3FC00000, ESP32-S3 0x3C000000-0x3E000000,
-// ESP32-C5 0x42000000-0x44000000, ESP32-P4 0x48000000-0x4C000000, Teensy 4.1 0x70000000 (heap pointers on the other chips
+// ESP32-C5 0x42000000-0x44000000, ESP32-P4 0x48000000-0x4C000000, Teensy 4.1 0x70000000, RP2350 0x11000000 (heap pointers on the other chips
 // never fall in these ranges).
 // Each platform's own names for what the checks need: Arduino-ESP32's on the
 // ESP32 family, Teensyduino's (or Baseline's raw calls) on Teensy 4.x.
@@ -66,7 +66,11 @@ static Saved *saved;
 #define T_PS_MALLOC(n)      BL->ps_malloc(n)            /* PSRAM only: extmem_malloc() falls back to RAM */
 #define T_PS_CALLOC(n, sz)  BL->ps_calloc(n, sz)
 #define T_PS_REALLOC(p, n)  BL->ps_realloc(p, n)
+#if defined(BL_PLATFORM_TEENSY)
 #define T_TEMPERATURE()     tempmonGetTemp()
+#else
+#define T_TEMPERATURE()     BL->temperature_read()
+#endif
 #define T_RESET_REASON()    bl_reset_reason()
 #define T_WOKE_BY_TIMER()   (bl_sleep_wake_cause() == 4)  /* the timer */
 #define T_DEEP_SLEEP(us)    do { bl_sleep_wake(BL_WAKE_TIMER, us, 0, 0); bl_sleep_deep(); } while (0)
@@ -78,7 +82,8 @@ static bool in_psram(const void *p)
     uintptr_t a = (uintptr_t)p;
     return (a >= 0x3F800000 && a < 0x3FC00000) || (a >= 0x3C000000 && a < 0x3E000000) ||
            (a >= 0x42000000 && a < 0x44000000) || (a >= 0x48000000 && a < 0x4C000000) ||
-           (a >= 0x70000000 && a < 0x72000000);     // Teensy 4.1 PSRAM
+           (a >= 0x70000000 && a < 0x72000000) ||   // Teensy 4.1 PSRAM
+           (a >= 0x11000000 && a < 0x12000000);     // RP2350 PSRAM (QMI chip select 1)
 }
 
 Ticker ticker;
@@ -178,6 +183,14 @@ static void check_storage()
 
 #if defined(BL_BOARD_SD_BUILTIN)    // Teensy 4.1: SD.begin(BUILTIN_SDCARD)
     bool sd = SD.begin(BUILTIN_SDCARD);
+    if (!sd) {
+        SKIP("microSD", "no card in the slot, or it could not be mounted");
+    } else {
+        Serial.printf("microSD %llu MB\n", (unsigned long long)(SD.totalBytes() >> 20));
+        CHECK("microSD mounted", SD.totalBytes() > 0);
+    }
+#elif !defined(BL_PLATFORM_ESP32) && defined(BL_BOARD_SD_CS) && BL_BOARD_SD_CS >= 0     // SPI only
+    bool sd = SD.begin();
     if (!sd) {
         SKIP("microSD", "no card in the slot, or it could not be mounted");
     } else {

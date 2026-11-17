@@ -1,0 +1,8 @@
+{
+    "chip": "rp2040",
+    "description": "SparkFun Thing Plus - RP2040: RP2040, 16 MB flash, native USB",
+    "flash_size": "16MB",
+    "fqbn": "rp2040:rp2040:sparkfun_thingplusrp2040:os=none,usbstack=picosdk,freq=133,opt=Small,dbgport=Disabled,dbglvl=None",
+    "status": "bring-up",
+    "product_url": "https://www.sparkfun.com/sparkfun-thing-plus-rp2040.html"
+}

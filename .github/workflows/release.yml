@@ -86,7 +86,21 @@ jobs:
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
       - run: pip install -r requirements.txt
       - run: python flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
-        if: matrix.group.chip != 'imxrt1062'
+        if: matrix.group.chip != 'imxrt1062' && matrix.group.chip != 'rp2040' && matrix.group.chip != 'rp2350'
+      - name: Cache arduino-pico
+        if: matrix.group.chip == 'rp2040' || matrix.group.chip == 'rp2350'
+        uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: arduino-pico-6.3.2-${{ runner.os }}
+      - uses: arduino/setup-arduino-cli@v2
+        if: matrix.group.chip == 'rp2040' || matrix.group.chip == 'rp2350'
+      - name: arduino-pico 6.3.2 (its compiler builds the RP sketches)
+        if: matrix.group.chip == 'rp2040' || matrix.group.chip == 'rp2350'
+        run: |
+          url=https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core update-index --additional-urls "$url"
+          arduino-cli core install rp2040:rp2040@6.3.2 --additional-urls "$url"
       - name: Cache Teensyduino
         if: matrix.group.chip == 'imxrt1062'
         uses: actions/cache@v6
@@ -185,6 +199,7 @@ jobs:
           files: |
             dist/*/baseline-*.bin
             dist/*/baseline-*.bsu
+            dist/*/baseline-*.uf2
             dist/kit/*.zip
       - name: The download page as an artifact (to look at while the repo is private)
         uses: actions/upload-artifact@v7
