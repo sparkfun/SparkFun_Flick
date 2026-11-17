@@ -12,7 +12,7 @@
 #include "bl_impl.h"
 #include "sketch_abi.h"
 
-#define BASELINE_VERSION "0.3.0"
+#define BASELINE_VERSION "0.4.0"
 
 #ifdef __cplusplus
 extern "C" {

@@ -322,6 +322,15 @@ async function run(ex) {
     const res = await fetch(`examples/${ex.path}/${target}.flick`, FRESH);
     if (!res.ok) throw new Error(`no image for this board (${res.status})`);
     const img = new Uint8Array(await res.arrayBuffer());
+    // The image's ABI (header offsets 8 and 10) against the board's: a Baseline
+    // refuses a sketch built for a newer one, so say what to do instead.
+    const hv = new DataView(img.buffer);
+    const [needMaj, needMin] = [hv.getUint16(8, true), hv.getUint16(10, true)];
+    const [haveMaj, haveMin] = (state.board.abi || "0.0").split(".").map(Number);
+    if (needMaj === haveMaj && needMin > haveMin) {
+      throw new Error(`this example needs Baseline ABI ${needMaj}.${needMin}, and the board runs ` +
+                      `Baseline ${state.board.baseline} (ABI ${state.board.abi}): press Flash above to update it`);
+    }
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", img)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
     log(`--- uploading ${ex.name} (${img.length} bytes)`, "note");
@@ -691,9 +700,9 @@ async function flashBoard(btn) {
             }
           }
           target = pick.target; family = pick.chip; need = pick.flash_mb;
-          foundLine(status, `Found: ${module}, ${what.replace(/^[^,]*, /, "")}. Installing Baseline for ${pick.name}.`);
+          foundLine(status, `Found: ${module}, ${what.replace(/^[^,]*, /, "")}. Installing Baseline ${NEW_VERSION()} for ${pick.name}.`);
           showAs(btn.closest("div.board"), pick.target);
-          say(`Downloading Baseline for ${pick.name}...`);
+          say(`Downloading Baseline ${NEW_VERSION()} for ${pick.name}...`);
           notes.push(`Flashed ${pick.name}.`);
           files = await baselineParts(target);
         }
@@ -725,7 +734,7 @@ async function flashBoard(btn) {
           reportProgress: (fi, written, size) => {
             const done = files.slice(0, fi).reduce((n, f) => n + f.data.length, 0)
               + (written / size) * files[fi].data.length;
-            say(`Writing ${Math.floor((done / total) * 100)}%`);
+            say(`Writing Baseline ${NEW_VERSION()}: ${Math.floor((done / total) * 100)}%`);
           },
         });
         say("Restarting the board...");
@@ -776,6 +785,8 @@ async function flashBoard(btn) {
 // opening its serial port at 134 baud. Two choosers: the serial port, then the
 // bootloader (the browser opens a chooser only right after a click).
 
+// The version of the Baseline images on this page (what Flash installs).
+const NEW_VERSION = () => (window.FLICK && window.FLICK.version) || "";
 const FLASH_BUTTONS = "button.flash, button.teensy-flash";
 const HALFKAY = { vendorId: 0x16c0, productId: 0x0478 };
 const TEENSY_BLOCK = 1024;
@@ -879,7 +890,7 @@ async function flashTeensy(btn) {
   render();
   for (const b of document.querySelectorAll(FLASH_BUTTONS)) b.disabled = true;
   try {
-    say("Downloading Baseline...");
+    say(`Downloading Baseline ${NEW_VERSION()}...`);
     const hexUrl = new URL(`firmware/${target}/baseline-${target}.hex`, location.href);
     const res = await fetch(hexUrl, FRESH);
     if (!res.ok) throw new Error(`can't download the .hex (${res.status})`);
@@ -896,7 +907,7 @@ async function flashTeensy(btn) {
       report[2] = (addr >> 16) & 0xff;
       report.set(image.subarray(addr, addr + TEENSY_BLOCK), 64);
       await halfkayWrite(dev, report, i < 5 ? 45000 : 2000);     // the first blocks wait for the erase
-      if (i % 16 === 0) say(`Writing ${Math.floor((i / blocks.length) * 100)}%`);
+      if (i % 16 === 0) say(`Writing Baseline ${NEW_VERSION()}: ${Math.floor((i / blocks.length) * 100)}%`);
     }
     const boot = new Uint8Array(TEENSY_BLOCK + 64);
     boot[0] = boot[1] = boot[2] = 0xff;
@@ -1059,7 +1070,7 @@ async function picobootFlash(dev, blocks, wantChip, say) {
         if (!back || back.length !== 4096 || back.some((x, k) => x !== run.sectors[i][k])) {
           throw new Error(`flash at 0x${addr.toString(16)} doesn't read back what was written`);
         }
-        say(`Writing ${Math.floor((++done / total) * 100)}%`);
+        say(`Writing Baseline ${NEW_VERSION()}: ${Math.floor((++done / total) * 100)}%`);
       }
     }
     say("Restarting the board...");
@@ -1343,11 +1354,11 @@ async function flashRp2(btn) {
     chip = pick.chip;
     if (auto) {
       foundLine(status, `${(status.previousElementSibling && status.previousElementSibling.textContent) || "Found:"} ` +
-                        `Installing Baseline for ${pick.name}.`.trim());
+                        `Installing Baseline ${NEW_VERSION()} for ${pick.name}.`.trim());
       notes.push(`Flashed ${pick.name}.`);
     }
 
-    say(`Downloading Baseline${auto ? ` for ${pick.name}` : ""}...`);
+    say(`Downloading Baseline ${NEW_VERSION()}${auto ? ` for ${pick.name}` : ""}...`);
     const name = `baseline-${target}.uf2`;
     const resp = await fetch(`firmware/${target}/${name}`, FRESH);
     if (!resp.ok) throw new Error(`can't download ${name} (${resp.status})`);
@@ -1356,7 +1367,7 @@ async function flashRp2(btn) {
 
     let secs = null;
     if (dev) {
-      say("Writing Baseline...");
+      say(`Writing Baseline ${NEW_VERSION()}...`);
       try {
         secs = await picobootFlash(dev, blocks, chip, say);
       } catch (e) {

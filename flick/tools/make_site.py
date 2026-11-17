@@ -76,6 +76,11 @@ def main():
     args = ap.parse_args()
     out, dist = Path(args.out), Path(args.dist)
     version = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / "baseline/src/bl_main.h").read_text()).group(1)
+    # The Teensy and RP2 Baselines have their own copy of the version: the page names one for all.
+    for other in ("chips/imxrt1062/baseline/bl_teensy.h", "chips/rp2350/baseline/bl_rp2.h"):
+        v = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / other).read_text()).group(1)
+        if v != version:
+            sys.exit(f"make_site: BASELINE_VERSION is {v} in {other}, {version} in baseline/src/bl_main.h")
     abi = re.findall(r"#define BL_ABI_(?:MAJOR|MINOR) (\d+)", (ROOT / "sdk/include/baseline_api.h").read_text())
 
     if out.exists():
@@ -258,7 +263,7 @@ def main():
                               "  <div class=\"card board-card\" id=\"board-card\">", *panels,
                               f"      <p class=\"note-small\" id=\"board-none\">{none}</p>", "  </div>"])
 
-    flick_cfg = json.dumps({"abi": ".".join(abi), "boards": boards, "builds": builds, "generic": generic,
+    flick_cfg = json.dumps({"abi": ".".join(abi), "version": version, "boards": boards, "builds": builds, "generic": generic,
                             "sparkfun": sparkfun, "rp2": rp2})
     kit_button = (f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>'
                   if kit_link else "")
