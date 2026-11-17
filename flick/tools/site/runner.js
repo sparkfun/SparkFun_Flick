@@ -29,6 +29,10 @@ const GROUPS = {
 };
 
 const $ = (id) => document.getElementById(id);
+// Images and lists are always checked with the server (a 304 when unchanged):
+// a cached Baseline image older than the page would be flashed again and again,
+// since its build never matches the page's.
+const FRESH = { cache: "no-cache" };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // ------------------------------------------------------------------ the serial link
@@ -311,7 +315,7 @@ async function run(ex) {
   const target = state.board.target;
   let fast = false;
   try {
-    const res = await fetch(`examples/${ex.path}/${target}.flick`);
+    const res = await fetch(`examples/${ex.path}/${target}.flick`, FRESH);
     if (!res.ok) throw new Error(`no image for this board (${res.status})`);
     const img = new Uint8Array(await res.arrayBuffer());
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", img)))
@@ -362,7 +366,7 @@ async function show(ex) {
   $("source").textContent = "loading...";
   render();
   try {
-    $("source").textContent = await (await fetch(`examples/${ex.path}/${ex.name}.ino`)).text();
+    $("source").textContent = await (await fetch(`examples/${ex.path}/${ex.name}.ino`, FRESH)).text();
   } catch (e) {
     $("source").textContent = "(couldn't load the source)";
   }
@@ -455,17 +459,17 @@ async function sendInput(e) {
 // only confirmation. No erase: the image blanks NVS and otadata itself, the
 // manifest adds a blank coredump partition, and LittleFS keeps the user's files.
 
-const ESPTOOL = "https://cdn.jsdelivr.net/npm/esptool-js@0.6.0/+esm";
+const ESPTOOL = "https://cdn.jsdelivr.net/npm/esptool-js@0.7.1/+esm";   // 0.7: P4 flash power-on, C5 SPI registers, stale input drained
 const FLASH_BAUD = 921600;
 
 // The parts a manifest lists (image at 0, blank coredump), downloaded.
 async function baselineParts(target) {
   const manifestUrl = new URL(`manifests/${target}.json`, location.href);
-  const res = await fetch(manifestUrl);
+  const res = await fetch(manifestUrl, FRESH);
   if (!res.ok) throw new Error(`can't download the manifest for ${target} (${res.status})`);
   const manifest = await res.json();
   return Promise.all(manifest.builds[0].parts.map(async (p) => {
-    const r = await fetch(new URL(p.path, manifestUrl));
+    const r = await fetch(new URL(p.path, manifestUrl), FRESH);
     if (!r.ok) throw new Error(`can't download ${p.path} (${r.status})`);
     return { data: new Uint8Array(await r.arrayBuffer()), address: p.offset };
   }));
@@ -512,9 +516,10 @@ function sparkfunMatches(family, flashMb) {
   return (window.FLICK.sparkfun || []).filter((b) => b.chip === family && (!flashMb || b.flash_mb === flashMb));
 }
 
-// A board that already runs Baseline names its own target: ask before the
-// chip is reset into its bootloader. null when nothing answers.
-async function baselineTarget(port) {
+// A board that already runs Baseline answers INFO: its target (which board it
+// is) and build (which exact image). Asked before the chip is reset into its
+// bootloader. null when nothing answers.
+async function baselineInfo(port) {
   let r = null;
   try {
     r = await openLink(port);
@@ -523,7 +528,7 @@ async function baselineTarget(port) {
   }
   if (!r) return null;
   await r.link.close();
-  return r.info.target || null;
+  return r.info;
 }
 
 // The "Found: ..." line above a Flash button's status: what the chip
@@ -571,6 +576,8 @@ function askWhich(status, text, choices) {
 async function flashBoard(btn) {
   let target = btn.dataset.target, family = btn.dataset.chip, need = Number(btn.dataset.flashMb);
   const auto = target.startsWith("auto-") ? target.slice(5) : "";    // "sparkfun" or "generic"
+  const force = btn.dataset.force === "1";        // "Reinstall anyway": flash even if up to date
+  delete btn.dataset.force;
   const status = btn.parentElement.querySelector(".flash-status");
   const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
   if (!needs("serial")) { say("This browser can't flash a board: use Chrome or Edge on a computer.", "bad"); return; }
@@ -591,15 +598,32 @@ async function flashBoard(btn) {
   try {
     const notes = [];
     let files = null;
-    if (auto === "sparkfun") {
-      say("Asking the board whether it already runs Baseline...");
-      const known = await baselineTarget(port);
-      const board = (window.FLICK.sparkfun || []).find((b) => b.target === known);
+    say("Asking the board whether it already runs Baseline...");
+    const running = await baselineInfo(port);
+    if (running && auto) {
+      const list = auto === "sparkfun" ? window.FLICK.sparkfun : window.FLICK.generic;
+      const board = (list || []).find((b) => b.target === running.target);
       if (board) {
         target = board.target; family = board.chip; need = board.flash_mb;
         notes.push(`The board's Baseline says it is a ${board.name}.`);
         showAs(btn.closest("div.board"), board.target);
       }
+    }
+    // Already this exact Baseline (INFO build= matches the page's image): no
+    // flash, just connect. Baselines before build= always get the update.
+    const latest = (window.FLICK.builds || {})[target];
+    if (!force && running && latest && running.target === target && running.build === latest) {
+      const name = (window.FLICK.boards || {})[target] || target;
+      foundLine(status, `Found: ${name}, already running the latest Baseline (${running.baseline}).`);
+      say("Nothing to update. Connecting...", "good");
+      const ok = await connectAfterFlash(port);
+      say(ok ? "Nothing to update. Connected: its examples are below." : "Nothing to update. Press Connect below to try the examples.", "good");
+      const again = document.createElement("button");
+      again.textContent = "Reinstall anyway";
+      again.className = "choice";
+      again.onclick = () => { btn.dataset.force = "1"; flashBoard(btn); };
+      status.append(" ", again);
+      return;
     }
     say("Loading the flasher...");
     if (!target.startsWith("auto-")) files = await baselineParts(target);
@@ -838,7 +862,7 @@ async function init() {
   for (const b of document.querySelectorAll("button.teensy-flash")) b.onclick = () => flashTeensy(b);
   for (const b of document.querySelectorAll("button.teensy-reboot")) b.onclick = () => rebootTeensy(b);
   try {
-    state.examples = (await (await fetch("examples/examples.json")).json()).examples;
+    state.examples = (await (await fetch("examples/examples.json", FRESH)).json()).examples;
   } catch (e) {
     state.examples = [];
     render();
