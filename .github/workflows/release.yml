@@ -30,14 +30,14 @@ jobs:
   kit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: |
           python flick.py package
           mkdir -p dist/kit && mv flick/dist/flick-kit-*.zip dist/kit/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kit
           path: dist/kit/*.zip
@@ -46,12 +46,12 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Cache the sketch compilers (flick setup)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.flick/tools
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
@@ -59,7 +59,7 @@ jobs:
       - run: python flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
       - name: Every example for every board
         run: python flick/tools/ci/build_examples.py --out dist/examples
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: examples
           path: dist/examples
@@ -69,8 +69,8 @@ jobs:
     needs: [baseline, kit, examples]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: The tag matches BASELINE_VERSION
@@ -81,14 +81,14 @@ jobs:
             echo "::error::tag ${{ github.ref_name }} does not match BASELINE_VERSION $version"
             exit 1
           fi
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: dist        # dist/<target>/baseline-<target>.bin/.bsu, dist/kit/*.zip, dist/examples/
       - name: Download page
         run: python flick/tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
       - name: GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           prerelease: ${{ startsWith(github.ref_name, 'v0.') }}
           generate_release_notes: true
@@ -97,13 +97,13 @@ jobs:
             dist/*/baseline-*.bsu
             dist/kit/*.zip
       - name: The download page as an artifact (to look at while the repo is private)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: download-page
           path: site_build
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         if: ${{ !github.event.repository.private }}
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         if: ${{ !github.event.repository.private }}
         with:
           path: site_build
@@ -117,4 +117,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

@@ -12,8 +12,8 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: ABI is append-only (api/abi.lock)
@@ -32,12 +32,12 @@ jobs:
   examples:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Cache the sketch compilers (flick setup)
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.flick/tools
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
