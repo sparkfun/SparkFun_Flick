@@ -51,10 +51,10 @@ static inline int digitalWrite(int pin, int level)
     if (pin == BL_BOARD_RGB_LED) {
         uint8_t v = level ? RGB_BRIGHTNESS : 0;
         bl_sdk_led_level = level ? 1 : 0;
-        return BL->rgb_write(pin, v, v, v);
+        return BL_CALL(rgb_write)(pin, v, v, v);
     }
 #endif
-    return BL->gpio_write(pin, level);
+    return BL_CALL(gpio_write)(pin, level);
 }
 static inline int digitalRead(int pin)
 {
@@ -63,7 +63,7 @@ static inline int digitalRead(int pin)
         return bl_sdk_led_level;
     }
 #endif
-    return BL->gpio_read(pin);
+    return BL_CALL(gpio_read)(pin);
 }
 #ifdef BL_PLATFORM_TEENSY
 int bl_teensy_analog_write(int pin, int value);    /* sketch_teensy.cpp: analogWriteResolution/Frequency */
@@ -77,10 +77,10 @@ static inline int analogWrite(int pin, int value)
     if (pin == BL_BOARD_RGB_LED) {
         uint8_t v = (uint8_t)(value < 0 ? 0 : value > 255 ? 255 : value);
         bl_sdk_led_level = v ? 1 : 0;
-        return BL->rgb_write(pin, v, v, v);
+        return BL_CALL(rgb_write)(pin, v, v, v);
     }
 #endif
-    return BL->pwm_write(pin, value);
+    return BL_CALL(pwm_write)(pin, value);
 }
 
 /* Implemented by the sketch. */

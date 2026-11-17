@@ -259,7 +259,7 @@ size_t IPAddress::printTo(Print &p) const
 uint64_t EspClass::getEfuseMac()
 {
     uint8_t m[6] = {0};
-    BL->wifi_mac(m);        /* the table entry: boards without WiFi (P4) answer with an error, so 0 */
+    BL_CALL(wifi_mac)(m);        /* the table entry: boards without WiFi (P4) answer with an error, so 0 */
     uint64_t v = 0;
     for (int i = 5; i >= 0; i--) {
         v = (v << 8) | m[i];     // same byte order as Arduino-ESP32
@@ -287,7 +287,7 @@ bool TwoWire::begin(int sda, int scl, uint32_t frequency)
 bool TwoWire::end()
 {
     if (bus_ != 0 || BL_HAS(i2cx_end)) {
-        bl_i2cx_end(bus_);
+        BL->i2cx_end(bus_);     /* guarded: needs no newer Baseline */
     }
     begun_ = false;
     return true;

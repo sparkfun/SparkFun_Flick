@@ -213,6 +213,26 @@ def gen_api_h(major, minor, entries):
     o.append("/* True if the running Baseline provides `field` (for entries newer than the\n"
              "   sketch's required minor). */\n")
     o.append("#define BL_HAS(field) (offsetof(bl_api_t, field) < BL->struct_size)\n\n")
+    o.append(r'''/* The oldest Baseline a sketch runs on. Each call through the table leaves a
+   marker, a byte holding the minor version that added the entry, in a section
+   of its own (.bl_need.N) that the calling code refers to. Linking drops the
+   markers of code that isn't used, and flick stamps the sketch header with the
+   largest one left (sdk/ld/sketch_esp.ld.in collects them, make_image() in
+   flick.py reads them), so a sketch runs on every Baseline that has the
+   entries it calls. Call the table with BL_CALL(field)(...); a plain
+   BL->field(...) leaves no marker: only for a call guarded by BL_HAS(field). */
+#define BL_NEED_STR_(x) #x
+#define BL_NEED_(minor) __asm__ volatile(".pushsection .bl_need.%=,\"a\"\n" \
+    ".Lbl_need%=: .byte " BL_NEED_STR_(minor) "\n.popsection\n" \
+    ".reloc ., BFD_RELOC_NONE, .Lbl_need%=" ::)
+#define BL_NEED(minor) BL_NEED_(minor)
+#define BL_CALL(field) (__extension__({ BL_NEED(BL_MINOR_##field); BL->field; }))
+
+/* The minor version that added each entry. */
+''')
+    for e in entries:
+        o.append(f"#define BL_MINOR_{e.field} {e.minor}\n")
+    o.append("\n")
     for e in entries:
         if e.wrapper == "-" or e.wrapper.startswith("@"):     # @name: written by hand in baseline.h
             continue
@@ -221,11 +241,11 @@ def gen_api_h(major, minor, entries):
             o.append(f"#if {need}\n")
         o.append(f"/* {e.doc} */\n")
         if e.variadic:
-            o.append(f"#define {e.wrapper}(...) (BL->{e.field}(__VA_ARGS__))\n")
+            o.append(f"#define {e.wrapper}(...) (BL_CALL({e.field})(__VA_ARGS__))\n")
         else:
             args = ", ".join(e.arg_names())
             ret = "" if e.ret == "void" else "return "
-            o.append(f"static inline {e.ret} {e.wrapper}({e.params}) {{ {ret}BL->{e.field}({args}); }}\n")
+            o.append(f"static inline {e.ret} {e.wrapper}({e.params}) {{ {ret}BL_CALL({e.field})({args}); }}\n")
         if need:
             o.append("#endif\n")
     o.append("#endif /* BASELINE_FIRMWARE */\n\n#endif /* BASELINE_API_H */\n")

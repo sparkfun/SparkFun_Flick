@@ -341,959 +341,1271 @@ extern const bl_api_t *BL;
    sketch's required minor). */
 #define BL_HAS(field) (offsetof(bl_api_t, field) < BL->struct_size)
 
+/* The oldest Baseline a sketch runs on. Each call through the table leaves a
+   marker, a byte holding the minor version that added the entry, in a section
+   of its own (.bl_need.N) that the calling code refers to. Linking drops the
+   markers of code that isn't used, and flick stamps the sketch header with the
+   largest one left (sdk/ld/sketch_esp.ld.in collects them, make_image() in
+   flick.py reads them), so a sketch runs on every Baseline that has the
+   entries it calls. Call the table with BL_CALL(field)(...); a plain
+   BL->field(...) leaves no marker: only for a call guarded by BL_HAS(field). */
+#define BL_NEED_STR_(x) #x
+#define BL_NEED_(minor) __asm__ volatile(".pushsection .bl_need.%=,\"a\"\n" \
+    ".Lbl_need%=: .byte " BL_NEED_STR_(minor) "\n.popsection\n" \
+    ".reloc ., BFD_RELOC_NONE, .Lbl_need%=" ::)
+#define BL_NEED(minor) BL_NEED_(minor)
+#define BL_CALL(field) (__extension__({ BL_NEED(BL_MINOR_##field); BL->field; }))
+
+/* The minor version that added each entry. */
+#define BL_MINOR_millis 0
+#define BL_MINOR_micros 0
+#define BL_MINOR_delay_ms 0
+#define BL_MINOR_delay_us 0
+#define BL_MINOR_yield 0
+#define BL_MINOR_printf 0
+#define BL_MINOR_vprintf 0
+#define BL_MINOR_snprintf 0
+#define BL_MINOR_vsnprintf 0
+#define BL_MINOR_log 0
+#define BL_MINOR_malloc 0
+#define BL_MINOR_calloc 0
+#define BL_MINOR_realloc 0
+#define BL_MINOR_free 0
+#define BL_MINOR_free_heap 0
+#define BL_MINOR_restart 0
+#define BL_MINOR_baseline_version 0
+#define BL_MINOR_gpio_mode 0
+#define BL_MINOR_gpio_write 0
+#define BL_MINOR_gpio_read 0
+#define BL_MINOR_console_write 1
+#define BL_MINOR_console_available 1
+#define BL_MINOR_console_read 1
+#define BL_MINOR_adc_read 1
+#define BL_MINOR_adc_read_mv 1
+#define BL_MINOR_pwm_write 1
+#define BL_MINOR_rgb_write 1
+#define BL_MINOR_i2c_begin 1
+#define BL_MINOR_i2c_write 1
+#define BL_MINOR_i2c_read 1
+#define BL_MINOR_wifi_begin 1
+#define BL_MINOR_wifi_status 1
+#define BL_MINOR_wifi_disconnect 1
+#define BL_MINOR_wifi_local_ip 1
+#define BL_MINOR_wifi_rssi 1
+#define BL_MINOR_wifi_mac 1
+#define BL_MINOR_http_get 1
+#define BL_MINOR_ble_serial_begin 1
+#define BL_MINOR_ble_serial_connected 1
+#define BL_MINOR_ble_serial_write 1
+#define BL_MINOR_ble_serial_available 1
+#define BL_MINOR_ble_serial_read 1
+#define BL_MINOR_espnow_begin 1
+#define BL_MINOR_espnow_send 1
+#define BL_MINOR_espnow_receive 1
+#define BL_MINOR_http_request 2
+#define BL_MINOR_espnow_send_status 2
+#define BL_MINOR_system_info 2
+#define BL_MINOR_random 2
+#define BL_MINOR_gpio_attach_interrupt 3
+#define BL_MINOR_gpio_detach_interrupt 3
+#define BL_MINOR_gpio_interrupt_take 3
+#define BL_MINOR_spi_begin 3
+#define BL_MINOR_spi_end 3
+#define BL_MINOR_spi_begin_transaction 3
+#define BL_MINOR_spi_end_transaction 3
+#define BL_MINOR_spi_transfer 3
+#define BL_MINOR_spi_write 3
+#define BL_MINOR_wifi_set_mode 3
+#define BL_MINOR_wifi_get_mode 3
+#define BL_MINOR_wifi_softap 3
+#define BL_MINOR_wifi_softap_stop 3
+#define BL_MINOR_wifi_softap_stations 3
+#define BL_MINOR_wifi_ip 3
+#define BL_MINOR_wifi_scan 3
+#define BL_MINOR_wifi_scan_result 3
+#define BL_MINOR_wifi_channel 3
+#define BL_MINOR_wifi_ssid 3
+#define BL_MINOR_wifi_config 3
+#define BL_MINOR_wifi_set_hostname 3
+#define BL_MINOR_net_resolve 3
+#define BL_MINOR_tcp_client_new 3
+#define BL_MINOR_tcp_client_retain 3
+#define BL_MINOR_tcp_client_release 3
+#define BL_MINOR_tcp_client_tls_config 3
+#define BL_MINOR_tcp_client_connect 3
+#define BL_MINOR_tcp_client_write 3
+#define BL_MINOR_tcp_client_available 3
+#define BL_MINOR_tcp_client_read 3
+#define BL_MINOR_tcp_client_peek 3
+#define BL_MINOR_tcp_client_connected 3
+#define BL_MINOR_tcp_client_stop 3
+#define BL_MINOR_tcp_client_remote 3
+#define BL_MINOR_tcp_server_new 3
+#define BL_MINOR_tcp_server_accept 3
+#define BL_MINOR_tcp_server_close 3
+#define BL_MINOR_udp_new 3
+#define BL_MINOR_udp_close 3
+#define BL_MINOR_udp_begin_packet 3
+#define BL_MINOR_udp_write 3
+#define BL_MINOR_udp_end_packet 3
+#define BL_MINOR_udp_parse_packet 3
+#define BL_MINOR_udp_read 3
+#define BL_MINOR_udp_remote 3
+#define BL_MINOR_web_new 3
+#define BL_MINOR_web_close 3
+#define BL_MINOR_web_on 3
+#define BL_MINOR_web_on_not_found 3
+#define BL_MINOR_web_handle_client 3
+#define BL_MINOR_web_send 3
+#define BL_MINOR_web_send_header 3
+#define BL_MINOR_web_request 3
+#define BL_MINOR_web_collect_headers 3
+#define BL_MINOR_ble_init 3
+#define BL_MINOR_ble_deinit 3
+#define BL_MINOR_ble_address 3
+#define BL_MINOR_ble_set_mtu 3
+#define BL_MINOR_ble_server_create 3
+#define BL_MINOR_ble_server_connected_count 3
+#define BL_MINOR_ble_server_disconnect 3
+#define BL_MINOR_ble_service_create 3
+#define BL_MINOR_ble_service_start 3
+#define BL_MINOR_ble_char_create 3
+#define BL_MINOR_ble_char_set_value 3
+#define BL_MINOR_ble_char_get_value 3
+#define BL_MINOR_ble_char_notify 3
+#define BL_MINOR_ble_char_add_descriptor 3
+#define BL_MINOR_ble_adv_config 3
+#define BL_MINOR_ble_adv_start 3
+#define BL_MINOR_ble_adv_stop 3
+#define BL_MINOR_ble_scan_start 3
+#define BL_MINOR_ble_scan_stop 3
+#define BL_MINOR_ble_scan_running 3
+#define BL_MINOR_ble_scan_count 3
+#define BL_MINOR_ble_scan_result 3
+#define BL_MINOR_ble_scan_clear 3
+#define BL_MINOR_ble_client_connect 3
+#define BL_MINOR_ble_client_disconnect 3
+#define BL_MINOR_ble_client_connected 3
+#define BL_MINOR_ble_client_rssi 3
+#define BL_MINOR_ble_remote_char 3
+#define BL_MINOR_ble_remote_read 3
+#define BL_MINOR_ble_remote_write 3
+#define BL_MINOR_ble_remote_subscribe 3
+#define BL_MINOR_ble_remote_props 3
+#define BL_MINOR_ble_event_take 3
+#define BL_MINOR_prefs_open 4
+#define BL_MINOR_prefs_close 4
+#define BL_MINOR_prefs_clear 4
+#define BL_MINOR_prefs_remove 4
+#define BL_MINOR_prefs_put 4
+#define BL_MINOR_prefs_get 4
+#define BL_MINOR_prefs_info 4
+#define BL_MINOR_fs_begin 4
+#define BL_MINOR_fs_end 4
+#define BL_MINOR_fs_format 4
+#define BL_MINOR_fs_info 4
+#define BL_MINOR_fs_open 4
+#define BL_MINOR_fs_retain 4
+#define BL_MINOR_fs_release 4
+#define BL_MINOR_fs_read 4
+#define BL_MINOR_fs_write 4
+#define BL_MINOR_fs_peek 4
+#define BL_MINOR_fs_seek 4
+#define BL_MINOR_fs_flush 4
+#define BL_MINOR_fs_file_info 4
+#define BL_MINOR_fs_file_name 4
+#define BL_MINOR_fs_next 4
+#define BL_MINOR_fs_path_op 4
+#define BL_MINOR_uart_begin 4
+#define BL_MINOR_uart_end 4
+#define BL_MINOR_uart_write 4
+#define BL_MINOR_uart_available 4
+#define BL_MINOR_uart_read 4
+#define BL_MINOR_uart_peek 4
+#define BL_MINOR_uart_flush 4
+#define BL_MINOR_mdns_begin 4
+#define BL_MINOR_mdns_end 4
+#define BL_MINOR_mdns_add_service 4
+#define BL_MINOR_mdns_add_txt 4
+#define BL_MINOR_mdns_query_host 4
+#define BL_MINOR_mdns_query_service 4
+#define BL_MINOR_mdns_result 4
+#define BL_MINOR_mqtt_new 4
+#define BL_MINOR_mqtt_free 4
+#define BL_MINOR_mqtt_config 4
+#define BL_MINOR_mqtt_connect 4
+#define BL_MINOR_mqtt_disconnect 4
+#define BL_MINOR_mqtt_state 4
+#define BL_MINOR_mqtt_publish 4
+#define BL_MINOR_mqtt_subscribe 4
+#define BL_MINOR_mqtt_unsubscribe 4
+#define BL_MINOR_mqtt_take 4
+#define BL_MINOR_ota_begin 4
+#define BL_MINOR_ota_end 4
+#define BL_MINOR_bt_spp_begin 5
+#define BL_MINOR_bt_spp_end 5
+#define BL_MINOR_bt_spp_connected 5
+#define BL_MINOR_bt_spp_write 5
+#define BL_MINOR_bt_spp_available 5
+#define BL_MINOR_bt_spp_read 5
+#define BL_MINOR_bt_spp_peek 5
+#define BL_MINOR_bt_spp_flush 5
+#define BL_MINOR_bt_spp_set_pin 5
+#define BL_MINOR_sd_begin 6
+#define BL_MINOR_sd_end 6
+#define BL_MINOR_sd_info 6
+#define BL_MINOR_fsx_open 6
+#define BL_MINOR_fsx_path_op 6
+#define BL_MINOR_sleep_wake 6
+#define BL_MINOR_sleep_disable_wake 6
+#define BL_MINOR_sleep_deep 6
+#define BL_MINOR_sleep_light 6
+#define BL_MINOR_sleep_wake_cause 6
+#define BL_MINOR_sleep_ext1_status 6
+#define BL_MINOR_rtc_memory 6
+#define BL_MINOR_timer_new 6
+#define BL_MINOR_timer_free 6
+#define BL_MINOR_timer_start 6
+#define BL_MINOR_timer_stop 6
+#define BL_MINOR_timer_active 6
+#define BL_MINOR_timer_take 6
+#define BL_MINOR_time_ntp_start 6
+#define BL_MINOR_time_get 6
+#define BL_MINOR_time_set 6
+#define BL_MINOR_time_synced 6
+#define BL_MINOR_touch_read 6
+#define BL_MINOR_touch_attach 6
+#define BL_MINOR_touch_detach 6
+#define BL_MINOR_touch_take 6
+#define BL_MINOR_i2s_begin 6
+#define BL_MINOR_i2s_end 6
+#define BL_MINOR_i2s_write 6
+#define BL_MINOR_i2s_read 6
+#define BL_MINOR_led_strip_write 6
+#define BL_MINOR_ledc_attach 6
+#define BL_MINOR_ledc_write 6
+#define BL_MINOR_ledc_detach 6
+#define BL_MINOR_ledc_write_tone 6
+#define BL_MINOR_ledc_change_frequency 6
+#define BL_MINOR_dns_start 6
+#define BL_MINOR_dns_stop 6
+#define BL_MINOR_dns_error_reply 6
+#define BL_MINOR_usb_begin 6
+#define BL_MINOR_usb_end 6
+#define BL_MINOR_usb_devices 6
+#define BL_MINOR_usb_mounted 6
+#define BL_MINOR_usb_keyboard 6
+#define BL_MINOR_usb_mouse 6
+#define BL_MINOR_usb_gamepad 6
+#define BL_MINOR_usb_consumer 6
+#define BL_MINOR_usb_midi_write 6
+#define BL_MINOR_usb_midi_read 6
+#define BL_MINOR_ps_malloc 6
+#define BL_MINOR_ps_calloc 6
+#define BL_MINOR_ps_realloc 6
+#define BL_MINOR_i2cx_begin 6
+#define BL_MINOR_i2cx_end 6
+#define BL_MINOR_i2cx_write 6
+#define BL_MINOR_i2cx_read 6
+#define BL_MINOR_uart_set_rx_buffer 6
+#define BL_MINOR_uart_available_for_write 6
+#define BL_MINOR_adc_set_resolution 6
+#define BL_MINOR_adc_set_attenuation 6
+#define BL_MINOR_dac_write 6
+#define BL_MINOR_temperature_read 6
+#define BL_MINOR_reset_reason 6
+#define BL_MINOR_last_crash 6
+#define BL_MINOR_wifi_event_take 6
+#define BL_MINOR_baseline_update_mode 7
+#define BL_MINOR_ota_pull_sketch 7
+#define BL_MINOR_ota_pull_baseline 7
+#define BL_MINOR_isr_attach_pin 8
+#define BL_MINOR_isr_detach_pin 8
+#define BL_MINOR_isr_timer_begin 8
+#define BL_MINOR_isr_timer_update 8
+#define BL_MINOR_isr_timer_end 8
+#define BL_MINOR_isr_timer_priority 8
+#define BL_MINOR_dma_channel_alloc 8
+#define BL_MINOR_dma_channel_free 8
+#define BL_MINOR_audio_memory 8
+#define BL_MINOR_audio_create 8
+#define BL_MINOR_audio_connect 8
+#define BL_MINOR_audio_disconnect 8
+#define BL_MINOR_audio_reconnect 8
+#define BL_MINOR_audio_call 8
+#define BL_MINOR_audio_stat 8
+#define BL_MINOR_audio_interrupts 8
+#define BL_MINOR_usbh_begin 9
+#define BL_MINOR_usbh_info 9
+#define BL_MINOR_usbh_key_take 9
+#define BL_MINOR_usbh_keyboard_leds 9
+#define BL_MINOR_usbh_mouse_take 9
+#define BL_MINOR_usbh_joystick_take 9
+#define BL_MINOR_usbh_midi_read 9
+#define BL_MINOR_usbh_midi_send 9
+#define BL_MINOR_usbh_serial_begin 9
+#define BL_MINOR_usbh_serial_available 9
+#define BL_MINOR_usbh_serial_read 9
+#define BL_MINOR_usbh_serial_write 9
+#define BL_MINOR_eth_begin 9
+#define BL_MINOR_eth_status 9
+#define BL_MINOR_eth_ip 9
+#define BL_MINOR_eth_mac 9
+#define BL_MINOR_eth_maintain 9
+
 /* Milliseconds since boot. */
-static inline uint32_t millis(void) { return BL->millis(); }
+static inline uint32_t millis(void) { return BL_CALL(millis)(); }
 /* Microseconds since boot. */
-static inline uint64_t micros(void) { return BL->micros(); }
+static inline uint64_t micros(void) { return BL_CALL(micros)(); }
 /* Busy-wait for us microseconds. */
-static inline void delayMicroseconds(uint32_t us) { BL->delay_us(us); }
+static inline void delayMicroseconds(uint32_t us) { BL_CALL(delay_us)(us); }
 /* printf to the Baseline console. */
-#define bl_printf(...) (BL->printf(__VA_ARGS__))
+#define bl_printf(...) (BL_CALL(printf)(__VA_ARGS__))
 /* vprintf to the Baseline console. */
-static inline int bl_vprintf(const char *fmt, va_list ap) { return BL->vprintf(fmt, ap); }
+static inline int bl_vprintf(const char *fmt, va_list ap) { return BL_CALL(vprintf)(fmt, ap); }
 /* Format into a buffer. */
-#define bl_snprintf(...) (BL->snprintf(__VA_ARGS__))
+#define bl_snprintf(...) (BL_CALL(snprintf)(__VA_ARGS__))
 /* Format into a buffer (va_list). */
-static inline int bl_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) { return BL->vsnprintf(buf, size, fmt, ap); }
+static inline int bl_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) { return BL_CALL(vsnprintf)(buf, size, fmt, ap); }
 /* Log through ESP-IDF logging. level: BL_LOG_*. */
-#define bl_log(...) (BL->log(__VA_ARGS__))
+#define bl_log(...) (BL_CALL(log)(__VA_ARGS__))
 /* Allocate from the Baseline heap. */
-static inline void * bl_malloc(size_t size) { return BL->malloc(size); }
+static inline void * bl_malloc(size_t size) { return BL_CALL(malloc)(size); }
 /* Allocate zeroed memory. */
-static inline void * bl_calloc(size_t n, size_t size) { return BL->calloc(n, size); }
+static inline void * bl_calloc(size_t n, size_t size) { return BL_CALL(calloc)(n, size); }
 /* Resize an allocation. */
-static inline void * bl_realloc(void *ptr, size_t size) { return BL->realloc(ptr, size); }
+static inline void * bl_realloc(void *ptr, size_t size) { return BL_CALL(realloc)(ptr, size); }
 /* Free an allocation. */
-static inline void bl_free(void *ptr) { BL->free(ptr); }
+static inline void bl_free(void *ptr) { BL_CALL(free)(ptr); }
 /* Free heap bytes. */
-static inline uint32_t bl_free_heap(void) { return BL->free_heap(); }
+static inline uint32_t bl_free_heap(void) { return BL_CALL(free_heap)(); }
 /* Reboot the device. */
-static inline void bl_restart(void) { BL->restart(); }
+static inline void bl_restart(void) { BL_CALL(restart)(); }
 /* Baseline firmware version string. */
-static inline const char * bl_baseline_version(void) { return BL->baseline_version(); }
+static inline const char * bl_baseline_version(void) { return BL_CALL(baseline_version)(); }
 /* Configure a pin. mode: INPUT, OUTPUT, INPUT_PULLUP, INPUT_PULLDOWN, OUTPUT_OPEN_DRAIN. Returns 0 or BL_ERR_*. */
-static inline int pinMode(int pin, int mode) { return BL->gpio_mode(pin, mode); }
+static inline int pinMode(int pin, int mode) { return BL_CALL(gpio_mode)(pin, mode); }
 /* Write raw bytes to the USB console. Returns bytes written. */
-static inline int bl_console_write(const uint8_t *data, size_t len) { return BL->console_write(data, len); }
+static inline int bl_console_write(const uint8_t *data, size_t len) { return BL_CALL(console_write)(data, len); }
 /* Bytes waiting to be read from the USB console. */
-static inline int bl_console_available(void) { return BL->console_available(); }
+static inline int bl_console_available(void) { return BL_CALL(console_available)(); }
 /* Read one byte from the USB console, or -1 if none. */
-static inline int bl_console_read(void) { return BL->console_read(); }
+static inline int bl_console_read(void) { return BL_CALL(console_read)(); }
 /* Read a pin's ADC value (0-4095), or BL_ERR_*. */
-static inline int analogRead(int pin) { return BL->adc_read(pin); }
+static inline int analogRead(int pin) { return BL_CALL(adc_read)(pin); }
 #if defined(BL_PLATFORM_ESP32)
 /* Read a pin's voltage in millivolts, or BL_ERR_*. */
-static inline int analogReadMilliVolts(int pin) { return BL->adc_read_mv(pin); }
+static inline int analogReadMilliVolts(int pin) { return BL_CALL(adc_read_mv)(pin); }
 #endif
 #if defined(BL_HAS_LED_STRIP)
 /* Set a WS2812 RGB LED (RGB_BUILTIN: S3 Thing Plus 46, Thing Plus C 2). Returns 0 or BL_ERR_*. */
-static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL->rgb_write(pin, red, green, blue); }
+static inline int rgbLedWrite(int pin, uint8_t red, uint8_t green, uint8_t blue) { return BL_CALL(rgb_write)(pin, red, green, blue); }
 #endif
 /* Start I2C. sda/scl -1 = board Qwiic pins (8/9). freq in Hz (0 = 100 kHz). */
-static inline int bl_i2c_begin(int sda, int scl, uint32_t freq) { return BL->i2c_begin(sda, scl, freq); }
+static inline int bl_i2c_begin(int sda, int scl, uint32_t freq) { return BL_CALL(i2c_begin)(sda, scl, freq); }
 /* Write bytes (len 0 = probe). 0, BL_ERR_NACK, BL_ERR_TIMEOUT or BL_ERR_FAIL. */
-static inline int bl_i2c_write(uint8_t addr, const uint8_t *data, size_t len, bool stop) { return BL->i2c_write(addr, data, len, stop); }
+static inline int bl_i2c_write(uint8_t addr, const uint8_t *data, size_t len, bool stop) { return BL_CALL(i2c_write)(addr, data, len, stop); }
 /* Read bytes. Returns the number read, or BL_ERR_*. */
-static inline int bl_i2c_read(uint8_t addr, uint8_t *data, size_t len) { return BL->i2c_read(addr, data, len); }
+static inline int bl_i2c_read(uint8_t addr, uint8_t *data, size_t len) { return BL_CALL(i2c_read)(addr, data, len); }
 #if defined(BL_HAS_WIFI)
 /* Start connecting as a station (returns at once). password may be NULL. */
-static inline int bl_wifi_begin(const char *ssid, const char *password) { return BL->wifi_begin(ssid, password); }
+static inline int bl_wifi_begin(const char *ssid, const char *password) { return BL_CALL(wifi_begin)(ssid, password); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* BL_WIFI_* status (same values as Arduino's WL_*). */
-static inline int bl_wifi_status(void) { return BL->wifi_status(); }
+static inline int bl_wifi_status(void) { return BL_CALL(wifi_status)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Disconnect from the access point. */
-static inline void bl_wifi_disconnect(void) { BL->wifi_disconnect(); }
+static inline void bl_wifi_disconnect(void) { BL_CALL(wifi_disconnect)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Write the IP address as text ("192.168.1.20"). Returns 0 or BL_ERR_STATE. */
-static inline int bl_wifi_local_ip(char *buf, size_t size) { return BL->wifi_local_ip(buf, size); }
+static inline int bl_wifi_local_ip(char *buf, size_t size) { return BL_CALL(wifi_local_ip)(buf, size); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Signal strength in dBm (0 when not connected). */
-static inline int bl_wifi_rssi(void) { return BL->wifi_rssi(); }
+static inline int bl_wifi_rssi(void) { return BL_CALL(wifi_rssi)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Copy the 6-byte station MAC address into mac. Returns 0. */
-static inline int bl_wifi_mac(uint8_t *mac) { return BL->wifi_mac(mac); }
+static inline int bl_wifi_mac(uint8_t *mac) { return BL_CALL(wifi_mac)(mac); }
 #endif
 #if defined(BL_HAS_NET)
 /* HTTP(S) GET; follows redirects, verifies TLS with the built-in CA bundle. Body is NUL-terminated and truncated to size-1. Returns body length or BL_ERR_*. */
-static inline int bl_http_get(const char *url, char *body, size_t size, int *status) { return BL->http_get(url, body, size, status); }
+static inline int bl_http_get(const char *url, char *body, size_t size, int *status) { return BL_CALL(http_get)(url, body, size, status); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Start advertising a BLE UART (Nordic UART Service) named `name`. */
-static inline int bl_ble_serial_begin(const char *name) { return BL->ble_serial_begin(name); }
+static inline int bl_ble_serial_begin(const char *name) { return BL_CALL(ble_serial_begin)(name); }
 #endif
 #if defined(BL_HAS_BLE)
 /* 1 if a central is connected. */
-static inline int bl_ble_serial_connected(void) { return BL->ble_serial_connected(); }
+static inline int bl_ble_serial_connected(void) { return BL_CALL(ble_serial_connected)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Send bytes as notifications. Returns bytes sent (0 if not connected). */
-static inline int bl_ble_serial_write(const uint8_t *data, size_t len) { return BL->ble_serial_write(data, len); }
+static inline int bl_ble_serial_write(const uint8_t *data, size_t len) { return BL_CALL(ble_serial_write)(data, len); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Bytes received and not yet read. */
-static inline int bl_ble_serial_available(void) { return BL->ble_serial_available(); }
+static inline int bl_ble_serial_available(void) { return BL_CALL(ble_serial_available)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Read one received byte, or -1. */
-static inline int bl_ble_serial_read(void) { return BL->ble_serial_read(); }
+static inline int bl_ble_serial_read(void) { return BL_CALL(ble_serial_read)(); }
 #endif
 #if defined(BL_HAS_ESPNOW)
 /* Start ESP-NOW (puts WiFi in station mode if needed). */
-static inline int bl_espnow_begin(void) { return BL->espnow_begin(); }
+static inline int bl_espnow_begin(void) { return BL_CALL(espnow_begin)(); }
 #endif
 #if defined(BL_HAS_ESPNOW)
 /* Send up to 250 bytes. mac NULL = broadcast. Returns 0 or BL_ERR_*. */
-static inline int bl_espnow_send(const uint8_t *mac, const uint8_t *data, size_t len) { return BL->espnow_send(mac, data, len); }
+static inline int bl_espnow_send(const uint8_t *mac, const uint8_t *data, size_t len) { return BL_CALL(espnow_send)(mac, data, len); }
 #endif
 #if defined(BL_HAS_ESPNOW)
 /* Take the next received packet: copies sender MAC (6 bytes, may be NULL) and data. Returns length, 0 if none. */
-static inline int bl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return BL->espnow_receive(mac, data, size); }
+static inline int bl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return BL_CALL(espnow_receive)(mac, data, size); }
 #endif
 #if defined(BL_HAS_NET)
 /* HTTP(S) request. headers: "Name: value\r\n" lines or NULL. *response gets a malloc'd NUL-terminated body (free with bl_free); may be NULL. Returns HTTP status or BL_ERR_*. */
-static inline int bl_http_request(const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char * *response, size_t *response_len) { return BL->http_request(method, url, headers, body, body_len, response, response_len); }
+static inline int bl_http_request(const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len, char * *response, size_t *response_len) { return BL_CALL(http_request)(method, url, headers, body, body_len, response, response_len); }
 #endif
 #if defined(BL_HAS_ESPNOW)
 /* Take the next delivery report: copies the peer MAC; returns 1 delivered, 0 failed, -1 none pending. */
-static inline int bl_espnow_send_status(uint8_t *mac) { return BL->espnow_send_status(mac); }
+static inline int bl_espnow_send_status(uint8_t *mac) { return BL_CALL(espnow_send_status)(mac); }
 #endif
 /* System facts: what = BL_INFO_* (CPU MHz, heap/PSRAM/flash sizes). */
-static inline uint32_t bl_system_info(int what) { return BL->system_info(what); }
+static inline uint32_t bl_system_info(int what) { return BL_CALL(system_info)(what); }
 /* 32-bit hardware random number. */
-static inline uint32_t bl_random(void) { return BL->random(); }
+static inline uint32_t bl_random(void) { return BL_CALL(random)(); }
 /* Watch a pin. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH. */
-static inline int bl_gpio_attach_interrupt(int pin, int mode) { return BL->gpio_attach_interrupt(pin, mode); }
+static inline int bl_gpio_attach_interrupt(int pin, int mode) { return BL_CALL(gpio_attach_interrupt)(pin, mode); }
 /* Stop watching a pin. */
-static inline int bl_gpio_detach_interrupt(int pin) { return BL->gpio_detach_interrupt(pin); }
+static inline int bl_gpio_detach_interrupt(int pin) { return BL_CALL(gpio_detach_interrupt)(pin); }
 /* Next pin that fired, or -1. */
-static inline int bl_gpio_interrupt_take(void) { return BL->gpio_interrupt_take(); }
+static inline int bl_gpio_interrupt_take(void) { return BL_CALL(gpio_interrupt_take)(); }
 /* Start the SPI bus. -1 = board default pin. */
-static inline int bl_spi_begin(int sck, int miso, int mosi, int ss) { return BL->spi_begin(sck, miso, mosi, ss); }
+static inline int bl_spi_begin(int sck, int miso, int mosi, int ss) { return BL_CALL(spi_begin)(sck, miso, mosi, ss); }
 /* Release the SPI bus. */
-static inline void bl_spi_end(void) { BL->spi_end(); }
+static inline void bl_spi_end(void) { BL_CALL(spi_end)(); }
 /* Lock the bus with these settings. bit_order: BL_MSBFIRST/BL_LSBFIRST, data_mode 0-3. */
-static inline void bl_spi_begin_transaction(uint32_t clock, int bit_order, int data_mode) { BL->spi_begin_transaction(clock, bit_order, data_mode); }
+static inline void bl_spi_begin_transaction(uint32_t clock, int bit_order, int data_mode) { BL_CALL(spi_begin_transaction)(clock, bit_order, data_mode); }
 /* Unlock the bus. */
-static inline void bl_spi_end_transaction(void) { BL->spi_end_transaction(); }
+static inline void bl_spi_end_transaction(void) { BL_CALL(spi_end_transaction)(); }
 /* Full-duplex transfer; received bytes replace data. */
-static inline void bl_spi_transfer(uint8_t *data, size_t len) { BL->spi_transfer(data, len); }
+static inline void bl_spi_transfer(uint8_t *data, size_t len) { BL_CALL(spi_transfer)(data, len); }
 /* Send bytes, discard what comes back. */
-static inline void bl_spi_write(const uint8_t *data, size_t len) { BL->spi_write(data, len); }
+static inline void bl_spi_write(const uint8_t *data, size_t len) { BL_CALL(spi_write)(data, len); }
 #if defined(BL_HAS_WIFI)
 /* BL_WIFI_MODE_OFF/STA/AP/AP_STA. */
-static inline int bl_wifi_set_mode(int mode) { return BL->wifi_set_mode(mode); }
+static inline int bl_wifi_set_mode(int mode) { return BL_CALL(wifi_set_mode)(mode); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Current BL_WIFI_MODE_*. */
-static inline int bl_wifi_get_mode(void) { return BL->wifi_get_mode(); }
+static inline int bl_wifi_get_mode(void) { return BL_CALL(wifi_get_mode)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Start an access point (password NULL or >= 8 chars). */
-static inline int bl_wifi_softap(const char *ssid, const char *password, int channel, int hidden, int max_clients) { return BL->wifi_softap(ssid, password, channel, hidden, max_clients); }
+static inline int bl_wifi_softap(const char *ssid, const char *password, int channel, int hidden, int max_clients) { return BL_CALL(wifi_softap)(ssid, password, channel, hidden, max_clients); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stop the access point. */
-static inline int bl_wifi_softap_stop(void) { return BL->wifi_softap_stop(); }
+static inline int bl_wifi_softap_stop(void) { return BL_CALL(wifi_softap_stop)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stations connected to our access point. */
-static inline int bl_wifi_softap_stations(void) { return BL->wifi_softap_stations(); }
+static inline int bl_wifi_softap_stations(void) { return BL_CALL(wifi_softap_stations)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* IPv4 address, first octet in the low byte. which: BL_IP_*. */
-static inline uint32_t bl_wifi_ip(int which) { return BL->wifi_ip(which); }
+static inline uint32_t bl_wifi_ip(int which) { return BL_CALL(wifi_ip)(which); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Scan for access points (blocks ~2-4 s). Returns the count or BL_ERR_*. */
-static inline int bl_wifi_scan(void) { return BL->wifi_scan(); }
+static inline int bl_wifi_scan(void) { return BL_CALL(wifi_scan)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Copy one scan result. */
-static inline int bl_wifi_scan_result(int index, bl_wifi_ap_t *ap) { return BL->wifi_scan_result(index, ap); }
+static inline int bl_wifi_scan_result(int index, bl_wifi_ap_t *ap) { return BL_CALL(wifi_scan_result)(index, ap); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Current WiFi channel. */
-static inline int bl_wifi_channel(void) { return BL->wifi_channel(); }
+static inline int bl_wifi_channel(void) { return BL_CALL(wifi_channel)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* SSID we are connected to. Returns its length. */
-static inline int bl_wifi_ssid(char *buf, size_t size) { return BL->wifi_ssid(buf, size); }
+static inline int bl_wifi_ssid(char *buf, size_t size) { return BL_CALL(wifi_ssid)(buf, size); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Static IP (all 0 = DHCP). */
-static inline int bl_wifi_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dns) { return BL->wifi_config(ip, gateway, subnet, dns); }
+static inline int bl_wifi_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dns) { return BL_CALL(wifi_config)(ip, gateway, subnet, dns); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Hostname used for DHCP (call before begin). */
-static inline int bl_wifi_set_hostname(const char *name) { return BL->wifi_set_hostname(name); }
+static inline int bl_wifi_set_hostname(const char *name) { return BL_CALL(wifi_set_hostname)(name); }
 #endif
 #if defined(BL_HAS_NET)
 /* DNS lookup. Returns 0 or BL_ERR_*. */
-static inline int bl_net_resolve(const char *host, uint32_t *ip) { return BL->net_resolve(host, ip); }
+static inline int bl_net_resolve(const char *host, uint32_t *ip) { return BL_CALL(net_resolve)(host, ip); }
 #endif
 #if defined(BL_HAS_NET)
 /* New client handle (secure = TLS). Reference count starts at 1. */
-static inline int bl_tcp_client_new(int secure) { return BL->tcp_client_new(secure); }
+static inline int bl_tcp_client_new(int secure) { return BL_CALL(tcp_client_new)(secure); }
 #endif
 #if defined(BL_HAS_NET)
 /* Add a reference (the SDK copies clients like Arduino does). */
-static inline void bl_tcp_client_retain(int h) { BL->tcp_client_retain(h); }
+static inline void bl_tcp_client_retain(int h) { BL_CALL(tcp_client_retain)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Drop a reference; the connection closes at zero. */
-static inline void bl_tcp_client_release(int h) { BL->tcp_client_release(h); }
+static inline void bl_tcp_client_release(int h) { BL_CALL(tcp_client_release)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* TLS: skip verification, or use this CA (NULL = built-in CA bundle). Must stay valid. */
-static inline int bl_tcp_client_tls_config(int h, int insecure, const char *ca_pem) { return BL->tcp_client_tls_config(h, insecure, ca_pem); }
+static inline int bl_tcp_client_tls_config(int h, int insecure, const char *ca_pem) { return BL_CALL(tcp_client_tls_config)(h, insecure, ca_pem); }
 #endif
 #if defined(BL_HAS_NET)
 /* Connect. Returns 1 or 0. */
-static inline int bl_tcp_client_connect(int h, const char *host, uint16_t port, int32_t timeout_ms) { return BL->tcp_client_connect(h, host, port, timeout_ms); }
+static inline int bl_tcp_client_connect(int h, const char *host, uint16_t port, int32_t timeout_ms) { return BL_CALL(tcp_client_connect)(h, host, port, timeout_ms); }
 #endif
 #if defined(BL_HAS_NET)
 /* Returns bytes written. */
-static inline int bl_tcp_client_write(int h, const uint8_t *data, size_t len) { return BL->tcp_client_write(h, data, len); }
+static inline int bl_tcp_client_write(int h, const uint8_t *data, size_t len) { return BL_CALL(tcp_client_write)(h, data, len); }
 #endif
 #if defined(BL_HAS_NET)
 /* Bytes ready to read. */
-static inline int bl_tcp_client_available(int h) { return BL->tcp_client_available(h); }
+static inline int bl_tcp_client_available(int h) { return BL_CALL(tcp_client_available)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Read up to size bytes; -1 if none. */
-static inline int bl_tcp_client_read(int h, uint8_t *buf, size_t size) { return BL->tcp_client_read(h, buf, size); }
+static inline int bl_tcp_client_read(int h, uint8_t *buf, size_t size) { return BL_CALL(tcp_client_read)(h, buf, size); }
 #endif
 #if defined(BL_HAS_NET)
 /* Next byte without consuming it, or -1. */
-static inline int bl_tcp_client_peek(int h) { return BL->tcp_client_peek(h); }
+static inline int bl_tcp_client_peek(int h) { return BL_CALL(tcp_client_peek)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* 1 while connected or data is still buffered. */
-static inline int bl_tcp_client_connected(int h) { return BL->tcp_client_connected(h); }
+static inline int bl_tcp_client_connected(int h) { return BL_CALL(tcp_client_connected)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Close the connection (the handle stays valid). */
-static inline void bl_tcp_client_stop(int h) { BL->tcp_client_stop(h); }
+static inline void bl_tcp_client_stop(int h) { BL_CALL(tcp_client_stop)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Peer address. */
-static inline int bl_tcp_client_remote(int h, uint32_t *ip, uint16_t *port) { return BL->tcp_client_remote(h, ip, port); }
+static inline int bl_tcp_client_remote(int h, uint32_t *ip, uint16_t *port) { return BL_CALL(tcp_client_remote)(h, ip, port); }
 #endif
 #if defined(BL_HAS_NET)
 /* Listen on port. */
-static inline int bl_tcp_server_new(uint16_t port, int max_clients) { return BL->tcp_server_new(port, max_clients); }
+static inline int bl_tcp_server_new(uint16_t port, int max_clients) { return BL_CALL(tcp_server_new)(port, max_clients); }
 #endif
 #if defined(BL_HAS_NET)
 /* A newly connected client handle, or -1. */
-static inline int bl_tcp_server_accept(int h) { return BL->tcp_server_accept(h); }
+static inline int bl_tcp_server_accept(int h) { return BL_CALL(tcp_server_accept)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Stop listening and free the handle. */
-static inline void bl_tcp_server_close(int h) { BL->tcp_server_close(h); }
+static inline void bl_tcp_server_close(int h) { BL_CALL(tcp_server_close)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Open a UDP socket (port 0 = any). */
-static inline int bl_udp_new(uint16_t port) { return BL->udp_new(port); }
+static inline int bl_udp_new(uint16_t port) { return BL_CALL(udp_new)(port); }
 #endif
 #if defined(BL_HAS_NET)
 /* Close and free. */
-static inline void bl_udp_close(int h) { BL->udp_close(h); }
+static inline void bl_udp_close(int h) { BL_CALL(udp_close)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Start a packet to host (name or dotted IP). */
-static inline int bl_udp_begin_packet(int h, const char *host, uint16_t port) { return BL->udp_begin_packet(h, host, port); }
+static inline int bl_udp_begin_packet(int h, const char *host, uint16_t port) { return BL_CALL(udp_begin_packet)(h, host, port); }
 #endif
 #if defined(BL_HAS_NET)
 /* Add bytes to the packet. */
-static inline int bl_udp_write(int h, const uint8_t *data, size_t len) { return BL->udp_write(h, data, len); }
+static inline int bl_udp_write(int h, const uint8_t *data, size_t len) { return BL_CALL(udp_write)(h, data, len); }
 #endif
 #if defined(BL_HAS_NET)
 /* Send it. Returns 1 or 0. */
-static inline int bl_udp_end_packet(int h) { return BL->udp_end_packet(h); }
+static inline int bl_udp_end_packet(int h) { return BL_CALL(udp_end_packet)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Size of the next received packet, or 0. */
-static inline int bl_udp_parse_packet(int h) { return BL->udp_parse_packet(h); }
+static inline int bl_udp_parse_packet(int h) { return BL_CALL(udp_parse_packet)(h); }
 #endif
 #if defined(BL_HAS_NET)
 /* Read from the current packet. */
-static inline int bl_udp_read(int h, uint8_t *buf, size_t size) { return BL->udp_read(h, buf, size); }
+static inline int bl_udp_read(int h, uint8_t *buf, size_t size) { return BL_CALL(udp_read)(h, buf, size); }
 #endif
 #if defined(BL_HAS_NET)
 /* Sender of the current packet. */
-static inline int bl_udp_remote(int h, uint32_t *ip, uint16_t *port) { return BL->udp_remote(h, ip, port); }
+static inline int bl_udp_remote(int h, uint32_t *ip, uint16_t *port) { return BL_CALL(udp_remote)(h, ip, port); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Create and start a web server. */
-static inline int bl_web_new(uint16_t port) { return BL->web_new(port); }
+static inline int bl_web_new(uint16_t port) { return BL_CALL(web_new)(port); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stop and free. */
-static inline void bl_web_close(int h) { BL->web_close(h); }
+static inline void bl_web_close(int h) { BL_CALL(web_close)(h); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Route uri (method BL_HTTP_* or BL_HTTP_ANY) to fn(arg). */
-static inline int bl_web_on(int h, const char *uri, int method, bl_callback_t fn, void *arg) { return BL->web_on(h, uri, method, fn, arg); }
+static inline int bl_web_on(int h, const char *uri, int method, bl_callback_t fn, void *arg) { return BL_CALL(web_on)(h, uri, method, fn, arg); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Handler for unmatched requests. */
-static inline int bl_web_on_not_found(int h, bl_callback_t fn, void *arg) { return BL->web_on_not_found(h, fn, arg); }
+static inline int bl_web_on_not_found(int h, bl_callback_t fn, void *arg) { return BL_CALL(web_on_not_found)(h, fn, arg); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Serve pending requests (call from loop()). */
-static inline void bl_web_handle_client(int h) { BL->web_handle_client(h); }
+static inline void bl_web_handle_client(int h) { BL_CALL(web_handle_client)(h); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Send the response. */
-static inline void bl_web_send(int h, int code, const char *content_type, const uint8_t *content, size_t len) { BL->web_send(h, code, content_type, content, len); }
+static inline void bl_web_send(int h, int code, const char *content_type, const uint8_t *content, size_t len) { BL_CALL(web_send)(h, code, content_type, content, len); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Add a response header (before web_send). */
-static inline void bl_web_send_header(int h, const char *name, const char *value, int first) { BL->web_send_header(h, name, value, first); }
+static inline void bl_web_send_header(int h, const char *name, const char *value, int first) { BL_CALL(web_send_header)(h, name, value, first); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Request details (what = BL_WEB_*). Copies text, returns its full length, or -1 if absent. */
-static inline int bl_web_request(int h, int what, int index, const char *name, char *buf, size_t size) { return BL->web_request(h, what, index, name, buf, size); }
+static inline int bl_web_request(int h, int what, int index, const char *name, char *buf, size_t size) { return BL_CALL(web_request)(h, what, index, name, buf, size); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Request headers to keep for BL_WEB_HEADER. */
-static inline void bl_web_collect_headers(int h, const char * *names, size_t count) { BL->web_collect_headers(h, names, count); }
+static inline void bl_web_collect_headers(int h, const char * *names, size_t count) { BL_CALL(web_collect_headers)(h, names, count); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Start BLE with this device name (safe to call twice). */
-static inline int bl_ble_init(const char *name) { return BL->ble_init(name); }
+static inline int bl_ble_init(const char *name) { return BL_CALL(ble_init)(name); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Stop BLE. */
-static inline void bl_ble_deinit(void) { BL->ble_deinit(); }
+static inline void bl_ble_deinit(void) { BL_CALL(ble_deinit)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Our BLE address "aa:bb:cc:dd:ee:ff". */
-static inline int bl_ble_address(char *buf, size_t size) { return BL->ble_address(buf, size); }
+static inline int bl_ble_address(char *buf, size_t size) { return BL_CALL(ble_address)(buf, size); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Preferred ATT MTU. */
-static inline int bl_ble_set_mtu(uint16_t mtu) { return BL->ble_set_mtu(mtu); }
+static inline int bl_ble_set_mtu(uint16_t mtu) { return BL_CALL(ble_set_mtu)(mtu); }
 #endif
 #if defined(BL_HAS_BLE)
 /* The GATT server (one per device). */
-static inline int bl_ble_server_create(void) { return BL->ble_server_create(); }
+static inline int bl_ble_server_create(void) { return BL_CALL(ble_server_create)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Connected centrals. */
-static inline int bl_ble_server_connected_count(void) { return BL->ble_server_connected_count(); }
+static inline int bl_ble_server_connected_count(void) { return BL_CALL(ble_server_connected_count)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Drop a connection. */
-static inline void bl_ble_server_disconnect(uint16_t conn_id) { BL->ble_server_disconnect(conn_id); }
+static inline void bl_ble_server_disconnect(uint16_t conn_id) { BL_CALL(ble_server_disconnect)(conn_id); }
 #endif
 #if defined(BL_HAS_BLE)
 /* New service on the server. */
-static inline int bl_ble_service_create(const char *uuid, int num_handles) { return BL->ble_service_create(uuid, num_handles); }
+static inline int bl_ble_service_create(const char *uuid, int num_handles) { return BL_CALL(ble_service_create)(uuid, num_handles); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Publish the service. */
-static inline int bl_ble_service_start(int svc) { return BL->ble_service_start(svc); }
+static inline int bl_ble_service_start(int svc) { return BL_CALL(ble_service_start)(svc); }
 #endif
 #if defined(BL_HAS_BLE)
 /* New characteristic. properties: BL_BLE_PROP_* bits. */
-static inline int bl_ble_char_create(int svc, const char *uuid, uint32_t properties) { return BL->ble_char_create(svc, uuid, properties); }
+static inline int bl_ble_char_create(int svc, const char *uuid, uint32_t properties) { return BL_CALL(ble_char_create)(svc, uuid, properties); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Set the value centrals read / get notified with. */
-static inline int bl_ble_char_set_value(int ch, const uint8_t *data, size_t len) { return BL->ble_char_set_value(ch, data, len); }
+static inline int bl_ble_char_set_value(int ch, const uint8_t *data, size_t len) { return BL_CALL(ble_char_set_value)(ch, data, len); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Copy the value; returns its full length. */
-static inline int bl_ble_char_get_value(int ch, uint8_t *buf, size_t size) { return BL->ble_char_get_value(ch, buf, size); }
+static inline int bl_ble_char_get_value(int ch, uint8_t *buf, size_t size) { return BL_CALL(ble_char_get_value)(ch, buf, size); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Send the value as a notification (or indication). */
-static inline int bl_ble_char_notify(int ch, int indicate) { return BL->ble_char_notify(ch, indicate); }
+static inline int bl_ble_char_notify(int ch, int indicate) { return BL_CALL(ble_char_notify)(ch, indicate); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Add a descriptor (e.g. 2901 user description). */
-static inline int bl_ble_char_add_descriptor(int ch, const char *uuid, const uint8_t *value, size_t len) { return BL->ble_char_add_descriptor(ch, uuid, value, len); }
+static inline int bl_ble_char_add_descriptor(int ch, const char *uuid, const uint8_t *value, size_t len) { return BL_CALL(ble_char_add_descriptor)(ch, uuid, value, len); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Advertising setting: what = BL_BLE_ADV_*. */
-static inline int bl_ble_adv_config(int what, const char *text, const uint8_t *data, size_t value) { return BL->ble_adv_config(what, text, data, value); }
+static inline int bl_ble_adv_config(int what, const char *text, const uint8_t *data, size_t value) { return BL_CALL(ble_adv_config)(what, text, data, value); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Start advertising. */
-static inline int bl_ble_adv_start(void) { return BL->ble_adv_start(); }
+static inline int bl_ble_adv_start(void) { return BL_CALL(ble_adv_start)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Stop advertising. */
-static inline int bl_ble_adv_stop(void) { return BL->ble_adv_stop(); }
+static inline int bl_ble_adv_stop(void) { return BL_CALL(ble_adv_stop)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Start scanning in the background. */
-static inline int bl_ble_scan_start(uint32_t seconds, int active, uint16_t interval_ms, uint16_t window_ms) { return BL->ble_scan_start(seconds, active, interval_ms, window_ms); }
+static inline int bl_ble_scan_start(uint32_t seconds, int active, uint16_t interval_ms, uint16_t window_ms) { return BL_CALL(ble_scan_start)(seconds, active, interval_ms, window_ms); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Stop scanning. */
-static inline int bl_ble_scan_stop(void) { return BL->ble_scan_stop(); }
+static inline int bl_ble_scan_stop(void) { return BL_CALL(ble_scan_stop)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* 1 while a scan is in progress. */
-static inline int bl_ble_scan_running(void) { return BL->ble_scan_running(); }
+static inline int bl_ble_scan_running(void) { return BL_CALL(ble_scan_running)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Devices found by the last scan. */
-static inline int bl_ble_scan_count(void) { return BL->ble_scan_count(); }
+static inline int bl_ble_scan_count(void) { return BL_CALL(ble_scan_count)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Copy one scan result. */
-static inline int bl_ble_scan_result(int index, bl_ble_adv_t *dev) { return BL->ble_scan_result(index, dev); }
+static inline int bl_ble_scan_result(int index, bl_ble_adv_t *dev) { return BL_CALL(ble_scan_result)(index, dev); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Forget scan results. */
-static inline void bl_ble_scan_clear(void) { BL->ble_scan_clear(); }
+static inline void bl_ble_scan_clear(void) { BL_CALL(ble_scan_clear)(); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Connect to a peripheral (blocks up to ~5 s). Returns a client handle. */
-static inline int bl_ble_client_connect(const char *address, int addr_type) { return BL->ble_client_connect(address, addr_type); }
+static inline int bl_ble_client_connect(const char *address, int addr_type) { return BL_CALL(ble_client_connect)(address, addr_type); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Disconnect. */
-static inline void bl_ble_client_disconnect(int cl) { BL->ble_client_disconnect(cl); }
+static inline void bl_ble_client_disconnect(int cl) { BL_CALL(ble_client_disconnect)(cl); }
 #endif
 #if defined(BL_HAS_BLE)
 /* 1 while connected. */
-static inline int bl_ble_client_connected(int cl) { return BL->ble_client_connected(cl); }
+static inline int bl_ble_client_connected(int cl) { return BL_CALL(ble_client_connected)(cl); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Signal strength of the connection. */
-static inline int bl_ble_client_rssi(int cl) { return BL->ble_client_rssi(cl); }
+static inline int bl_ble_client_rssi(int cl) { return BL_CALL(ble_client_rssi)(cl); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Find a characteristic on the peripheral. Returns a handle. */
-static inline int bl_ble_remote_char(int cl, const char *service_uuid, const char *char_uuid) { return BL->ble_remote_char(cl, service_uuid, char_uuid); }
+static inline int bl_ble_remote_char(int cl, const char *service_uuid, const char *char_uuid) { return BL_CALL(ble_remote_char)(cl, service_uuid, char_uuid); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Read the value; returns its length. */
-static inline int bl_ble_remote_read(int rc, uint8_t *buf, size_t size) { return BL->ble_remote_read(rc, buf, size); }
+static inline int bl_ble_remote_read(int rc, uint8_t *buf, size_t size) { return BL_CALL(ble_remote_read)(rc, buf, size); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Write the value. */
-static inline int bl_ble_remote_write(int rc, const uint8_t *data, size_t len, int response) { return BL->ble_remote_write(rc, data, len, response); }
+static inline int bl_ble_remote_write(int rc, const uint8_t *data, size_t len, int response) { return BL_CALL(ble_remote_write)(rc, data, len, response); }
 #endif
 #if defined(BL_HAS_BLE)
 /* 0 off, 1 notifications, 2 indications (delivered as BL_BLE_EV_NOTIFY). */
-static inline int bl_ble_remote_subscribe(int rc, int mode) { return BL->ble_remote_subscribe(rc, mode); }
+static inline int bl_ble_remote_subscribe(int rc, int mode) { return BL_CALL(ble_remote_subscribe)(rc, mode); }
 #endif
 #if defined(BL_HAS_BLE)
 /* BL_BLE_PROP_* bits of a remote characteristic. */
-static inline uint32_t bl_ble_remote_props(int rc) { return BL->ble_remote_props(rc); }
+static inline uint32_t bl_ble_remote_props(int rc) { return BL_CALL(ble_remote_props)(rc); }
 #endif
 #if defined(BL_HAS_BLE)
 /* Take the next BLE event. Returns 1, or 0 if none. */
-static inline int bl_ble_event_take(bl_ble_event_t *ev) { return BL->ble_event_take(ev); }
+static inline int bl_ble_event_take(bl_ble_event_t *ev) { return BL_CALL(ble_event_take)(ev); }
 #endif
 /* Open a namespace. Returns a handle. */
-static inline int bl_prefs_open(const char *name, int read_only) { return BL->prefs_open(name, read_only); }
+static inline int bl_prefs_open(const char *name, int read_only) { return BL_CALL(prefs_open)(name, read_only); }
 /* Close it. */
-static inline void bl_prefs_close(int h) { BL->prefs_close(h); }
+static inline void bl_prefs_close(int h) { BL_CALL(prefs_close)(h); }
 /* Delete every key in the namespace. */
-static inline int bl_prefs_clear(int h) { return BL->prefs_clear(h); }
+static inline int bl_prefs_clear(int h) { return BL_CALL(prefs_clear)(h); }
 /* Delete one key. */
-static inline int bl_prefs_remove(int h, const char *key) { return BL->prefs_remove(h, key); }
+static inline int bl_prefs_remove(int h, const char *key) { return BL_CALL(prefs_remove)(h, key); }
 /* Store a value (type BL_PREF_*). Returns bytes stored, 0 on failure. */
-static inline int bl_prefs_put(int h, const char *key, int type, const void *data, size_t len) { return BL->prefs_put(h, key, type, data, len); }
+static inline int bl_prefs_put(int h, const char *key, int type, const void *data, size_t len) { return BL_CALL(prefs_put)(h, key, type, data, len); }
 /* Read a value. Returns its length (strings: without NUL), or -1 if the key is missing. */
-static inline int bl_prefs_get(int h, const char *key, int type, void *buf, size_t size) { return BL->prefs_get(h, key, type, buf, size); }
+static inline int bl_prefs_get(int h, const char *key, int type, void *buf, size_t size) { return BL_CALL(prefs_get)(h, key, type, buf, size); }
 /* BL_PREF_INFO_*: key exists, stored type, length, free entries. */
-static inline int bl_prefs_info(int h, const char *key, int what) { return BL->prefs_info(h, key, what); }
+static inline int bl_prefs_info(int h, const char *key, int what) { return BL_CALL(prefs_info)(h, key, what); }
 /* Mount (optionally format a blank partition). */
-static inline int bl_fs_begin(int format_if_failed) { return BL->fs_begin(format_if_failed); }
+static inline int bl_fs_begin(int format_if_failed) { return BL_CALL(fs_begin)(format_if_failed); }
 /* Unmount. */
-static inline void bl_fs_end(void) { BL->fs_end(); }
+static inline void bl_fs_end(void) { BL_CALL(fs_end)(); }
 /* Erase everything. */
-static inline int bl_fs_format(void) { return BL->fs_format(); }
+static inline int bl_fs_format(void) { return BL_CALL(fs_format)(); }
 /* BL_FS_TOTAL_BYTES or BL_FS_USED_BYTES. */
-static inline uint32_t bl_fs_info(int what) { return BL->fs_info(what); }
+static inline uint32_t bl_fs_info(int what) { return BL_CALL(fs_info)(what); }
 /* Open a file or directory ("r", "w", "a", ...). Returns a handle (reference count 1). */
-static inline int bl_fs_open(const char *path, const char *mode, int create) { return BL->fs_open(path, mode, create); }
+static inline int bl_fs_open(const char *path, const char *mode, int create) { return BL_CALL(fs_open)(path, mode, create); }
 /* Add a reference (File objects are copyable). */
-static inline void bl_fs_retain(int h) { BL->fs_retain(h); }
+static inline void bl_fs_retain(int h) { BL_CALL(fs_retain)(h); }
 /* Drop a reference; the file closes at zero. */
-static inline void bl_fs_release(int h) { BL->fs_release(h); }
+static inline void bl_fs_release(int h) { BL_CALL(fs_release)(h); }
 /* Read up to size bytes. */
-static inline int bl_fs_read(int h, uint8_t *buf, size_t size) { return BL->fs_read(h, buf, size); }
+static inline int bl_fs_read(int h, uint8_t *buf, size_t size) { return BL_CALL(fs_read)(h, buf, size); }
 /* Write bytes. */
-static inline int bl_fs_write(int h, const uint8_t *data, size_t len) { return BL->fs_write(h, data, len); }
+static inline int bl_fs_write(int h, const uint8_t *data, size_t len) { return BL_CALL(fs_write)(h, data, len); }
 /* Next byte without consuming it, or -1. */
-static inline int bl_fs_peek(int h) { return BL->fs_peek(h); }
+static inline int bl_fs_peek(int h) { return BL_CALL(fs_peek)(h); }
 /* Move (mode 0 set, 1 current, 2 end). Returns 1 or 0. */
-static inline int bl_fs_seek(int h, uint32_t pos, int mode) { return BL->fs_seek(h, pos, mode); }
+static inline int bl_fs_seek(int h, uint32_t pos, int mode) { return BL_CALL(fs_seek)(h, pos, mode); }
 /* Flush writes. */
-static inline void bl_fs_flush(int h) { BL->fs_flush(h); }
+static inline void bl_fs_flush(int h) { BL_CALL(fs_flush)(h); }
 /* BL_FS_FILE_*: position, size, is directory, last write time. */
-static inline uint32_t bl_fs_file_info(int h, int what) { return BL->fs_file_info(h, what); }
+static inline uint32_t bl_fs_file_info(int h, int what) { return BL_CALL(fs_file_info)(h, what); }
 /* Name (or full path). Returns its length. */
-static inline int bl_fs_file_name(int h, int full_path, char *buf, size_t size) { return BL->fs_file_name(h, full_path, buf, size); }
+static inline int bl_fs_file_name(int h, int full_path, char *buf, size_t size) { return BL_CALL(fs_file_name)(h, full_path, buf, size); }
 /* Next entry of an open directory: a new handle, or -1 at the end. */
-static inline int bl_fs_next(int h) { return BL->fs_next(h); }
+static inline int bl_fs_next(int h) { return BL_CALL(fs_next)(h); }
 /* BL_FS_* path operation (exists, delete, rename, mkdir, rmdir). Returns 1 or 0. */
-static inline int bl_fs_path_op(int op, const char *path, const char *path2) { return BL->fs_path_op(op, path, path2); }
+static inline int bl_fs_path_op(int op, const char *path, const char *path2) { return BL_CALL(fs_path_op)(op, path, path2); }
 /* Start UART 1 or 2. config = SERIAL_8N1 etc. -1 pins = defaults. */
-static inline int bl_uart_begin(int port, uint32_t baud, uint32_t config, int rx, int tx) { return BL->uart_begin(port, baud, config, rx, tx); }
+static inline int bl_uart_begin(int port, uint32_t baud, uint32_t config, int rx, int tx) { return BL_CALL(uart_begin)(port, baud, config, rx, tx); }
 /* Stop it. */
-static inline void bl_uart_end(int port) { BL->uart_end(port); }
+static inline void bl_uart_end(int port) { BL_CALL(uart_end)(port); }
 /* Send bytes. */
-static inline int bl_uart_write(int port, const uint8_t *data, size_t len) { return BL->uart_write(port, data, len); }
+static inline int bl_uart_write(int port, const uint8_t *data, size_t len) { return BL_CALL(uart_write)(port, data, len); }
 /* Bytes waiting. */
-static inline int bl_uart_available(int port) { return BL->uart_available(port); }
+static inline int bl_uart_available(int port) { return BL_CALL(uart_available)(port); }
 /* Read up to size bytes (0 if none). */
-static inline int bl_uart_read(int port, uint8_t *buf, size_t size) { return BL->uart_read(port, buf, size); }
+static inline int bl_uart_read(int port, uint8_t *buf, size_t size) { return BL_CALL(uart_read)(port, buf, size); }
 /* Next byte without consuming it, or -1. */
-static inline int bl_uart_peek(int port) { return BL->uart_peek(port); }
+static inline int bl_uart_peek(int port) { return BL_CALL(uart_peek)(port); }
 /* Wait until everything is sent. */
-static inline void bl_uart_flush(int port) { BL->uart_flush(port); }
+static inline void bl_uart_flush(int port) { BL_CALL(uart_flush)(port); }
 #if defined(BL_HAS_WIFI)
 /* Answer to hostname.local. */
-static inline int bl_mdns_begin(const char *hostname) { return BL->mdns_begin(hostname); }
+static inline int bl_mdns_begin(const char *hostname) { return BL_CALL(mdns_begin)(hostname); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stop mDNS. */
-static inline void bl_mdns_end(void) { BL->mdns_end(); }
+static inline void bl_mdns_end(void) { BL_CALL(mdns_end)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Advertise a service ("http", "tcp", 80). */
-static inline int bl_mdns_add_service(const char *service, const char *proto, uint16_t port) { return BL->mdns_add_service(service, proto, port); }
+static inline int bl_mdns_add_service(const char *service, const char *proto, uint16_t port) { return BL_CALL(mdns_add_service)(service, proto, port); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Add a TXT record to a service. */
-static inline int bl_mdns_add_txt(const char *service, const char *proto, const char *key, const char *value) { return BL->mdns_add_txt(service, proto, key, value); }
+static inline int bl_mdns_add_txt(const char *service, const char *proto, const char *key, const char *value) { return BL_CALL(mdns_add_txt)(service, proto, key, value); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Resolve name.local (without ".local"). Returns the IPv4 address or 0. */
-static inline uint32_t bl_mdns_query_host(const char *host, uint32_t timeout_ms) { return BL->mdns_query_host(host, timeout_ms); }
+static inline uint32_t bl_mdns_query_host(const char *host, uint32_t timeout_ms) { return BL_CALL(mdns_query_host)(host, timeout_ms); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Browse for a service. Returns how many were found. */
-static inline int bl_mdns_query_service(const char *service, const char *proto) { return BL->mdns_query_service(service, proto); }
+static inline int bl_mdns_query_service(const char *service, const char *proto) { return BL_CALL(mdns_query_service)(service, proto); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* One browse result: BL_MDNS_HOSTNAME (text), BL_MDNS_IP, BL_MDNS_PORT (numbers). */
-static inline int bl_mdns_result(int index, int what, char *buf, size_t size) { return BL->mdns_result(index, what, buf, size); }
+static inline int bl_mdns_result(int index, int what, char *buf, size_t size) { return BL_CALL(mdns_result)(index, what, buf, size); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* New MQTT client handle. */
-static inline int bl_mqtt_new(void) { return BL->mqtt_new(); }
+static inline int bl_mqtt_new(void) { return BL_CALL(mqtt_new)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Disconnect and free. */
-static inline void bl_mqtt_free(int h) { BL->mqtt_free(h); }
+static inline void bl_mqtt_free(int h) { BL_CALL(mqtt_free)(h); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Setting BL_MQTT_* (server, client id, credentials, will, TLS, ...). Text is copied. */
-static inline int bl_mqtt_config(int h, int what, const char *text, int32_t value) { return BL->mqtt_config(h, what, text, value); }
+static inline int bl_mqtt_config(int h, int what, const char *text, int32_t value) { return BL_CALL(mqtt_config)(h, what, text, value); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Connect with the current settings. Returns 1 or 0. */
-static inline int bl_mqtt_connect(int h, uint32_t timeout_ms) { return BL->mqtt_connect(h, timeout_ms); }
+static inline int bl_mqtt_connect(int h, uint32_t timeout_ms) { return BL_CALL(mqtt_connect)(h, timeout_ms); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Disconnect. */
-static inline void bl_mqtt_disconnect(int h) { BL->mqtt_disconnect(h); }
+static inline void bl_mqtt_disconnect(int h) { BL_CALL(mqtt_disconnect)(h); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* PubSubClient-style state (0 = connected, negative = not). */
-static inline int bl_mqtt_state(int h) { return BL->mqtt_state(h); }
+static inline int bl_mqtt_state(int h) { return BL_CALL(mqtt_state)(h); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Publish. Returns 1 or 0. */
-static inline int bl_mqtt_publish(int h, const char *topic, const uint8_t *payload, size_t len, int qos, int retain) { return BL->mqtt_publish(h, topic, payload, len, qos, retain); }
+static inline int bl_mqtt_publish(int h, const char *topic, const uint8_t *payload, size_t len, int qos, int retain) { return BL_CALL(mqtt_publish)(h, topic, payload, len, qos, retain); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Subscribe. Returns 1 or 0. */
-static inline int bl_mqtt_subscribe(int h, const char *topic, int qos) { return BL->mqtt_subscribe(h, topic, qos); }
+static inline int bl_mqtt_subscribe(int h, const char *topic, int qos) { return BL_CALL(mqtt_subscribe)(h, topic, qos); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Unsubscribe. Returns 1 or 0. */
-static inline int bl_mqtt_unsubscribe(int h, const char *topic) { return BL->mqtt_unsubscribe(h, topic); }
+static inline int bl_mqtt_unsubscribe(int h, const char *topic) { return BL_CALL(mqtt_unsubscribe)(h, topic); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Next received message: copies topic and payload; returns the payload length, or -1 if none. */
-static inline int bl_mqtt_take(int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size) { return BL->mqtt_take(h, topic, topic_size, payload, payload_size); }
+static inline int bl_mqtt_take(int h, char *topic, size_t topic_size, uint8_t *payload, size_t payload_size) { return BL_CALL(mqtt_take)(h, topic, topic_size, payload, payload_size); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Accept sketch uploads over WiFi (and advertise NAME.local). password may be NULL. */
-static inline int bl_ota_begin(const char *hostname, const char *password, uint16_t port) { return BL->ota_begin(hostname, password, port); }
+static inline int bl_ota_begin(const char *hostname, const char *password, uint16_t port) { return BL_CALL(ota_begin)(hostname, password, port); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stop accepting uploads over WiFi. */
-static inline void bl_ota_end(void) { BL->ota_end(); }
+static inline void bl_ota_end(void) { BL_CALL(ota_end)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Start an SPP serial port visible as `name`. BL_ERR_UNSUPPORTED on chips without Bluetooth Classic. */
-static inline int bl_bt_spp_begin(const char *name) { return BL->bt_spp_begin(name); }
+static inline int bl_bt_spp_begin(const char *name) { return BL_CALL(bt_spp_begin)(name); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Stop it. */
-static inline void bl_bt_spp_end(void) { BL->bt_spp_end(); }
+static inline void bl_bt_spp_end(void) { BL_CALL(bt_spp_end)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* 1 if a device is connected. */
-static inline int bl_bt_spp_connected(void) { return BL->bt_spp_connected(); }
+static inline int bl_bt_spp_connected(void) { return BL_CALL(bt_spp_connected)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Send bytes. Returns bytes sent. */
-static inline int bl_bt_spp_write(const uint8_t *data, size_t len) { return BL->bt_spp_write(data, len); }
+static inline int bl_bt_spp_write(const uint8_t *data, size_t len) { return BL_CALL(bt_spp_write)(data, len); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Bytes received and not yet read. */
-static inline int bl_bt_spp_available(void) { return BL->bt_spp_available(); }
+static inline int bl_bt_spp_available(void) { return BL_CALL(bt_spp_available)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Read up to size bytes (0 if none). */
-static inline int bl_bt_spp_read(uint8_t *buf, size_t size) { return BL->bt_spp_read(buf, size); }
+static inline int bl_bt_spp_read(uint8_t *buf, size_t size) { return BL_CALL(bt_spp_read)(buf, size); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Next byte without consuming it, or -1. */
-static inline int bl_bt_spp_peek(void) { return BL->bt_spp_peek(); }
+static inline int bl_bt_spp_peek(void) { return BL_CALL(bt_spp_peek)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Wait until everything is sent. */
-static inline void bl_bt_spp_flush(void) { BL->bt_spp_flush(); }
+static inline void bl_bt_spp_flush(void) { BL_CALL(bt_spp_flush)(); }
 #endif
 #if defined(BL_HAS_BT_CLASSIC)
 /* Legacy pairing PIN (call before begin). 0 or BL_ERR_*. */
-static inline int bl_bt_spp_set_pin(const char *pin) { return BL->bt_spp_set_pin(pin); }
+static inline int bl_bt_spp_set_pin(const char *pin) { return BL_CALL(bt_spp_set_pin)(pin); }
 #endif
 /* Mount the microSD card. bus = BL_SD_SPI (cs pin, -1 = board default) or BL_SD_MMC (board pins; cs = 1 for 1-bit mode). */
-static inline int bl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if_empty) { return BL->sd_begin(bus, cs, freq_hz, format_if_empty); }
+static inline int bl_sd_begin(int bus, int cs, uint32_t freq_hz, int format_if_empty) { return BL_CALL(sd_begin)(bus, cs, freq_hz, format_if_empty); }
 /* Unmount the card. */
-static inline void bl_sd_end(void) { BL->sd_end(); }
+static inline void bl_sd_end(void) { BL_CALL(sd_end)(); }
 /* BL_SD_CARD_TYPE / CARD_SIZE / TOTAL_BYTES / USED_BYTES. */
-static inline uint64_t bl_sd_info(int what) { return BL->sd_info(what); }
+static inline uint64_t bl_sd_info(int what) { return BL_CALL(sd_info)(what); }
 /* Open a file or directory on a file system. Returns a handle. */
-static inline int bl_fsx_open(int fs, const char *path, const char *mode, int create) { return BL->fsx_open(fs, path, mode, create); }
+static inline int bl_fsx_open(int fs, const char *path, const char *mode, int create) { return BL_CALL(fsx_open)(fs, path, mode, create); }
 /* BL_FS_EXISTS / REMOVE / RENAME / MKDIR / RMDIR. Returns 1 or 0. */
-static inline int bl_fsx_path_op(int fs, int op, const char *path, const char *path2) { return BL->fsx_path_op(fs, op, path, path2); }
+static inline int bl_fsx_path_op(int fs, int op, const char *path, const char *path2) { return BL_CALL(fsx_path_op)(fs, op, path, path2); }
 /* Enable a wake source (BL_WAKE_*): TIMER value = us; EXT0 pin+level; EXT1 value = pin mask, level = mode; TOUCH; GPIO/UART (light sleep). */
-static inline int bl_sleep_wake(int source, uint64_t value, int pin, int level) { return BL->sleep_wake(source, value, pin, level); }
+static inline int bl_sleep_wake(int source, uint64_t value, int pin, int level) { return BL_CALL(sleep_wake)(source, value, pin, level); }
 /* Disable a wake source (BL_WAKE_ALL = every source). */
-static inline int bl_sleep_disable_wake(int source) { return BL->sleep_disable_wake(source); }
+static inline int bl_sleep_disable_wake(int source) { return BL_CALL(sleep_disable_wake)(source); }
 /* Deep sleep. The board restarts on wake: Baseline boots and starts the sketch again. */
-static inline void bl_sleep_deep(void) { BL->sleep_deep(); }
+static inline void bl_sleep_deep(void) { BL_CALL(sleep_deep)(); }
 /* Light sleep; returns after wake with 0 or BL_ERR_*. */
-static inline int bl_sleep_light(void) { return BL->sleep_light(); }
+static inline int bl_sleep_light(void) { return BL_CALL(sleep_light)(); }
 /* Why the chip woke (esp_sleep_wakeup_cause_t values; 0 = not from sleep). */
-static inline int bl_sleep_wake_cause(void) { return BL->sleep_wake_cause(); }
+static inline int bl_sleep_wake_cause(void) { return BL_CALL(sleep_wake_cause)(); }
 /* Pin mask that caused an EXT1 wake. */
-static inline uint64_t bl_sleep_ext1_status(void) { return BL->sleep_ext1_status(); }
+static inline uint64_t bl_sleep_ext1_status(void) { return BL_CALL(sleep_ext1_status)(); }
 /* 1 KB of RTC memory kept through deep sleep and resets (cleared at power-on). */
-static inline void * bl_rtc_memory(uint32_t *size) { return BL->rtc_memory(size); }
+static inline void * bl_rtc_memory(uint32_t *size) { return BL_CALL(rtc_memory)(size); }
 /* New timer handle. */
-static inline int bl_timer_new(void) { return BL->timer_new(); }
+static inline int bl_timer_new(void) { return BL_CALL(timer_new)(); }
 /* Stop and free it. */
-static inline void bl_timer_free(int h) { BL->timer_free(h); }
+static inline void bl_timer_free(int h) { BL_CALL(timer_free)(h); }
 /* Fire after period_us (repeatedly if periodic). */
-static inline int bl_timer_start(int h, uint64_t period_us, int periodic) { return BL->timer_start(h, period_us, periodic); }
+static inline int bl_timer_start(int h, uint64_t period_us, int periodic) { return BL_CALL(timer_start)(h, period_us, periodic); }
 /* Stop it. */
-static inline void bl_timer_stop(int h) { BL->timer_stop(h); }
+static inline void bl_timer_stop(int h) { BL_CALL(timer_stop)(h); }
 /* 1 while running. */
-static inline int bl_timer_active(int h) { return BL->timer_active(h); }
+static inline int bl_timer_active(int h) { return BL_CALL(timer_active)(h); }
 /* Next timer that fired (one result per firing), or -1. */
-static inline int bl_timer_take(void) { return BL->timer_take(); }
+static inline int bl_timer_take(void) { return BL_CALL(timer_take)(); }
 /* Start NTP time sync (WiFi must be connected). NULL server1 = pool.ntp.org. */
-static inline void bl_time_ntp_start(const char *server1, const char *server2, const char *server3) { BL->time_ntp_start(server1, server2, server3); }
+static inline void bl_time_ntp_start(const char *server1, const char *server2, const char *server3) { BL_CALL(time_ntp_start)(server1, server2, server3); }
 /* gettimeofday(): seconds since 1970 (UTC). */
-static inline int bl_time_get(int64_t *sec, int32_t *usec) { return BL->time_get(sec, usec); }
+static inline int bl_time_get(int64_t *sec, int32_t *usec) { return BL_CALL(time_get)(sec, usec); }
 /* settimeofday(). */
-static inline int bl_time_set(int64_t sec, int32_t usec) { return BL->time_set(sec, usec); }
+static inline int bl_time_set(int64_t sec, int32_t usec) { return BL_CALL(time_set)(sec, usec); }
 /* 1 once NTP (or time_set) has set the clock. */
-static inline int bl_time_synced(void) { return BL->time_synced(); }
+static inline int bl_time_synced(void) { return BL_CALL(time_synced)(); }
 #if defined(BL_HAS_TOUCH)
 /* touchRead() value (0 if not a touch pin). */
-static inline uint32_t bl_touch_read(int pin) { return BL->touch_read(pin); }
+static inline uint32_t bl_touch_read(int pin) { return BL_CALL(touch_read)(pin); }
 #endif
 #if defined(BL_HAS_TOUCH)
 /* Report touches past threshold through touch_take(). */
-static inline int bl_touch_attach(int pin, uint32_t threshold) { return BL->touch_attach(pin, threshold); }
+static inline int bl_touch_attach(int pin, uint32_t threshold) { return BL_CALL(touch_attach)(pin, threshold); }
 #endif
 #if defined(BL_HAS_TOUCH)
 /* Stop reporting. */
-static inline int bl_touch_detach(int pin) { return BL->touch_detach(pin); }
+static inline int bl_touch_detach(int pin) { return BL_CALL(touch_detach)(pin); }
 #endif
 #if defined(BL_HAS_TOUCH)
 /* Next pin that was touched, or -1. */
-static inline int bl_touch_take(void) { return BL->touch_take(); }
+static inline int bl_touch_take(void) { return BL_CALL(touch_take)(); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Start I2S (BL_I2S_*). PDM uses bclk as clock. -1 = unused pin. */
-static inline int bl_i2s_begin(int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk) { return BL->i2s_begin(mode, rate, bits, stereo, bclk, ws, dout, din, mclk); }
+static inline int bl_i2s_begin(int mode, uint32_t rate, int bits, int stereo, int bclk, int ws, int dout, int din, int mclk) { return BL_CALL(i2s_begin)(mode, rate, bits, stereo, bclk, ws, dout, din, mclk); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Stop I2S. */
-static inline void bl_i2s_end(void) { BL->i2s_end(); }
+static inline void bl_i2s_end(void) { BL_CALL(i2s_end)(); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Queue samples. Returns bytes written. */
-static inline int bl_i2s_write(const uint8_t *data, size_t len) { return BL->i2s_write(data, len); }
+static inline int bl_i2s_write(const uint8_t *data, size_t len) { return BL_CALL(i2s_write)(data, len); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Read samples. Returns bytes read. */
-static inline int bl_i2s_read(uint8_t *buf, size_t size) { return BL->i2s_read(buf, size); }
+static inline int bl_i2s_read(uint8_t *buf, size_t size) { return BL_CALL(i2s_read)(buf, size); }
 #endif
 #if defined(BL_HAS_LED_STRIP)
 /* Send bytes (already in the strip's color order) to a WS2812-type strip (BL_STRIP_*). */
-static inline int bl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len) { return BL->led_strip_write(pin, chipset, data, len); }
+static inline int bl_led_strip_write(int pin, int chipset, const uint8_t *data, size_t len) { return BL_CALL(led_strip_write)(pin, chipset, data, len); }
 #endif
 /* PWM at any frequency/resolution (servos, tones). 1 or 0. */
-static inline int bl_ledc_attach(int pin, uint32_t freq, int resolution) { return BL->ledc_attach(pin, freq, resolution); }
+static inline int bl_ledc_attach(int pin, uint32_t freq, int resolution) { return BL_CALL(ledc_attach)(pin, freq, resolution); }
 /* Set the duty. 1 or 0. */
-static inline int bl_ledc_write(int pin, uint32_t duty) { return BL->ledc_write(pin, duty); }
+static inline int bl_ledc_write(int pin, uint32_t duty) { return BL_CALL(ledc_write)(pin, duty); }
 /* Stop PWM. 1 or 0. */
-static inline int bl_ledc_detach(int pin) { return BL->ledc_detach(pin); }
+static inline int bl_ledc_detach(int pin) { return BL_CALL(ledc_detach)(pin); }
 /* Square wave at freq (0 = off). Returns the frequency set. */
-static inline uint32_t bl_ledc_write_tone(int pin, uint32_t freq) { return BL->ledc_write_tone(pin, freq); }
+static inline uint32_t bl_ledc_write_tone(int pin, uint32_t freq) { return BL_CALL(ledc_write_tone)(pin, freq); }
 /* Change frequency. Returns the frequency set. */
-static inline uint32_t bl_ledc_change_frequency(int pin, uint32_t freq, int resolution) { return BL->ledc_change_frequency(pin, freq, resolution); }
+static inline uint32_t bl_ledc_change_frequency(int pin, uint32_t freq, int resolution) { return BL_CALL(ledc_change_frequency)(pin, freq, resolution); }
 #if defined(BL_HAS_WIFI)
 /* Answer DNS queries for domain ("*" = all) with ip. */
-static inline int bl_dns_start(uint16_t port, const char *domain, uint32_t ip) { return BL->dns_start(port, domain, ip); }
+static inline int bl_dns_start(uint16_t port, const char *domain, uint32_t ip) { return BL_CALL(dns_start)(port, domain, ip); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Stop it. */
-static inline void bl_dns_stop(void) { BL->dns_stop(); }
+static inline void bl_dns_stop(void) { BL_CALL(dns_stop)(); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Reply code for other names. */
-static inline void bl_dns_error_reply(int code) { BL->dns_error_reply(code); }
+static inline void bl_dns_error_reply(int code) { BL_CALL(dns_error_reply)(code); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Run as these USB devices (BL_USB_* bits) next to the serial console. Returns BL_OK if they are running; otherwise Baseline saves the set and reboots into it (the sketch starts again). */
-static inline int bl_usb_begin(uint32_t devices) { return BL->usb_begin(devices); }
+static inline int bl_usb_begin(uint32_t devices) { return BL_CALL(usb_begin)(devices); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Back to the plain USB serial port (reboots if needed). */
-static inline void bl_usb_end(void) { BL->usb_end(); }
+static inline void bl_usb_end(void) { BL_CALL(usb_end)(); }
 #endif
 /* Devices that are running. */
-static inline uint32_t bl_usb_devices(void) { return BL->usb_devices(); }
+static inline uint32_t bl_usb_devices(void) { return BL_CALL(usb_devices)(); }
 #if defined(BL_HAS_USB_DEVICE)
 /* 1 when a computer has set up the device. */
-static inline int bl_usb_mounted(void) { return BL->usb_mounted(); }
+static inline int bl_usb_mounted(void) { return BL_CALL(usb_mounted)(); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* BL_USB_PRESS / RELEASE / RELEASE_ALL / WRITE with an Arduino key code. Returns 1 or 0. */
-static inline int bl_usb_keyboard(int op, uint32_t key) { return BL->usb_keyboard(op, key); }
+static inline int bl_usb_keyboard(int op, uint32_t key) { return BL_CALL(usb_keyboard)(op, key); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* BL_USB_MOVE (x, y, wheel), PRESS / RELEASE / CLICK (buttons). */
-static inline int bl_usb_mouse(int op, int x, int y, int wheel, int buttons) { return BL->usb_mouse(op, x, y, wheel, buttons); }
+static inline int bl_usb_mouse(int op, int x, int y, int wheel, int buttons) { return BL_CALL(usb_mouse)(op, x, y, wheel, buttons); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Send the full gamepad state. Returns 1 or 0. */
-static inline int bl_usb_gamepad(int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons) { return BL->usb_gamepad(x, y, z, rz, rx, ry, hat, buttons); }
+static inline int bl_usb_gamepad(int x, int y, int z, int rz, int rx, int ry, int hat, uint32_t buttons) { return BL_CALL(usb_gamepad)(x, y, z, rz, rx, ry, hat, buttons); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Media key: BL_USB_PRESS (usage) or BL_USB_RELEASE. */
-static inline int bl_usb_consumer(int op, uint16_t usage) { return BL->usb_consumer(op, usage); }
+static inline int bl_usb_consumer(int op, uint16_t usage) { return BL_CALL(usb_consumer)(op, usage); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Send one 4-byte USB-MIDI event packet. */
-static inline int bl_usb_midi_write(const uint8_t *packet) { return BL->usb_midi_write(packet); }
+static inline int bl_usb_midi_write(const uint8_t *packet) { return BL_CALL(usb_midi_write)(packet); }
 #endif
 #if defined(BL_HAS_USB_DEVICE)
 /* Take one received 4-byte packet. Returns 1, or 0 if none. */
-static inline int bl_usb_midi_read(uint8_t *packet) { return BL->usb_midi_read(packet); }
+static inline int bl_usb_midi_read(uint8_t *packet) { return BL_CALL(usb_midi_read)(packet); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Allocate from PSRAM only. NULL if the board has no PSRAM or it is full. Free with free(). */
-static inline void * ps_malloc(size_t size) { return BL->ps_malloc(size); }
+static inline void * ps_malloc(size_t size) { return BL_CALL(ps_malloc)(size); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Allocate zeroed memory from PSRAM only. */
-static inline void * ps_calloc(size_t n, size_t size) { return BL->ps_calloc(n, size); }
+static inline void * ps_calloc(size_t n, size_t size) { return BL_CALL(ps_calloc)(n, size); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Resize an allocation; the result is in PSRAM. */
-static inline void * ps_realloc(void *ptr, size_t size) { return BL->ps_realloc(ptr, size); }
+static inline void * ps_realloc(void *ptr, size_t size) { return BL_CALL(ps_realloc)(ptr, size); }
 #endif
 /* Start I2C bus 0 (Wire) or 1 (Wire1). -1 pins = board defaults (bus 0 only). BL_ERR_UNSUPPORTED if the chip has no such bus. */
-static inline int bl_i2cx_begin(int bus, int sda, int scl, uint32_t freq) { return BL->i2cx_begin(bus, sda, scl, freq); }
+static inline int bl_i2cx_begin(int bus, int sda, int scl, uint32_t freq) { return BL_CALL(i2cx_begin)(bus, sda, scl, freq); }
 /* Stop an I2C bus. */
-static inline void bl_i2cx_end(int bus) { BL->i2cx_end(bus); }
+static inline void bl_i2cx_end(int bus) { BL_CALL(i2cx_end)(bus); }
 /* i2c_write on a given bus. */
-static inline int bl_i2cx_write(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop) { return BL->i2cx_write(bus, addr, data, len, stop); }
+static inline int bl_i2cx_write(int bus, uint8_t addr, const uint8_t *data, size_t len, bool stop) { return BL_CALL(i2cx_write)(bus, addr, data, len, stop); }
 /* i2c_read on a given bus. */
-static inline int bl_i2cx_read(int bus, uint8_t addr, uint8_t *data, size_t len) { return BL->i2cx_read(bus, addr, data, len); }
+static inline int bl_i2cx_read(int bus, uint8_t addr, uint8_t *data, size_t len) { return BL_CALL(i2cx_read)(bus, addr, data, len); }
 /* Receive buffer size in bytes (default 256). Call before uart_begin. */
-static inline int bl_uart_set_rx_buffer(int port, size_t size) { return BL->uart_set_rx_buffer(port, size); }
+static inline int bl_uart_set_rx_buffer(int port, size_t size) { return BL_CALL(uart_set_rx_buffer)(port, size); }
 /* Bytes that can be written without waiting. */
-static inline int bl_uart_available_for_write(int port) { return BL->uart_available_for_write(port); }
+static inline int bl_uart_available_for_write(int port) { return BL_CALL(uart_available_for_write)(port); }
 /* analogRead() result width, 9-12 bits (default 12). */
-static inline int analogReadResolution(int bits) { return BL->adc_set_resolution(bits); }
+static inline int analogReadResolution(int bits) { return BL_CALL(adc_set_resolution)(bits); }
 /* Input range: atten = BL_ADC_ATTEN_* (0, 2.5, 6, 11 dB). pin -1 = every pin. */
-static inline int bl_adc_set_attenuation(int pin, int atten) { return BL->adc_set_attenuation(pin, atten); }
+static inline int bl_adc_set_attenuation(int pin, int atten) { return BL_CALL(adc_set_attenuation)(pin, atten); }
 #if defined(BL_HAS_DAC)
 /* 8-bit DAC output (classic ESP32: GPIO 25, 26). BL_ERR_UNSUPPORTED on chips without a DAC. */
-static inline int dacWrite(int pin, uint8_t value) { return BL->dac_write(pin, value); }
+static inline int dacWrite(int pin, uint8_t value) { return BL_CALL(dac_write)(pin, value); }
 #endif
 #if defined(BL_PLATFORM_ESP32)
 /* Chip temperature in degrees C; NaN if the chip has no sensor. */
-static inline float temperatureRead(void) { return BL->temperature_read(); }
+static inline float temperatureRead(void) { return BL_CALL(temperature_read)(); }
 #endif
 /* Why the chip last reset (esp_reset_reason_t values: 1 power-on, 3 software, 4 panic, 5-7 watchdogs, 8 deep sleep, ...). */
-static inline int bl_reset_reason(void) { return BL->reset_reason(); }
+static inline int bl_reset_reason(void) { return BL_CALL(reset_reason)(); }
 /* One-line summary of the last crash from the coredump (task, cause, PC). Returns its length, or 0 if there is none. */
-static inline int bl_last_crash(char *buf, size_t size) { return BL->last_crash(buf, size); }
+static inline int bl_last_crash(char *buf, size_t size) { return BL_CALL(last_crash)(buf, size); }
 #if defined(BL_HAS_WIFI)
 /* Next WiFi/network event (Arduino-ESP32 3.3 arduino_event_id_t values) for WiFi.onEvent, or -1. */
-static inline int bl_wifi_event_take(void) { return BL->wifi_event_take(); }
+static inline int bl_wifi_event_take(void) { return BL_CALL(wifi_event_take)(); }
 #endif
 /* How Baseline updates over the air: BL_UPDATE_DUAL (two Baseline slots; sketch and files kept), BL_UPDATE_STAGED (4 MB flash; each update erases the sketch and LittleFS) or BL_UPDATE_NONE. */
-static inline int bl_baseline_update_mode(void) { return BL->baseline_update_mode(); }
+static inline int bl_baseline_update_mode(void) { return BL_CALL(baseline_update_mode)(); }
 #if defined(BL_HAS_WIFI)
 /* Download a sketch (.flick) over HTTP(S), install it in the free slot and restart into it (it rolls back if it crashes). Returns only on failure. */
-static inline int bl_ota_pull_sketch(const char *url) { return BL->ota_pull_sketch(url); }
+static inline int bl_ota_pull_sketch(const char *url) { return BL_CALL(ota_pull_sketch)(url); }
 #endif
 #if defined(BL_HAS_WIFI)
 /* Download a Baseline update (.bsu) over HTTP(S), install it and restart. sketch_url (may be NULL): a sketch to install once the new Baseline runs (on BL_UPDATE_STAGED boards the update erases the sketch). Returns only on failure. */
-static inline int bl_ota_pull_baseline(const char *url, const char *sketch_url) { return BL->ota_pull_baseline(url, sketch_url); }
+static inline int bl_ota_pull_baseline(const char *url, const char *sketch_url) { return BL_CALL(ota_pull_baseline)(url, sketch_url); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Call fn(arg) from the pin's interrupt. mode: BL_RISING, BL_FALLING, BL_CHANGE, BL_ONLOW, BL_ONHIGH. */
-static inline int bl_isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg) { return BL->isr_attach_pin(pin, mode, fn, arg); }
+static inline int bl_isr_attach_pin(int pin, int mode, bl_callback_t fn, void *arg) { return BL_CALL(isr_attach_pin)(pin, mode, fn, arg); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Stop calling it. */
-static inline int bl_isr_detach_pin(int pin) { return BL->isr_detach_pin(pin); }
+static inline int bl_isr_detach_pin(int pin) { return BL_CALL(isr_detach_pin)(pin); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Periodic timer (IntervalTimer): call fn(arg) every period_us from its interrupt. Returns a handle or BL_ERR_* (BL_ERR_NO_MEM: all timers in use). */
-static inline int bl_isr_timer_begin(bl_callback_t fn, void *arg, float period_us) { return BL->isr_timer_begin(fn, arg, period_us); }
+static inline int bl_isr_timer_begin(bl_callback_t fn, void *arg, float period_us) { return BL_CALL(isr_timer_begin)(fn, arg, period_us); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* New period, from the next interval on. */
-static inline int bl_isr_timer_update(int h, float period_us) { return BL->isr_timer_update(h, period_us); }
+static inline int bl_isr_timer_update(int h, float period_us) { return BL_CALL(isr_timer_update)(h, period_us); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Stop the timer and free it. */
-static inline void bl_isr_timer_end(int h) { BL->isr_timer_end(h); }
+static inline void bl_isr_timer_end(int h) { BL_CALL(isr_timer_end)(h); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Interrupt priority, 0 (highest) to 255; the default is 128. */
-static inline int bl_isr_timer_priority(int h, int priority) { return BL->isr_timer_priority(h, priority); }
+static inline int bl_isr_timer_priority(int h, int priority) { return BL_CALL(isr_timer_priority)(h, priority); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Reserve a DMA channel for the sketch (i.MX RT eDMA, 0-31) and turn the DMA engine on. Returns the channel or BL_ERR_NO_MEM. */
-static inline int bl_dma_channel_alloc(void) { return BL->dma_channel_alloc(); }
+static inline int bl_dma_channel_alloc(void) { return BL_CALL(dma_channel_alloc)(); }
 #endif
 #if defined(BL_TARGET_SKETCH_ISR)
 /* Give the channel back. */
-static inline void bl_dma_channel_free(int channel) { BL->dma_channel_free(channel); }
+static inline void bl_dma_channel_free(int channel) { BL_CALL(dma_channel_free)(channel); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* AudioMemory(): blocks of 128 samples for the audio graph. The first call allocates; later calls return BL_OK if no more are asked for, else BL_ERR_STATE. */
-static inline int bl_audio_memory(int blocks) { return BL->audio_memory(blocks); }
+static inline int bl_audio_memory(int blocks) { return BL_CALL(audio_memory)(blocks); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* New audio object of type BL_AUDIO_T_* (constructor arguments in args). Returns a handle or BL_ERR_*. */
-static inline int bl_audio_create(int type, const bl_audio_arg_t *args, int nargs) { return BL->audio_create(type, args, nargs); }
+static inline int bl_audio_create(int type, const bl_audio_arg_t *args, int nargs) { return BL_CALL(audio_create)(type, args, nargs); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* AudioConnection from output src_port of src to input dst_port of dst. Returns a connection handle or BL_ERR_*. */
-static inline int bl_audio_connect(int src, int src_port, int dst, int dst_port) { return BL->audio_connect(src, src_port, dst, dst_port); }
+static inline int bl_audio_connect(int src, int src_port, int dst, int dst_port) { return BL_CALL(audio_connect)(src, src_port, dst, dst_port); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* Remove a connection (it can be made again with audio_reconnect). */
-static inline int bl_audio_disconnect(int connection) { return BL->audio_disconnect(connection); }
+static inline int bl_audio_disconnect(int connection) { return BL_CALL(audio_disconnect)(connection); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* Make a removed connection again. */
-static inline int bl_audio_reconnect(int connection) { return BL->audio_reconnect(connection); }
+static inline int bl_audio_reconnect(int connection) { return BL_CALL(audio_reconnect)(connection); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* Call method BL_AUDIO_M_* on object h; ret (may be NULL) gets the result. Returns BL_OK or BL_ERR_*. */
-static inline int bl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret) { return BL->audio_call(h, method, args, nargs, ret); }
+static inline int bl_audio_call(int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret) { return BL_CALL(audio_call)(h, method, args, nargs, ret); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* BL_AUDIO_STAT_*: processor use in % and its maximum, audio blocks in use and the maximum; the *_RESET values reset a maximum and return 0. */
-static inline float bl_audio_stat(int what) { return BL->audio_stat(what); }
+static inline float bl_audio_stat(int what) { return BL_CALL(audio_stat)(what); }
 #endif
 #if defined(BL_HAS_AUDIO)
 /* AudioNoInterrupts() (0) and AudioInterrupts() (1): change several objects at once, between audio updates. */
-static inline void bl_audio_interrupts(int enable) { BL->audio_interrupts(enable); }
+static inline void bl_audio_interrupts(int enable) { BL_CALL(audio_interrupts)(enable); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Start the USB host port (USBHost::begin): power it and enumerate what is plugged in, hubs included. Baseline services it from then on. */
-static inline int bl_usbh_begin(void) { return BL->usbh_begin(); }
+static inline int bl_usbh_begin(void) { return BL_CALL(usbh_begin)(); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Whether device index of BL_USBH_* kind is connected, and its IDs and strings. BL_OK or BL_ERR_ARG. */
-static inline int bl_usbh_info(int kind, int index, bl_usbh_info_t *info) { return BL->usbh_info(kind, index, info); }
+static inline int bl_usbh_info(int kind, int index, bl_usbh_info_t *info) { return BL_CALL(usbh_info)(kind, index, info); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* The next keyboard event (presses, releases, raw codes), queued in the USB interrupt. 1 if one was taken, 0 if none. */
-static inline int bl_usbh_key_take(int index, bl_usbh_key_t *ev) { return BL->usbh_key_take(index, ev); }
+static inline int bl_usbh_key_take(int index, bl_usbh_key_t *ev) { return BL_CALL(usbh_key_take)(index, ev); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Set the keyboard's LEDs (bit 0 Num Lock, 1 Caps Lock, 2 Scroll Lock); -1 only reads them. Returns the LEDs. */
-static inline int bl_usbh_keyboard_leds(int index, int leds) { return BL->usbh_keyboard_leds(index, leds); }
+static inline int bl_usbh_keyboard_leds(int index, int leds) { return BL_CALL(usbh_keyboard_leds)(index, leds); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* 1 and the mouse's report if it sent one since the last call (mouseDataClear), else 0. */
-static inline int bl_usbh_mouse_take(int index, bl_usbh_mouse_t *m) { return BL->usbh_mouse_take(index, m); }
+static inline int bl_usbh_mouse_take(int index, bl_usbh_mouse_t *m) { return BL_CALL(usbh_mouse_take)(index, m); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* 1 and the joystick's state if it changed since the last call (joystickDataClear), else 0. */
-static inline int bl_usbh_joystick_take(int index, bl_usbh_joystick_t *j) { return BL->usbh_joystick_take(index, j); }
+static inline int bl_usbh_joystick_take(int index, bl_usbh_joystick_t *j) { return BL_CALL(usbh_joystick_take)(index, j); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* One MIDI message: msg[0] type, [1] channel, [2] data1, [3] data2, [4] cable. 1 if one was read, else 0. */
-static inline int bl_usbh_midi_read(int index, uint8_t *msg) { return BL->usbh_midi_read(index, msg); }
+static inline int bl_usbh_midi_read(int index, uint8_t *msg) { return BL_CALL(usbh_midi_read)(index, msg); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Send one MIDI message (MIDIDevice::send). */
-static inline int bl_usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable) { return BL->usbh_midi_send(index, type, data1, data2, channel, cable); }
+static inline int bl_usbh_midi_send(int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable) { return BL_CALL(usbh_midi_send)(index, type, data1, data2, channel, cable); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Open a USB-serial adapter (FTDI, CP210x, CH34x, PL2303, CDC ACM) at baud; format = USBHOST_SERIAL_* (0 = 8N1). */
-static inline int bl_usbh_serial_begin(int index, uint32_t baud, uint32_t format) { return BL->usbh_serial_begin(index, baud, format); }
+static inline int bl_usbh_serial_begin(int index, uint32_t baud, uint32_t format) { return BL_CALL(usbh_serial_begin)(index, baud, format); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Bytes waiting from the adapter, or -1 if it isn't connected. */
-static inline int bl_usbh_serial_available(int index) { return BL->usbh_serial_available(index); }
+static inline int bl_usbh_serial_available(int index) { return BL_CALL(usbh_serial_available)(index); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Read up to len waiting bytes. Returns how many. */
-static inline int bl_usbh_serial_read(int index, uint8_t *buf, size_t len) { return BL->usbh_serial_read(index, buf, len); }
+static inline int bl_usbh_serial_read(int index, uint8_t *buf, size_t len) { return BL_CALL(usbh_serial_read)(index, buf, len); }
 #endif
 #if defined(BL_HAS_USB_HOST)
 /* Send len bytes. Returns how many were queued. */
-static inline int bl_usbh_serial_write(int index, const uint8_t *buf, size_t len) { return BL->usbh_serial_write(index, buf, len); }
+static inline int bl_usbh_serial_write(int index, const uint8_t *buf, size_t len) { return BL_CALL(usbh_serial_write)(index, buf, len); }
 #endif
 #if defined(BL_HAS_ETHERNET)
 /* Start Ethernet. mac NULL = the board's own; ip 0 = DHCP (waits up to timeout_ms), else these addresses (0 = derived). Returns 1 when it has an address, else 0. */
-static inline int bl_eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms) { return BL->eth_begin(mac, ip, dns, gateway, subnet, timeout_ms); }
+static inline int bl_eth_begin(const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms) { return BL_CALL(eth_begin)(mac, ip, dns, gateway, subnet, timeout_ms); }
 #endif
 #if defined(BL_HAS_ETHERNET)
 /* BL_ETH_LINK: 1 cable connected, 0 not, -1 unknown. BL_ETH_HARDWARE: 1 if the board has the PHY, else 0. */
-static inline int bl_eth_status(int what) { return BL->eth_status(what); }
+static inline int bl_eth_status(int what) { return BL_CALL(eth_status)(what); }
 #endif
 #if defined(BL_HAS_ETHERNET)
 /* IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS. */
-static inline uint32_t bl_eth_ip(int which) { return BL->eth_ip(which); }
+static inline uint32_t bl_eth_ip(int which) { return BL_CALL(eth_ip)(which); }
 #endif
 #if defined(BL_HAS_ETHERNET)
 /* The MAC address in use (6 bytes). */
-static inline int bl_eth_mac(uint8_t *mac) { return BL->eth_mac(mac); }
+static inline int bl_eth_mac(uint8_t *mac) { return BL_CALL(eth_mac)(mac); }
 #endif
 #if defined(BL_HAS_ETHERNET)
 /* Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound). */
-static inline int bl_eth_maintain(void) { return BL->eth_maintain(); }
+static inline int bl_eth_maintain(void) { return BL_CALL(eth_maintain)(); }
 #endif
 #endif /* BASELINE_FIRMWARE */
 

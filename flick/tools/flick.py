@@ -74,6 +74,7 @@ LEGACY_TARGETS = {"esp32": "thing_plus_esp32", "esp32s3": "thing_plus_esp32s3"}
 # Must match sdk/include/sketch_abi.h (the target addresses come from bl_target.h)
 HEADER_SIZE = 0x100
 MAGIC = 0x4B534C42
+HDR_OFF_ABI_MINOR = 10
 HDR_OFF_IMAGE_SIZE = 12
 HDR_OFF_BUILD_ID = 96
 HDR_OFF_SHA256 = HEADER_SIZE - 32
@@ -783,9 +784,27 @@ def build(proj, target_name=None):
     flick = out / (cfg["name"] + ".flick")
     flick.write_bytes(image)
     sha = image[HDR_OFF_SHA256:HDR_OFF_SHA256 + 32].hex()
-    print(f"built {cfg['name']}.flick for {target['name']}: {len(image)} bytes, sha256 {sha[:16]}..., "
-          f"{time.time() - t0:.2f}s")
+    abi = f"{struct.unpack_from('<H', image, 8)[0]}.{struct.unpack_from('<H', image, HDR_OFF_ABI_MINOR)[0]}"
+    print(f"built {cfg['name']}.flick for {target['name']}: {len(image)} bytes, needs Baseline ABI {abi}, "
+          f"sha256 {sha[:16]}..., {time.time() - t0:.2f}s")
     return flick
+
+
+def elf_section(elf, name):
+    """The contents of a 32-bit ELF's section `name`, or b"" if it has none."""
+    e_shoff, = struct.unpack_from("<I", elf, 32)
+    e_shentsize, e_shnum, e_shstrndx = struct.unpack_from("<HHH", elf, 46)
+    if not e_shoff or e_shstrndx >= e_shnum:
+        return b""
+    shdr = lambda i: struct.unpack_from("<10I", elf, e_shoff + i * e_shentsize)
+    strtab = shdr(e_shstrndx)
+    want = name.encode()
+    for i in range(e_shnum):
+        sh_name, sh_type, _flags, _addr, sh_offset, sh_size = shdr(i)[:6]
+        at = strtab[4] + sh_name
+        if elf[at:at + len(want) + 1] == want + b"\0":
+            return b"" if sh_type == 8 else elf[sh_offset:sh_offset + sh_size]     # SHT_NOBITS: no contents
+    return b""
 
 
 def make_image(elf, target):
@@ -819,6 +838,9 @@ def make_image(elf, target):
     if len(image) > MAX_SIZE:
         sys.exit(f"error: image is {len(image)} bytes; a sketch slot holds {MAX_SIZE}")
     struct.pack_into("<I", image, HDR_OFF_IMAGE_SIZE, len(image))
+    # The oldest Baseline it runs on: the newest table entry the linked code calls.
+    need = elf_section(elf, ".bl_need")
+    struct.pack_into("<H", image, HDR_OFF_ABI_MINOR, max(need, default=0))
     build_id = hashlib.sha256(bytes(image) + str(time.time()).encode()).digest()[:16]
     image[HDR_OFF_BUILD_ID:HDR_OFF_BUILD_ID + 16] = build_id
     image[HDR_OFF_SHA256:HDR_OFF_SHA256 + 32] = bytes(32)

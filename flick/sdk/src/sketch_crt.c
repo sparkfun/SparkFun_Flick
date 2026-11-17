@@ -87,13 +87,13 @@ static void run_pumps(void)
 void delay(uint32_t ms)
 {
     if (!s_pump_count) {
-        BL->delay_ms(ms);
+        BL_CALL(delay_ms)(ms);
         return;
     }
     run_pumps();
     while (ms) {
         uint32_t step = ms < PUMP_SLICE ? ms : PUMP_SLICE;
-        BL->delay_ms(step);
+        BL_CALL(delay_ms)(step);
         ms -= step;
         run_pumps();
     }
@@ -101,7 +101,7 @@ void delay(uint32_t ms)
 
 void yield(void)
 {
-    BL->yield();
+    BL_CALL(yield)();
     run_pumps();
 }
 

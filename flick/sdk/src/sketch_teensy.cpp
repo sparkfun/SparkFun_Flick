@@ -40,7 +40,7 @@ int bl_teensy_analog_write(int pin, int value)
         return BL_ERR_ARG;
     }
     if (s_bits == 8 && s_freq[pin] == 0) {
-        return BL->pwm_write(pin, value);
+        return BL_CALL(pwm_write)(pin, value);
     }
     if (s_attached[pin] != s_bits) {
         if (bl_ledc_attach(pin, s_freq[pin] > 0 ? (uint32_t)s_freq[pin] : 4482, s_bits) != 1) {

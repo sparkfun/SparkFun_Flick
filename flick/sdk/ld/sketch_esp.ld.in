@@ -60,6 +60,10 @@ SECTIONS
 
     _sketch_image_size = _sketch_data_load + SIZEOF(.data) - BL_SKETCH_DBUS_BASE;
 
+    /* The ABI minor of each table entry the linked code calls (BL_CALL in
+     * baseline_api.h): not part of the image; flick reads it from the ELF. */
+    .bl_need 0 (INFO) : { *(.bl_need.*) }
+
     /* No exceptions in sketches: unwind and exception tables are dropped. */
     /DISCARD/ : { *(.eh_frame .eh_frame_hdr .gcc_except_table .gcc_except_table.* .fini_array* .dtors* .comment .note.*
                   .ARM.exidx* .ARM.extab* .ARM.attributes) }

@@ -43,12 +43,12 @@ void analogWriteResolution(unsigned int bits);
 void analogWriteFrequency(uint8_t pin, float frequency);
 /* Teensy 4.1 PSRAM (EXTMEM chips): like Teensyduino, these fall back to RAM
  * when there is no PSRAM. free() frees either kind. */
-static inline void *extmem_malloc(size_t size) { void *p = BL->ps_malloc(size); return p ? p : malloc(size); }
-static inline void *extmem_calloc(size_t n, size_t size) { void *p = BL->ps_calloc(n, size); return p ? p : calloc(n, size); }
-static inline void *extmem_realloc(void *ptr, size_t size) { void *p = BL->ps_realloc(ptr, size); return p ? p : realloc(ptr, size); }
+static inline void *extmem_malloc(size_t size) { void *p = BL_CALL(ps_malloc)(size); return p ? p : malloc(size); }
+static inline void *extmem_calloc(size_t n, size_t size) { void *p = BL_CALL(ps_calloc)(n, size); return p ? p : calloc(n, size); }
+static inline void *extmem_realloc(void *ptr, size_t size) { void *p = BL_CALL(ps_realloc)(ptr, size); return p ? p : realloc(ptr, size); }
 static inline void extmem_free(void *ptr) { free(ptr); }
 /* The die temperature, degrees C. */
-static inline float tempmonGetTemp(void) { return BL->temperature_read(); }
+static inline float tempmonGetTemp(void) { return BL_CALL(temperature_read)(); }
 #ifdef BL_BOARD_SD_BUILTIN
 #define BUILTIN_SDCARD BL_BOARD_SD_BUILTIN      /* SD.begin(BUILTIN_SDCARD): the 4.1's slot */
 #endif
