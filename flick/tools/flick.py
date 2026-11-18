@@ -1636,6 +1636,21 @@ def build_baseline_teensy(target, flash, serial_port=None):
     wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
     for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
         wanted[Path(name)] = gen / name
+    # INFO build= (the download page skips flashing a board that already runs
+    # this image): a hash of everything the build reads from Flick, as on RP2.
+    h = hashlib.sha256()
+    inputs = sorted(wanted.items()) + sorted(
+        (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
+    for rel, src in inputs:
+        h.update(str(rel).replace("\\", "/").encode() + b"\0" + src.read_bytes())
+    h.update(target["fqbn"].encode() + b"\0-DTEENSY_INIT_USB_DELAY_AFTER=0")
+    h.update((target["chip_dir"] / "chip.json").read_bytes())
+    id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
+    text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
+    if not id_header.exists() or id_header.read_text() != text:
+        id_header.parent.mkdir(parents=True, exist_ok=True)
+        id_header.write_text(text)
+    wanted[Path("bl_build_id.h")] = id_header
     sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
     build_path = baseline_build_path(target["name"])
     # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").

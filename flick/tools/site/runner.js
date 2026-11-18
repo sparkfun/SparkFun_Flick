@@ -53,11 +53,12 @@ class Link {
     await this.port.open({ baudRate: baud, bufferSize: 65536 });
     // Release RTS before DTR, so the reset circuit never sees RTS alone (that resets
     // the chip). A TinyUSB port (S3 in USB device mode) and an RP2040/RP2350's USB
-    // serial (arduino-pico) need DTR to send anything.
+    // serial (arduino-pico) need DTR to send anything; a Teensy sends its first
+    // output seconds late without it (a Teensy restarts only on 134 baud).
     const info = this.port.getInfo();
     const tinyusb = info.usbVendorId === ESPRESSIF && info.usbProductId !== USB_SERIAL_JTAG;
     await this.port.setSignals({ requestToSend: false });
-    await this.port.setSignals({ dataTerminalReady: tinyusb || RP2_VIDS.includes(info.usbVendorId) });
+    await this.port.setSignals({ dataTerminalReady: tinyusb || info.usbVendorId === PJRC || RP2_VIDS.includes(info.usbVendorId) });
     this.writer = this.port.writable.getWriter();
     this.reader = this.port.readable.getReader();
     this.done = this.readLoop();
@@ -842,9 +843,40 @@ function halfkayModel(dev) {
   return c ? c.usage : 0;
 }
 
+// Restart a Teensy out of its bootloader (FF FF FF), and check it left: a
+// bootloader still on USB after the command means the Teensy didn't restart
+// (it would stay there until unplugged), so the command goes again.
+async function halfkayBoot(dev) {
+  const boot = new Uint8Array(TEENSY_BLOCK + 64);
+  boot[0] = boot[1] = boot[2] = 0xff;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      if (!dev.opened) await dev.open();
+      await dev.sendReport(0, boot);
+    } catch (e) {}                      // it restarts at once, so the send itself may fail
+    try { await dev.close(); } catch (e) {}
+    for (let i = 0; i < 20; i++) {
+      await sleep(100);
+      const still = (await navigator.hid.getDevices()).some((d) => d === dev ||
+        (d.vendorId === HALFKAY.vendorId && d.productId === HALFKAY.productId));
+      if (!still) return true;
+    }
+    log(`--- the Teensy is still in its bootloader after the restart command (try ${attempt})`, "note");
+  }
+  return false;
+}
+
+// A Teensy port this page was allowed before (it comes back without asking).
+async function knownTeensyPort() {
+  const known = (await navigator.serial.getPorts()).filter((p) => p.getInfo().usbVendorId === PJRC);
+  return known.length === 1 ? known[0] : null;
+}
+
 async function flashTeensy(btn) {
   let target = btn.dataset.target, codeSize = Number(btn.dataset.codeSize);
   const auto = target === "auto-teensy";
+  const force = btn.dataset.force === "1";        // "Reinstall anyway": flash even if up to date
+  delete btn.dataset.force;
   const teensys = (window.FLICK && window.FLICK.teensy) || [];
   let pick = auto ? null : teensys.find((b) => b.target === target) || null;
   const panel = btn.closest("div.board");
@@ -875,6 +907,22 @@ async function flashTeensy(btn) {
         showAs(panel, board.target);
       } else if (board && pick && board.model !== pick.model) {
         say(`This board is a ${board.name}, not a ${pick.name}: pick it in the menu (or Auto-detect), then Flash.`, "bad");
+        return;
+      }
+      // Already this exact Baseline (INFO build= matches the page's .hex): no flash.
+      const latest = (window.FLICK.builds || {})[pick ? pick.target : ""];
+      if (!force && running && latest && pick && running.target === pick.target && running.build === latest) {
+        foundLine(status, `Found: ${pick.name}, already running the latest Baseline (${running.baseline}).`);
+        say("Nothing to update. Connecting...", "good");
+        await sleep(300);
+        const ok = await connectAfterFlash(port);
+        say(ok ? "Nothing to update. Connected: its examples are below."
+               : "Nothing to update. Press Connect below to try the examples.", "good");
+        const again = document.createElement("button");
+        again.textContent = "Reinstall anyway";
+        again.className = "choice";
+        again.onclick = () => { btn.dataset.force = "1"; flashTeensy(btn); };
+        status.append(" ", again);
         return;
       }
       await sleep(300);                 // the INFO link's close must finish first
@@ -962,10 +1010,11 @@ async function flashTeensy(btn) {
       await halfkayWrite(dev, report, i < 5 ? 45000 : 2000);     // the first blocks wait for the erase
       if (i % 16 === 0) say(`Writing Baseline ${NEW_VERSION()}: ${Math.floor((i / blocks.length) * 100)}%`);
     }
-    const boot = new Uint8Array(TEENSY_BLOCK + 64);
-    boot[0] = boot[1] = boot[2] = 0xff;
-    try { await dev.sendReport(0, boot); } catch (e) {}           // it restarts at once
-    try { await dev.close(); } catch (e) {}
+    say(`Restarting the Teensy into Baseline ${NEW_VERSION()}...`);
+    if (!await halfkayBoot(dev)) {
+      throw new Error("written, but the Teensy stays in its bootloader: press the button on it (or unplug it " +
+                      "and plug it back in) to start Baseline");
+    }
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
     let done = (auto ? `Flashed ${pick.name}. ` : "") + `Done in ${secs} s.`;
     // Auto-detect: the flashed board's own panel takes over (its examples, its Flash button).
@@ -973,6 +1022,14 @@ async function flashTeensy(btn) {
       .find((d) => d.dataset.target === target).querySelector(".flash-status")) : status;
     const tell = (text, cls) => { line.textContent = text; line.className = "flash-status " + (cls || ""); };
     tell(done + " Connecting...", "good");
+    // Flashed straight from the bootloader (no port picked): a Teensy port this
+    // page was allowed before shows up again by itself once Baseline runs.
+    if (!port) {
+      for (let i = 0; i < 20 && !port; i++) {
+        await sleep(250);
+        port = await knownTeensyPort();
+      }
+    }
     const ok = port ? await connectAfterFlash(port) : false;
     tell(done + (ok ? " Connected: its examples are below." : " Press Connect below to try the examples."), "good");
   } catch (e) {

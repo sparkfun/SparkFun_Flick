@@ -45,6 +45,12 @@ def build_id(image):
     SHA-256 in its app description (esp_app_desc_t.app_elf_sha256, 144 bytes
     in), as Baseline reports it in INFO build=. None if it isn't there."""
     data = Path(image).read_bytes()
+    if Path(image).suffix == ".hex":
+        # Teensy: the same "BLBUILD=" string (bl_teensy_loader.cpp), in the data records.
+        flat = b"".join(bytes.fromhex(l[9:-2]) for l in data.decode("ascii", "replace").split()
+                        if l.startswith(":") and l[7:9] == "00")
+        m = re.search(rb"BLBUILD=([0-9a-f]{16})\0", flat)
+        return m.group(1).decode() if m else None
     if Path(image).suffix == ".uf2":
         # RP2040/RP2350: flick compiles "BLBUILD=<16 hex>" into Baseline (bl_rp2_loader.cpp).
         # The payloads (256 bytes each, after a 32-byte header) in address order, so the
@@ -169,7 +175,7 @@ def main():
     boards = {name: board for board, name, *_ in rows}
     # What the Flash buttons compare with INFO build= (a board already running
     # this Baseline is not flashed again).
-    builds = {name: build_id(image) for _, name, _, _, image, _ in rows if image.suffix in (".bin", ".uf2")}
+    builds = {name: build_id(image) for _, name, _, _, image, _ in rows if image.suffix in (".bin", ".uf2", ".hex")}
 
     kit = Path(args.kit) if args.kit else max(dist.glob("flick-kit-*.zip"), default=None,
                                               key=lambda p: p.stat().st_mtime)

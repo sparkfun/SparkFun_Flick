@@ -481,9 +481,18 @@ void bl_console_out(const void *data, size_t len)
 }
 
 /* ---- Loader protocol ------------------------------------------------------ */
+#if __has_include("bl_build_id.h")
+#include "bl_build_id.h"                /* written by flick: a hash of the build's inputs */
+#else
+#define BL_BUILD_ID "-"
+#endif
+/* INFO build=. The "BLBUILD=" prefix lets the download page find the same ID
+ * in the .hex, and skip flashing a board that already runs this image. */
+static const char s_build[] = "BLBUILD=" BL_BUILD_ID;
+
 static void reply(const char *status, const char *fmt, ...)
 {
-    char buf[400];
+    char buf[512];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -596,9 +605,9 @@ static void cmd_info(void)
     if (bl_last_crash_text(crash, sizeof(crash)) <= 0) {
         strcpy(crash, "-");
     }
-    OK("baseline=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=0 reset=%d update=none "
-       "bpart=- remap=%d crash=\"%s\"",
-       BASELINE_VERSION, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + s_ps.active,
+    OK("baseline=%s build=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=0 reset=%d "
+       "update=none bpart=- remap=%d crash=\"%s\"",
+       BASELINE_VERSION, s_build + 8, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + s_ps.active,
        s_name[0] ? s_name : "-", s_status, s_safe ? "yes" : "no", bl_reset_reason_code(), s_remap_mode, crash);
 }
 
