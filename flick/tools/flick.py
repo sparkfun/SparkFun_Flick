@@ -1649,6 +1649,12 @@ def id_bytes(path):
     return path.read_bytes().replace(b"\r\n", b"\n")
 
 
+def id_sorted(items):
+    """(relative path, file) pairs in the order a build ID hashes them: by the
+    path's text, case and all. Path objects sort without case on Windows only."""
+    return sorted(items, key=lambda item: item[0].as_posix())
+
+
 def build_baseline_teensy(target, flash, serial_port=None):
     """Baseline for the i.MX RT1062 (Teensy 4.x): an Arduino sketch built with
     Teensyduino through arduino-cli. Staged from chips/<chip>/baseline plus the
@@ -1660,10 +1666,10 @@ def build_baseline_teensy(target, flash, serial_port=None):
     # INFO build= (the download page skips flashing a board that already runs
     # this image): a hash of everything the build reads from Flick, as on RP2.
     h = hashlib.sha256()
-    inputs = sorted(wanted.items()) + sorted(
+    inputs = id_sorted(wanted.items()) + id_sorted(
         (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
     for rel, src in inputs:
-        h.update(str(rel).replace("\\", "/").encode() + b"\0" + id_bytes(src))
+        h.update(rel.as_posix().encode() + b"\0" + id_bytes(src))
     h.update(target["fqbn"].encode() + b"\0-DTEENSY_INIT_USB_DELAY_AFTER=0")
     h.update(id_bytes(target["chip_dir"] / "chip.json"))
     id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
@@ -1755,10 +1761,10 @@ def build_baseline_rp2(target, flash, port=None):
     # this image): a hash of everything the build reads from Flick, so the same
     # sources give the same ID. chip.json names the core and compiler versions.
     h = hashlib.sha256()
-    inputs = sorted(wanted.items()) + sorted(
+    inputs = id_sorted(wanted.items()) + id_sorted(
         (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
     for rel, src in inputs:
-        h.update(str(rel).replace("\\", "/").encode() + b"\0" + id_bytes(src))
+        h.update(rel.as_posix().encode() + b"\0" + id_bytes(src))
     h.update("\0".join([target["fqbn"], *props]).encode())
     h.update(id_bytes(target["chip_dir"] / "chip.json"))
     id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
