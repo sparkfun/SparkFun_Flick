@@ -2491,7 +2491,12 @@ def flash_file(args):
 # ---------------------------------------------------------------- Baseline updates over the air
 
 # .bsu: the Baseline update package (baseline/src/bsu/bsu_format.h): a 128-byte
-# header, then the app image compressed with raw deflate.
+# header, then the app image compressed with raw deflate. On RP2040/RP2350 the
+# compressed part is a gzip stream instead (header byte 5 = 1), the format
+# arduino-pico's OTA stub inflates (chips/rp2350/baseline/bl_rp2_update.cpp),
+# after a 16-byte extension: "RPX1", then the offset and size of the image's
+# Bluetooth bond store (arduino-pico's __bluetooth_tlv, which BTstack rewrites
+# at run time, so the installed image is checked without it), 0 and 0 if none.
 BSU_MAGIC = 0x31555342
 BSU_HEADER = struct.Struct("<IBBHII32s32s32s16s")
 BSU_COMP_GZIP = 1
