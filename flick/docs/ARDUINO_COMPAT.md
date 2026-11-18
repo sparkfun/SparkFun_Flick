@@ -111,9 +111,9 @@ a line from flick saying why. Compat headers for a missing feature stop with
 | `BL_PLATFORM_ESP32` | every ESP32 chip | Arduino-ESP32 / ESP-IDF names: `esp_*` (sleep, timer, random, restart, reset reason, ESP-NOW), `ESP`, `ESP_LOGx`/`log_x`, `ledc*`, `hw_timer`, `ps_malloc`, `psramFound`, `temperatureRead`, `analogReadMilliVolts`, attenuation, I2S, `SD_MMC`, `rgbLedWrite`, FastLED |
 | `BL_PLATFORM_TEENSY` | Teensy 4.0, 4.1 | Teensyduino names (below) |
 | `BL_PLATFORM_RP2` | RP2040 and RP2350 boards | `rgbLedWrite`, FastLED (below) |
-| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE); the Thing Plus - RP2350 | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
+| `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE); the Thing Plus - RP2350; the Pico 2 W | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
 | `BL_HAS_ESPNOW` | ESP32, S3, C3, C5, C6 (not through ESP-Hosted) | ESP-NOW |
-| `BL_HAS_BLE` | ESP32, S3, C3, C5, C6; the Thing Plus - RP2350 | `BLESerial`, the BLE library |
+| `BL_HAS_BLE` | ESP32, S3, C3, C5, C6; the Thing Plus - RP2350; the Pico 2 W | `BLESerial`, the BLE library |
 | `BL_HAS_BT_CLASSIC` | classic ESP32 | `BluetoothSerial` |
 | `BL_HAS_TOUCH` | ESP32, S3 | `touchRead`, `T0`... |
 | `BL_HAS_DAC` | classic ESP32 | `dacWrite` |
@@ -159,7 +159,7 @@ work on every board.
   doesn't answer while the chip sleeps; `flick upload` waits for it to wake.
 - **No WiFi, BLE or ESP-NOW:** those calls return errors.
 
-## RP2040 and RP2350 (`pro_micro_rp2040`, `thing_plus_rp2040`, `pro_micro_rp2350`, `thing_plus_rp2350`)
+## RP2040 and RP2350 (`pro_micro_rp2040`, `thing_plus_rp2040`, `pro_micro_rp2350`, `thing_plus_rp2350`, `rp2350_generic_pico2`, `rp2350_generic_pico2w`)
 
 Baseline for these boards is built on arduino-pico (Earle Philhower's core);
 sketches use the same classic Arduino names as on the ESP32.

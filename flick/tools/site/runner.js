@@ -1203,8 +1203,11 @@ async function rp2Pick(status, dev, flashed) {
   }
   const what = romChip ? `an ${romChip}` : "an RP2040 or RP2350 board (the chip isn't readable here)";
   foundLine(status, `Found: ${what}.`);
-  if (fits.length === 1) return fits[0];
-  return askWhich(status, `Found ${what}. Which board is it?`, fits);
+  // Only SparkFun boards are offered: a Pico 2 has its own entry in the menu.
+  const sparkfun = fits.filter((b) => !b.generic);
+  if (!sparkfun.length) throw new Error(`found ${what}, and no SparkFun board on this page has one: pick your board in the menu.`);
+  if (sparkfun.length === 1) return sparkfun[0];
+  return askWhich(status, `Found ${what}. Which board is it?`, sparkfun);
 }
 
 // A board in its boot ROM that ran Baseline before has its target name in

@@ -34,6 +34,7 @@ import argparse
 import base64
 import codecs
 import glob
+import gzip
 import hashlib
 import json
 import os
@@ -819,6 +820,24 @@ def elf_section(elf, name):
         if elf[at:at + len(want) + 1] == want + b"\0":
             return b"" if sh_type == 8 else elf[sh_offset:sh_offset + sh_size]     # SHT_NOBITS: no contents
     return b""
+
+
+def elf_symbol(elf, name):
+    """(value, size) of a 32-bit ELF's symbol `name` (local ones too), or None."""
+    e_shoff, = struct.unpack_from("<I", elf, 32)
+    e_shentsize, e_shnum = struct.unpack_from("<HH", elf, 46)
+    shdr = lambda i: struct.unpack_from("<10I", elf, e_shoff + i * e_shentsize)
+    want = name.encode() + b"\0"
+    for i in range(e_shnum):
+        h = shdr(i)
+        if h[1] != 2:       # SHT_SYMTAB
+            continue
+        strtab_off = shdr(h[6])[4]
+        for at in range(h[4], h[4] + h[5], 16):
+            st_name, st_value, st_size = struct.unpack_from("<III", elf, at)
+            if elf[strtab_off + st_name:strtab_off + st_name + len(want)] == want:
+                return st_value, st_size
+    return None
 
 
 def make_image(elf, target):
@@ -1732,6 +1751,10 @@ def build_baseline_rp2(target, flash, port=None):
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(uf2, out)
     print(f"Baseline image: {out.relative_to(WORK)} (UF2: drop it on the board's USB drive in BOOTSEL mode)")
+    version = header_defines(ROOT / target["baseline_source"] / "bl_rp2.h")["BASELINE_VERSION"]
+    bsu = make_bsu(target, build_path / "baseline.ino.bin", DIST / target["name"] / f"baseline-{target['name']}.bsu",
+                   version, build_path / "baseline.ino.elf")
+    print(f"Baseline update: {bsu.relative_to(WORK)} ({bsu.stat().st_size} bytes, for flick baseline update)")
     if flash:
         # arduino-pico's uploader opens the port at 1200 baud: its USB serial (Baseline's
         # console) then reboots into the boot ROM, and the .uf2 is copied to its drive.
@@ -2435,18 +2458,32 @@ def flash_file(args):
 # header, then the app image compressed with raw deflate.
 BSU_MAGIC = 0x31555342
 BSU_HEADER = struct.Struct("<IBBHII32s32s32s16s")
+BSU_COMP_GZIP = 1
+BSU_RP_EXT = struct.Struct("<4sIII")
 
 
-def make_bsu(target, app_bin, out):
+def make_bsu(target, app_bin, out, version=None, elf=None):
     raw = Path(app_bin).read_bytes()
-    z = zlib.compressobj(9, zlib.DEFLATED, -15, 9)
-    comp = z.compress(raw) + z.flush()
-    version = header_defines(ROOT / "baseline" / "src" / "bl_main.h")["BASELINE_VERSION"]
-    hdr = BSU_HEADER.pack(BSU_MAGIC, 1, 0, target["chip_id"], len(raw), len(comp),
+    ext = b""
+    if target.get("builder") == "rp2":
+        kind = BSU_COMP_GZIP
+        comp = gzip.compress(raw, 9, mtime=0)
+        tlv = elf_symbol(Path(elf).read_bytes(), "_ZL15__bluetooth_tlv") if elf else None
+        tlv_off, tlv_size = (tlv[0] - 0x10000000, tlv[1]) if tlv else (0, 0)
+        if tlv_size and raw[tlv_off:tlv_off + tlv_size].strip(b"\0"):
+            sys.exit("error: the image's Bluetooth bond store is not all zeros")
+        ext = BSU_RP_EXT.pack(b"RPX1", tlv_off, tlv_size, 0)
+    else:
+        kind = 0
+        z = zlib.compressobj(9, zlib.DEFLATED, -15, 9)
+        comp = z.compress(raw) + z.flush()
+    if version is None:
+        version = header_defines(ROOT / "baseline" / "src" / "bl_main.h")["BASELINE_VERSION"]
+    hdr = BSU_HEADER.pack(BSU_MAGIC, 1, kind, target["chip_id"], len(raw), len(comp),
                           hashlib.sha256(raw).digest(), hashlib.sha256(comp).digest(),
                           target["name"].encode().ljust(32, b"\0"), version.encode()[:16].ljust(16, b"\0"))
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(hdr + comp)
+    out.write_bytes(hdr + ext + comp)
     return out
 
 
@@ -2454,10 +2491,10 @@ def parse_bsu(pkg):
     """The .bsu header as a dict, after checking it and the compressed data's SHA-256."""
     if len(pkg) < BSU_HEADER.size:
         sys.exit("error: not a Baseline update (.bsu): too short")
-    magic, ver, _, chip, raw_size, comp_size, raw_sha, comp_sha, target, version = BSU_HEADER.unpack_from(pkg)
+    magic, ver, kind, chip, raw_size, comp_size, raw_sha, comp_sha, target, version = BSU_HEADER.unpack_from(pkg)
     if magic != BSU_MAGIC or ver != 1:
         sys.exit("error: not a Baseline update (.bsu)")
-    comp = pkg[BSU_HEADER.size:]
+    comp = pkg[BSU_HEADER.size + (BSU_RP_EXT.size if kind == BSU_COMP_GZIP else 0):]
     if len(comp) != comp_size or hashlib.sha256(comp).digest() != comp_sha:
         sys.exit("error: the .bsu file is damaged")
     return {"chip_id": chip, "raw_size": raw_size, "raw_sha": raw_sha, "comp": comp,
@@ -2516,7 +2553,12 @@ def cmd_baseline_update(args, target):
         bsu = Path(args.file)
     else:
         print(f"target {target['name']}: {target['description']}")
-        build_baseline_idf(target, esp32_core_for(target))
+        if target.get("builder") == "rp2":
+            build_baseline_rp2(target, False)
+        elif target.get("builder") == "idf":
+            build_baseline_idf(target, esp32_core_for(target))
+        else:
+            sys.exit(f"error: {target['name']} updates Baseline over USB only (flick baseline flash)")
         bsu = DIST / target["name"] / f"baseline-{target['name']}.bsu"
     pkg = bsu.read_bytes()
     h = parse_bsu(pkg)
@@ -2536,6 +2578,10 @@ def cmd_baseline_update(args, target):
     elif mode == "staged":
         kind, data = "bsu", pkg
         print("note: on this board the update erases the sketch and LittleFS")
+    elif mode == "file":
+        # RP2040/RP2350: stored in LittleFS, installed by arduino-pico's OTA stub at
+        # the restart; the sketch, its settings and its files are kept.
+        kind, data = "bsu", pkg
     else:
         sys.exit("error: this Baseline cannot be updated over the air (flash it once over USB: flick baseline flash)")
     for _ in range(2):
@@ -2550,12 +2596,13 @@ def cmd_baseline_update(args, target):
     else:
         sys.exit("error: the board did not take the update")
     conn.close()
-    if kind == "bsu" and getattr(args, "host", None):
+    if mode == "staged" and getattr(args, "host", None):
         # The update erased the sketch, so nothing will bring WiFi up again.
         print("the bootloader installs the update now (about 30 s); the sketch was erased, so the board is "
               "not on WiFi any more: upload a sketch over USB (or use ota_pull_baseline with a sketch URL)")
         return
-    print("waiting for the board to restart" + (" (the bootloader installs the update)" if kind == "bsu" else ""))
+    print("waiting for the board to restart" + (" (the bootloader installs the update)" if mode == "staged" else
+                                                 " (the OTA stub installs the update)" if mode == "file" else ""))
     conn, link = reconnect(args, timeout=120)
     with conn:
         info = info_fields(link.request("INFO"))

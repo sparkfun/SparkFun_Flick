@@ -554,6 +554,7 @@ extern "C" __attribute__((naked)) void bl_fault(void)
 
 void bl_restart_clean(void)
 {
+    bl_update_confirm();        // a new Baseline on trial is kept: this restart is on purpose
     s_ni.in_sketch = 0;
     s_ni.clean_restart = 1;
     uint32_t t = millis();
@@ -803,11 +804,13 @@ static void cmd_info(void)
         strcpy(crash, "-");
     }
     OK("baseline=%s build=%s abi=%d.%d chip=%s target=%s slot=%c sketch=%s status=\"%s\" safe=%s usb=0 reset=%d "
-       "update=none bpart=- core=%s crash=\"%s\"",
+       "update=file bpart=- core=%s crash=\"%s\"",
        BASELINE_VERSION, s_build + 8, BL_ABI_MAJOR, BL_ABI_MINOR, BL_TARGET_CHIP, BL_TARGET_NAME, 'a' + s_ps.active,
        s_name[0] ? s_name : "-", s_status, s_safe ? "yes" : "no", bl_reset_reason_code(), ARDUINO_PICO_VERSION_STR,
        crash);
 }
+
+static const char *slot_accept(int slot, char *name);
 
 static void cmd_begin(char *args)
 {
@@ -879,16 +882,125 @@ static void cmd_end(void)
         ERR("transfer corrupted (sha256 mismatch)");
         return;
     }
+    char name[32];
+    const char *why = slot_accept(slot, name);
+    if (why) {
+        ERR("rejected: %s", why);
+        return;
+    }
+    OK("slot=%c name=%s rebooting", 'a' + slot, name);
+    bl_restart_clean();
+}
+
+/* ota_pull_sketch: the image arrives without a size or SHA-256 up front; the
+ * header's SHA-256 (sketch_check) decides. */
+void bl_sketch_stream_begin(void)
+{
+    memset(&s_up, 0, sizeof(s_up));
+    s_up.slot = s_ps.active ^ 1;
+    bl_flash_erase(slot_addr(s_up.slot), BL_BOARD_SLOT_SIZE);
+    s_up.size = BL_BOARD_SLOT_SIZE < BL_SKETCH_MAX_SIZE ? BL_BOARD_SLOT_SIZE : BL_SKETCH_MAX_SIZE;
+    s_up.active = true;
+}
+
+void bl_sketch_stream_write(const uint8_t *data, uint32_t len)
+{
+    if (!s_up.active) {
+        return;
+    }
+    if (s_up.next + len > s_up.size) {
+        s_up.active = false;    // too big: end() says so
+        s_up.next = s_up.size + 1;
+        return;
+    }
+    up_write(data, len);
+    s_up.next += len;
+}
+
+const char *bl_sketch_stream_end(void)
+{
+    if (s_up.next > s_up.size) {
+        return "the sketch is bigger than a slot";
+    }
+    if (!s_up.active || s_up.next < BL_SKETCH_HEADER_SIZE) {
+        return "no sketch received";
+    }
+    up_page_flush();
+    s_up.active = false;
+    char name[32];
+    const char *why = slot_accept(s_up.slot, name);
+    if (why) {
+        return why;
+    }
+    bl_restart_clean();
+}
+
+static void cmd_ubegin(char *args)
+{
+    char *kind = strtok(args, " ");
+    char *size_s = strtok(NULL, " ");
+    char *sha_s = strtok(NULL, " ");
+    uint8_t sha[32];
+    if (!kind || strcmp(kind, "bsu") != 0) {
+        ERR("this board takes a .bsu (UBEGIN bsu <size> <sha256>)");
+        return;
+    }
+    if (!size_s || !parse_sha(sha_s, sha)) {
+        ERR("bad size or sha256");
+        return;
+    }
+    const char *e = bl_update_begin(strtoul(size_s, NULL, 10), sha);
+    if (e) {
+        ERR("%s", e);
+        return;
+    }
+    OK("receiving");
+}
+
+static void cmd_udata(char *args)
+{
+    static uint8_t buf[DATA_MAX];
+    char *off_s = strtok(args, " ");
+    char *b64 = strtok(NULL, " ");
+    int n = b64 ? b64_decode(b64, buf, sizeof(buf)) : -1;
+    if (!off_s || n < 0) {
+        ERR("bad UDATA line");
+        return;
+    }
+    uint32_t off = strtoul(off_s, NULL, 10);
+    const char *e = bl_update_data(off, buf, (uint32_t)n);
+    if (e) {
+        ERR("%s", e);
+        return;
+    }
+    OK("%u", (unsigned)(off + n));
+}
+
+static void cmd_uend(void)
+{
+    char note[96];
+    const char *e = bl_update_end(note, sizeof(note));
+    if (e) {
+        ERR("%s", e);
+        return;
+    }
+    OK("installing on restart%s; rebooting", note);
+    bl_update_install();
+}
+
+/* Checks a slot just written and makes it the active one (on trial).
+ * NULL when accepted, else why not. name: the sketch's (32 bytes). */
+static const char *slot_accept(int slot, char *name)
+{
     // Reads back what is in flash. On the RP2350 that is through the window: the
     // running sketch's code is on this call's stack, so the window goes back to
     // its slot after.
     int was = s_mapped;
     const char *why = sketch_check(slot);
-    char name[32];
     const uint8_t *img = slot_view(slot);
     if (img) {
-        memcpy(name, ((const bl_sketch_header_t *)img)->name, sizeof(name));
-        name[sizeof(name) - 1] = '\0';
+        memcpy(name, ((const bl_sketch_header_t *)img)->name, 32);
+        name[31] = '\0';
     } else {
         strcpy(name, "?");
     }
@@ -900,15 +1012,13 @@ static void cmd_end(void)
     (void)was;
 #endif
     if (why) {
-        ERR("rejected: %s", why);
-        return;
+        return why;
     }
     s_ps.active = (uint8_t)slot;
     s_ps.trial = 1;
     ps_save();
     s_ni.crashes = 0;
-    OK("slot=%c name=%s rebooting", 'a' + slot, name);
-    bl_restart_clean();
+    return NULL;
 }
 
 static void handle_line(char *line)
@@ -931,6 +1041,12 @@ static void handle_line(char *line)
         cmd_data(args);
     } else if (!strcmp(cmd, "END")) {
         cmd_end();
+    } else if (!strcmp(cmd, "UBEGIN")) {
+        cmd_ubegin(args);
+    } else if (!strcmp(cmd, "UDATA")) {
+        cmd_udata(args);
+    } else if (!strcmp(cmd, "UEND")) {
+        cmd_uend();
     } else if (!strcmp(cmd, "ABORT")) {
         s_up.active = false;
         OK("aborted");
@@ -976,6 +1092,7 @@ void bl_poll(void)
     busy = true;
     bl_timers_poll();
     bl_bootsel_poll();
+    bl_update_poll();
     bl_net_poll();
     console_release();
     if (s_running) {
@@ -1064,6 +1181,7 @@ void bl_rp2_start(void)
         s_ps.trial = 0;
         ps_save();
     }
+    bl_update_boot();                   // a Baseline update: its trial, or a rollback (may restart)
     if (s_ni.safe_request) {
         s_safe_reason = "requested";
         s_ni.safe_request = 0;

@@ -61,6 +61,8 @@ dist/<target>/baseline-<target>.bin    the built blob (flash at 0x0)
 | esp32c3 | `esp32c3_generic_4mb` | native USB boards only (the console is USB-Serial-JTAG) |
 | esp32c6 | `esp32c6_generic_4mb`, `_8mb` | native USB port |
 | esp32c5 | `esp32c5_generic_8mb` | native USB port |
+| rp2350 | `rp2350_generic_pico2` | Raspberry Pi Pico 2 (arduino-pico's `rpipico2` pins), 4 MB layout: Baseline 1.75 MB, two 512 KB slots, LittleFS 1.25 MB |
+| rp2350 | `rp2350_generic_pico2w` | Raspberry Pi Pico 2 W (`rpipico2w`): WiFi and BLE on its CYW43439, same 4 MB layout |
 
 PSRAM needs no image of its own: Baseline looks for it at boot and runs without it. The flash size does (it picks the partition table), and so does the S3's PSRAM type (quad and octal are wired differently). A board with more flash than its image works, with the extra flash unused.
 

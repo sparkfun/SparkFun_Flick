@@ -1,0 +1,9 @@
+{
+    "chip": "rp2350",
+    "description": "Generic RP2350 with a CYW43439 radio, 4 MB flash: Raspberry Pi Pico 2 W; WiFi and Bluetooth LE, no PSRAM",
+    "flash_size": "4MB",
+    "generic": true,
+    "examples": "Raspberry Pi Pico 2 W",
+    "fqbn": "rp2040:rp2040:rpipico2w:arch=arm,os=none,usbstack=picosdk,freq=150,opt=Small,dbgport=Disabled,dbglvl=None,ipbtstack=ipv4btcble,wificountry=worldwide",
+    "status": "not run on hardware"
+}

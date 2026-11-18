@@ -32,6 +32,12 @@ static bool lfs_mount(void)
     return s_lfs_mounted;
 }
 
+/* Baseline updates (bl_rp2_update.cpp) keep their files in LittleFS. */
+bool bl_lfs_mount(void)
+{
+    return lfs_mount();
+}
+
 static FS *fs_by_id(int fs)
 {
     if (fs == BL_FS_LITTLEFS) {

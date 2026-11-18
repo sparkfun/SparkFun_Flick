@@ -1,0 +1,9 @@
+{
+    "chip": "rp2350",
+    "description": "Generic RP2350, 4 MB flash: Raspberry Pi Pico 2 and boards with its pins; no PSRAM, no radio",
+    "flash_size": "4MB",
+    "generic": true,
+    "examples": "Raspberry Pi Pico 2",
+    "fqbn": "rp2040:rp2040:rpipico2:arch=arm,os=none,usbstack=picosdk,freq=150,opt=Small,dbgport=Disabled,dbglvl=None",
+    "status": "not run on hardware"
+}

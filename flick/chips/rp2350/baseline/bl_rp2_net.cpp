@@ -437,10 +437,10 @@ public:
     }
 };
 
-/* One request: method, headers ("Name: value\r\n" lines), body. Returns the
- * HTTP status, or a BL_ERR_* code. */
+/* One request: method, headers ("Name: value\r\n" lines), body. The response
+ * body goes to sink. Returns the HTTP status, or a BL_ERR_* code. */
 static int http_do(const char *method, const char *url, const char *headers, const uint8_t *body, size_t body_len,
-                   BodySink &sink)
+                   Print &sink)
 {
     if (WiFi.status() != WL_CONNECTED) {
         return BL_ERR_STATE;
@@ -494,6 +494,16 @@ static int http_do(const char *method, const char *url, const char *headers, con
         delete client;
     });
     return result;
+}
+
+/* A GET whose body streams into out (over-the-air updates: bl_rp2_update.cpp).
+ * Returns the HTTP status, or a BL_ERR_* code. */
+int bl_http_get_to(const char *url, Print &out)
+{
+    if (!url) {
+        return BL_ERR_ARG;
+    }
+    return http_do("GET", url, NULL, NULL, 0, out);
 }
 
 extern "C" int bl_impl_http_get(const char *url, char *buf, size_t size, int *status)
@@ -1008,6 +1018,21 @@ extern "C" void bl_impl_time_ntp_start(const char *server1, const char *server2,
     s_ntp_wanted = true;
     s_ntp_running = false;
     ntp_try_start();
+}
+
+/* For HTTPS from Baseline itself (update pulls): BearSSL checks certificate
+ * dates, so the clock must be set. Starts NTP with the default servers if the
+ * sketch hasn't, and waits up to wait_ms. True once the time is known. */
+bool bl_ntp_ensure(uint32_t wait_ms)
+{
+    if (!s_ntp_wanted) {
+        bl_impl_time_ntp_start(NULL, NULL, NULL);
+    }
+    uint32_t t0 = millis();
+    while (!bl_impl_time_synced() && millis() - t0 < wait_ms) {
+        bl_impl_delay_ms(100);
+    }
+    return bl_impl_time_synced();
 }
 
 /* ---- mDNS (LEAmDNS) ---------------------------------------------------------------- */

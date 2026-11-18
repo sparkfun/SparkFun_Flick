@@ -3,7 +3,8 @@
 # is called by release.yml. The result is one artifact, "baselines":
 # <target>/baseline-<target>.bin (flash at 0x0) and .bsu (OTA) for every ESP
 # target, <target>/baseline-<target>.hex (Teensy Loader) for every Teensy target,
-# <target>/baseline-<target>.uf2 (the boot ROM's drive) for every RP2040/RP2350 target.
+# <target>/baseline-<target>.uf2 (the boot ROM's drive) and .bsu (OTA) for every
+# RP2040/RP2350 target.
 #
 # Builds are cached by the files they read (flick/tools/ci/baseline_keys.py):
 # one entry per target, and one holding every target. When nothing changed,
@@ -180,7 +181,9 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: baseline-${{ matrix.target }}
-          path: flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.uf2
+          path: |
+            flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.uf2
+            flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bsu
           if-no-files-found: error
 
   bundle:

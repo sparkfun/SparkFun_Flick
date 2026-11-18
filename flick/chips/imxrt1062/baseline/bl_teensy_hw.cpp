@@ -4,7 +4,6 @@
  */
 #include <SPI.h>
 #include <Wire.h>
-#include <Entropy.h>
 #include "bl_teensy.h"
 
 extern "C" {
@@ -451,14 +450,46 @@ extern "C" int bl_impl_timer_take(void)
 
 /* ---------------- hardware random numbers (the i.MX RT TRNG) ---------------- */
 
+/* The TRNG runs with its reset-default sampling and statistical-check settings.
+ * One generation fills ENT0..ENT15 (512 bits); reading ENT15 starts the next.
+ * A failed statistical check sets ERR: the TRNG is reset and started again. */
+static void trng_start(void)
+{
+    CCM_CCGR6 |= CCM_CCGR6_TRNG(CCM_CCGR_ON);
+    TRNG_MCTL = TRNG_MCTL_PRGM | TRNG_MCTL_RST_DEF;     // program mode, default settings
+    TRNG_MCTL &= ~TRNG_MCTL_PRGM;                       // run mode: generation starts
+}
+
 extern "C" uint32_t bl_impl_random(void)
 {
+    static uint32_t pool[16];
+    static uint8_t left;        // words of pool not yet handed out
     static bool started;
     if (!started) {
-        Entropy.Initialize();
+        trng_start();
         started = true;
     }
-    return Entropy.random();
+    if (left == 0) {
+        uint32_t t0 = millis();
+        for (;;) {
+            uint32_t mctl = TRNG_MCTL;
+            if (mctl & TRNG_MCTL_ERR) {
+                trng_start();
+            } else if (mctl & TRNG_MCTL_ENT_VAL) {
+                break;
+            }
+            if (millis() - t0 > 200) {
+                // The TRNG isn't producing: don't hang the caller (weak, but never stuck).
+                return ARM_DWT_CYCCNT ^ (micros() << 16);
+            }
+        }
+        volatile uint32_t *ent = &TRNG_ENT0;
+        for (int i = 0; i < 16; i++) {
+            pool[i] = ent[i];   // ENT15 last: that starts the next generation
+        }
+        left = 16;
+    }
+    return pool[--left];
 }
 
 /* ---------------- WS2812-type LEDs (ABI 1.1 rgb_write, 1.6 led_strip_write) ----------------

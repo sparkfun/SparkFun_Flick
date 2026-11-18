@@ -188,7 +188,10 @@ def main():
         title = (f'<a href="{html.escape(t["product_url"])}">{html.escape(board)}</a>'
                  if t.get("product_url") else html.escape(board))
         notes = []
-        if t.get("generic"):
+        if t.get("generic") and image.suffix == ".uf2":
+            notes.append(f"For the {html.escape(t.get('examples', ''))} and {fam} boards with the same pins and at least "
+                         f"{flash_mb} MB of flash. Pins follow arduino-pico's variant for it. Not yet tested on hardware.")
+        elif t.get("generic"):
             notes.append(f"For any {fam} board with {flash_mb} MB of flash, such as {html.escape(t.get('examples', ''))}. "
                          "Pins follow Arduino-ESP32's generic variant. Not yet tested on hardware.")
             if t["chip"] != "esp32":
@@ -249,7 +252,10 @@ def main():
                  "the supported examples.")
     # RP2040/RP2350 (flashRp2()): the target a Baseline on the board reports,
     # else the chip from the boot ROM, asking when several boards have it.
-    rp2 = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb}
+    # Generic boards (Pico 2) are recognised when they run Baseline, but the
+    # which-board question offers only SparkFun boards.
+    rp2 = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb,
+            "generic": bool(t.get("generic"))}
            for board, name, t, flash_mb, image, _ in sorted(rows, key=sort_key) if image.suffix == ".uf2"]
     rp2_text = ("Not sure which RP2040 or RP2350 board you've got? Auto-detect asks the board, or reads the chip "
                 "from its boot ROM and asks you when two SparkFun boards share it. The first time, hold the BOOTSEL "

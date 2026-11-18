@@ -50,8 +50,32 @@ void bl_on_big_stack(void (*fn)(void *), void *arg);
 /* bl_rp2_net.cpp */
 void bl_net_poll(void);                     /* mDNS, DNS server, MQTT, WiFi uploads, events */
 
+/* bl_rp2_storage.cpp */
+bool bl_lfs_mount(void);                    /* LittleFS (formats a blank region) */
+
+/* bl_rp2_loader.cpp: a sketch image streamed into the free slot (ota_pull_sketch).
+ * end() checks it and, if good, makes it active and restarts; else returns why not. */
+void bl_sketch_stream_begin(void);
+void bl_sketch_stream_write(const uint8_t *data, uint32_t len);
+const char *bl_sketch_stream_end(void);
+
+/* bl_rp2_update.cpp: Baseline updates over the air (docs/OTA.md). The loader's
+ * UBEGIN/UDATA/UEND call the first three (NULL = OK, else the error text);
+ * bl_update_install() writes the OTA command and restarts. */
+const char *bl_update_begin(uint32_t size, const uint8_t sha256[32]);
+const char *bl_update_data(uint32_t offset, const uint8_t *data, uint32_t len);
+const char *bl_update_end(char *note, size_t note_size);
+void bl_update_install(void) __attribute__((noreturn));
+void bl_update_boot(void);                  /* bl_rp2_start(), before the sketch starts: trial, rollback */
+void bl_update_poll(void);                  /* bl_poll(): confirms a new Baseline after 10 s */
+void bl_update_confirm(void);               /* before a deliberate restart */
+
 #ifdef __cplusplus
 }
+/* bl_rp2_net.cpp: a GET whose body streams into out. The HTTP status, or BL_ERR_*. */
+int bl_http_get_to(const char *url, Print &out);
+/* bl_rp2_net.cpp: starts NTP if nothing did and waits for the clock (HTTPS needs it). */
+bool bl_ntp_ensure(uint32_t wait_ms);
 /* bl_on_big_stack() for a lambda: on_big_stack([&] { ... }); */
 template <typename F> static inline void on_big_stack(F &&f)
 {

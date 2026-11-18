@@ -43,6 +43,15 @@ The same `flick` commands also work over USB: use `-p COMx` instead of `--host`.
 
 Both kinds need one USB flash with a Baseline that has these features: `python flick.py baseline flash -t <target>`. On 8/16 MB boards this flash changes the partition table, which erases LittleFS once.
 
+**RP2040 and RP2350 boards** (`update=file` in `flick info`; `BaselineUpdate.mode()` says `BL_UPDATE_DUAL`, because the sketch and files are kept).
+- **How it works:** the update is stored as a file in LittleFS while the sketch keeps running. At the restart, arduino-pico's OTA stub, which runs before Baseline on every start, copies it over Baseline, inflating it on the way. A power cut during the copy just starts the copy again.
+- **Rollback:** the new Baseline checks its image against the update's SHA-256 and runs on trial for 10 s. If the board resets before then (a crash, a hang, a power cut), the backup is installed the same way. The backup is the file the running Baseline was installed from, or else a copy of its flash if LittleFS has room. On a Pico 2 W (1.25 MB of LittleFS) there is no room for a backup: such an update has no rollback, and the reply to the push says so.
+- **Kept:** the sketch, its settings and its files. **Not kept:** Bluetooth bonds. arduino-pico stores them inside the Baseline image, so an update clears them, as a USB flash does.
+- **Room:** the update needs its size in free LittleFS (about 630 KB on boards with WiFi, 130 KB without) until it is installed.
+- **HTTPS pulls** need the time: Baseline starts NTP itself if the sketch hasn't, and waits up to 10 s.
+- A Baseline that dies before its own start-up code runs can't roll itself back. Hold BOOTSEL while plugging in, then use the download page's Flash button (or copy the `.uf2`).
+- **The `.bsu`:** the same 128-byte header, then a 16-byte RP extension (`RPX1`, the offset and size of the image's Bluetooth bond store), then a gzip stream (header byte 5 = 1), the format arduino-pico's stub inflates. `flick baseline build -t <target>` writes it next to the `.uf2`. `sketchUrl` in `baselineFromUrl()` is ignored on these boards, since the sketch stays.
+
 ## A pull, step by step
 
 `examples/07_updates/03_ota_pull_baseline` checks a small text file on the server every minute:
