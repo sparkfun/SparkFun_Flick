@@ -202,8 +202,24 @@ async function attach(port, quiet) {
   try {
     r = await openLink(port);
   } catch (e) {
-    if (!quiet) setStatus(`Can't open the port: ${e.message}. Is another tab with this page, a serial monitor or the Flash dialog using it?`, "bad");
-    return false;
+    // A board restarting (a sketch's wake from deep sleep) is gone for a moment: try again once.
+    await sleep(1000);
+    try {
+      r = await openLink(port);
+    } catch (e2) {
+      if (!quiet) setStatus(`Can't open the port: ${e2.message}. Is another tab with this page, a serial monitor or the Flash dialog using it?`, "bad");
+      return false;
+    }
+  }
+  if (!r && !quiet) {
+    // A board whose sketch sleeps answers only while it is awake: wait for that.
+    try { await port.close(); } catch (e) {}
+    const got = await catchWakingBoard(port.getInfo(), 115200, 20000, (t) => setStatus(t));
+    if (got) {
+      port = got.port;
+      r = { link: got.link, info: got.info };
+      state.baud = 115200;
+    }
   }
   if (!r) {
     if (!quiet) setStatus("The board doesn't answer. Flash Baseline first (step 1), then connect again.", "bad");
@@ -307,6 +323,103 @@ async function reopen(baud) {
   return nl;
 }
 
+// ---- a board in a deep-sleep loop ----
+// While a sketch sleeps, its board doesn't answer: a native-USB port is gone,
+// a Teensy's or a USB-serial chip's stays but is silent. The page waits for it
+// to wake and sends SAFE until the loader answers: the board then restarts in
+// safe mode (no sketch runs, so it stays awake), and an upload goes in.
+
+// Does the board answer on this link?
+async function answers(link) {
+  if (!link || link.closed) return false;
+  try {
+    const r = await link.request("INFO", 1500);
+    return !!(r && r.ok);
+  } catch (e) {
+    return false;
+  }
+}
+
+// A link on a port with these USB IDs (the board may come back as a new port
+// object), or null while there is none or it won't open.
+async function openSame(ids, baud) {
+  const ports = (await navigator.serial.getPorts()).filter((p) => {
+    const n = p.getInfo();
+    return n.usbVendorId === ids.usbVendorId && n.usbProductId === ids.usbProductId;
+  });
+  for (const p of ports) {
+    const link = new Link(p, (line) => log(line));
+    try {
+      await link.open(baud);
+      return { link, port: p };
+    } catch (e) {
+      try { await p.close(); } catch (e2) {}
+    }
+  }
+  return null;
+}
+
+// Catch the board behind `ids` when it wakes (up to waitMs) and reconnect to
+// it in safe mode. Returns { link, port, info }, or null if it never answered.
+async function catchWakingBoard(ids, baud, waitMs, say) {
+  say(`The board doesn't answer: its sketch may be asleep. Waiting up to ${Math.round(waitMs / 1000)} s ` +
+      "for it to wake...");
+  const end = performance.now() + waitMs;
+  let caught = false;
+  while (!caught && performance.now() < end) {
+    const o = await openSame(ids, baud);
+    if (!o) { await sleep(100); continue; }
+    for (let i = 0; i < 40 && !caught && !o.link.closed && performance.now() < end; i++) {
+      const reply = o.link.expect(150);
+      try { await o.link.send("SAFE"); } catch (e) { break; }
+      const r = await reply;
+      // SAFE's own reply: a late answer to a request sent while the board slept
+      // (an INFO) can arrive first.
+      if (r && r.ok && /safe mode/.test(r.text)) caught = true;
+      else o.link.waiters = [];
+    }
+    await o.link.close();
+    if (!caught) await sleep(100);
+  }
+  if (!caught) return null;
+  log("--- caught the board awake: it restarts in safe mode (no sketch runs)", "note");
+  say("Caught it: the board restarts in safe mode...");
+  for (let i = 0; i < 60; i++) {           // back from the restart, in safe mode
+    await sleep(250);
+    const o = await openSame(ids, baud);
+    if (!o) continue;
+    const r = await o.link.request("INFO", 2000);
+    // Until it has restarted, the sketch still runs (and may sleep again).
+    if (r && r.ok && infoFields(r.text).safe === "yes") return { link: o.link, port: o.port, info: infoFields(r.text) };
+    await o.link.close();
+  }
+  return null;
+}
+
+// run(): the connected board stopped answering. Catch it and make it the
+// connection again (watch() of the old link stops).
+async function recatch() {
+  const ids = state.port.getInfo();
+  const old = state.link;
+  state.link = null;
+  if (old) await old.close();
+  const got = await catchWakingBoard(ids, state.baud, 60000, (t) => setStatus(t));
+  if (!got) {
+    state.board = null;
+    $("connect").textContent = "Connect";
+    setStatus("The board didn't answer within 60 s. Is it plugged in? Press Connect to try again.", "bad");
+    render();
+    return false;
+  }
+  state.port = got.port;
+  state.link = got.link;
+  state.board = got.info;
+  const name = (window.FLICK.boards || {})[got.info.target] || got.info.target;
+  setStatus(`Connected: ${name} (safe mode until a sketch is installed)`, "good");
+  watch();
+  return true;
+}
+
 function b64(bytes) {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -318,7 +431,6 @@ async function run(ex) {
   state.busy = true;
   render();
   const target = state.board.target;
-  let fast = false;
   try {
     const res = await fetch(`examples/${ex.path}/${target}.flick`, FRESH);
     if (!res.ok) throw new Error(`no image for this board (${res.status})`);
@@ -334,8 +446,36 @@ async function run(ex) {
     }
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", img)))
       .map((b) => b.toString(16).padStart(2, "0")).join("");
+    // A sketch in a deep-sleep loop: catch the board when it wakes first.
+    if (!await answers(state.link)) {
+      if (!await recatch()) return;
+    }
     log(`--- uploading ${ex.name} (${img.length} bytes)`, "note");
-    let link = state.link;
+    try {
+      await sendSketch(img, hash);
+    } catch (e) {
+      // No reply, or the port went away: the board slept or restarted under the
+      // upload (a late reply can make it look awake just before). Catch it and
+      // send the image once more. A refusal (ERR) is reported as it is.
+      if (!e.lost && state.link && !state.link.closed) throw e;
+      log(`--- the board went away during the upload (${e.message}): catching it`, "note");
+      if (!await recatch()) return;
+      await sendSketch(img, hash);
+    }
+    log(`--- ${ex.name} installed; the board restarts into it`, "note");
+  } catch (e) {
+    log(`--- upload failed: ${e.message}`, "bad");
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+// BEGIN / DATA / END over the connection; throws with the reason on a failure.
+async function sendSketch(img, hash) {
+  let link = state.link;
+  let fast = false;
+  try {
     // A UART console goes to UPLOAD_BAUD for the upload; Baseline's reply says how
     // many lines may be in flight. Older Baselines answer ERR: one at a time.
     let window = 1;
@@ -349,28 +489,26 @@ async function run(ex) {
         }
       }
     }
-    let r = await link.request(`BEGIN ${img.length} ${hash}`, 15000);
-    if (!r || !r.ok) throw new Error(r ? r.text : "no reply to BEGIN");
+    // No reply at all: the board isn't listening (asleep, restarting); `lost`
+    // lets run() catch it. An ERR reply is a refusal.
+    const check = (r, what) => {
+      if (!r) throw Object.assign(new Error(`no reply ${what}`), { lost: true });
+      if (!r.ok) throw new Error(r.text);
+    };
+    check(await link.request(`BEGIN ${img.length} ${hash}`, 15000), "to BEGIN");
     const replies = [];
-    const check = (r, what) => { if (!r || !r.ok) throw new Error(r ? r.text : `no reply ${what}`); };
     for (let off = 0; off < img.length; off += CHUNK) {
       replies.push(link.expect(5000));
       await link.send(`DATA ${off} ${b64(img.subarray(off, off + CHUNK))}`);
       while (replies.length >= window) check(await replies.shift(), `at byte ${off}`);
     }
     while (replies.length) check(await replies.shift(), "to DATA");
-    r = await link.request("END", 10000);
-    if (!r || !r.ok) throw new Error(r ? r.text : "no reply to END");
-    log(`--- ${ex.name} installed; the board restarts into it`, "note");
-  } catch (e) {
-    log(`--- upload failed: ${e.message}`, "bad");
+    check(await link.request("END", 10000), "to END");
   } finally {
     // The board restarts (or, after a failure, drops back by itself) to its own rate.
     if (fast && state.link) {
       try { await reopen(state.baud); } catch (e) {}
     }
-    state.busy = false;
-    render();
   }
 }
 

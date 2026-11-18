@@ -922,7 +922,9 @@ def catch_waking_board(port=None):
     vids = board_vids()
     print(f"No answer from a board{f' on {port}' if port else ''}: waiting up to {WAKE_WAIT_S} s "
           "(a board in deep sleep answers when it wakes; or plug one in)...", flush=True)
-    ok = f"{PROTO_PREFIX} OK".encode()
+    # SAFE's own reply: a late answer to an earlier request (INFO sent while the
+    # board slept) can arrive first and must not count.
+    ok = f"{PROTO_PREFIX} OK rebooting into safe mode".encode()
     deadline = time.time() + WAKE_WAIT_S
     dev = None
     while time.time() < deadline and not dev:
