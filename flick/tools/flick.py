@@ -1299,7 +1299,22 @@ def cmd_upload(args):
         board = LEGACY_TARGETS.get(board, board)
         if args.target and args.target != board:
             sys.exit(f"error: the board runs the {board} Baseline, not {args.target}")
-        send_image(link, build(args.dir, board).read_bytes())
+        image = build(args.dir, board).read_bytes()
+        serial = import_serial()
+        try:
+            send_image(link, image)
+        except (serial.SerialException, OSError):
+            if args.host:
+                raise
+            # The port went away under the upload: a sketch that sleeps (or
+            # restarts) did so while the image was built. Catch the board when
+            # it is back, in safe mode, and send the image again.
+            print(f"{port} went away during the upload (the sketch sleeps or restarts).", flush=True)
+            s.close()
+            port = catch_waking_board(port) or sys.exit(f"error: no answer from a board on {port}.")
+            s = open_port(port, args.baud)
+            link = Link(s)
+            send_image(link, image)
         if args.monitor:
             monitor(s, port, args.baud, link, follow=not args.port)
 
@@ -1628,6 +1643,12 @@ def teensy_bootloader_port(serial_port=None):
     sys.exit(f"error: {len(found)} Teensys on USB ({names}): pick one with -p COMx, or unplug the others")
 
 
+def id_bytes(path):
+    """A file's bytes for a Baseline build ID (INFO build=), with CRLF read as
+    LF: a Windows checkout and CI's Linux one give the same ID."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 def build_baseline_teensy(target, flash, serial_port=None):
     """Baseline for the i.MX RT1062 (Teensy 4.x): an Arduino sketch built with
     Teensyduino through arduino-cli. Staged from chips/<chip>/baseline plus the
@@ -1642,9 +1663,9 @@ def build_baseline_teensy(target, flash, serial_port=None):
     inputs = sorted(wanted.items()) + sorted(
         (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
     for rel, src in inputs:
-        h.update(str(rel).replace("\\", "/").encode() + b"\0" + src.read_bytes())
+        h.update(str(rel).replace("\\", "/").encode() + b"\0" + id_bytes(src))
     h.update(target["fqbn"].encode() + b"\0-DTEENSY_INIT_USB_DELAY_AFTER=0")
-    h.update((target["chip_dir"] / "chip.json").read_bytes())
+    h.update(id_bytes(target["chip_dir"] / "chip.json"))
     id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
     text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
     if not id_header.exists() or id_header.read_text() != text:
@@ -1737,9 +1758,9 @@ def build_baseline_rp2(target, flash, port=None):
     inputs = sorted(wanted.items()) + sorted(
         (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
     for rel, src in inputs:
-        h.update(str(rel).replace("\\", "/").encode() + b"\0" + src.read_bytes())
+        h.update(str(rel).replace("\\", "/").encode() + b"\0" + id_bytes(src))
     h.update("\0".join([target["fqbn"], *props]).encode())
-    h.update((target["chip_dir"] / "chip.json").read_bytes())
+    h.update(id_bytes(target["chip_dir"] / "chip.json"))
     id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
     text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
     if not id_header.exists() or id_header.read_text() != text:

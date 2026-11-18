@@ -353,6 +353,30 @@ static int cause_of(int who)
     return WAKE_TIMER;
 }
 
+/* USB doesn't answer while the chip sleeps, so a sketch that sleeps at once
+ * after every wake could only be reached with the button. Before a sleep:
+ * - not in the first 1.5 s after a reset (Windows needs about 0.5 s to show
+ *   the port again, and flick a moment to open it);
+ * - while a host has the port open (DTR: flick, while it waits to catch the
+ *   board, or a serial monitor), 0.5 s more of serving the loader, so a SAFE
+ *   or an upload waiting for the board gets in first. */
+#define SLEEP_NOT_BEFORE_MS 1500
+#define SLEEP_HOST_GRACE_MS 500
+static void sleep_usb_guard(bool deep)
+{
+    while (millis() < SLEEP_NOT_BEFORE_MS) {
+        bl_poll();
+        yield();
+    }
+    if (deep && Serial.dtr()) {        /* light sleep returns: no extra wait in a sleep loop */
+        uint32_t t0 = millis();
+        while (millis() - t0 < SLEEP_HOST_GRACE_MS) {
+            bl_poll();
+            yield();
+        }
+    }
+}
+
 extern "C" void bl_impl_sleep_deep(void)
 {
     bool pins = s_wake_pin >= 0 || s_wake_mask;
@@ -360,6 +384,7 @@ extern "C" void bl_impl_sleep_deep(void)
         bl_impl_printf("deep sleep needs a wake source (a timer or a pin)\n");
         return;
     }
+    sleep_usb_guard(true);
     if (BL_USE_SNOOZE && !pins && s_wake_us < 1000000) {
         bl_sleep_restart(s_wake_us);    /* below Snooze's 1 s timer step */
     }
@@ -374,6 +399,7 @@ extern "C" int bl_impl_sleep_light(void)
     if (!s_wake_us && s_wake_pin < 0 && !s_wake_mask) {
         return BL_ERR_STATE;
     }
+    sleep_usb_guard(false);
     if (BL_USE_SNOOZE && s_wake_pin < 0 && !s_wake_mask && s_wake_us < 1000000) {
         delay((uint32_t)(s_wake_us / 1000));
         s_light_cause = WAKE_TIMER;

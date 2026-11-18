@@ -202,7 +202,7 @@ async function attach(port, quiet) {
   try {
     r = await openLink(port);
   } catch (e) {
-    if (!quiet) setStatus(`Can't open the port: ${e.message}. Is another program (or the Flash dialog) using it?`, "bad");
+    if (!quiet) setStatus(`Can't open the port: ${e.message}. Is another tab with this page, a serial monitor or the Flash dialog using it?`, "bad");
     return false;
   }
   if (!r) {
@@ -932,7 +932,9 @@ async function flashTeensy(btn) {
         await sleep(300);
         await port.close();
       } catch (e) {
-        say(`Can't open the port (${e.message}). Close other programs using it, or press the button on the Teensy.`, "bad");
+        say(`Can't open the port (${e.message}). Something else has it: another tab with this page ` +
+            "(press Disconnect there, or close it), a serial monitor, or flick. Close that and Flash again, " +
+            "or press the button on the Teensy.", "bad");
         return;
       }
       await sleep(1500);
