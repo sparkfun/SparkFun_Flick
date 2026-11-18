@@ -69,6 +69,7 @@ extern "C" {
 
 /* bl_rp2_hw.cpp */
 void bl_timers_poll(void);                  /* fires due timers (Ticker): from bl_poll() */
+void bl_bootsel_poll(void);                 /* bl_rp2_impl.cpp: BOOTSEL interrupts (pin BL_TARGET_BOOT_PIN), from bl_poll() */
 
 /* bl_sha256.c */
 typedef struct {

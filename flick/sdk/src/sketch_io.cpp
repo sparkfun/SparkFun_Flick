@@ -20,7 +20,22 @@ struct PinHandler {
     void (*with_arg)(void *);
     void *arg;
 };
-static PinHandler s_handlers[MAX_PINS];
+/* One slot per chip pin, plus one for a boot button numbered above them
+ * (BOOTSEL on RP2 is pin 100). */
+static PinHandler s_handlers[MAX_PINS + 1];
+
+static __attribute__((unused)) int handler_slot(int pin)     /* unused where handlers run in ISRs */
+{
+    if (pin >= 0 && pin < MAX_PINS) {
+        return pin;
+    }
+#if defined(BL_TARGET_BOOT_PIN)
+    if (pin == BL_TARGET_BOOT_PIN) {
+        return MAX_PINS;
+    }
+#endif
+    return -1;
+}
 
 #ifdef BL_TARGET_SKETCH_ISR
 /* Handlers run in interrupt context: Baseline calls fn(arg) straight from the pin's ISR. */
@@ -43,10 +58,11 @@ static void interrupt_pump()
 {
     int pin;
     while ((pin = bl_gpio_interrupt_take()) >= 0) {
-        if (pin >= MAX_PINS) {
+        int slot = handler_slot(pin);
+        if (slot < 0) {
             continue;
         }
-        PinHandler h = s_handlers[pin];
+        PinHandler h = s_handlers[slot];
         if (h.plain) {
             h.plain();
         } else if (h.with_arg) {
@@ -57,10 +73,11 @@ static void interrupt_pump()
 
 static void attach(uint8_t pin, PinHandler h, int mode)
 {
-    if (pin >= MAX_PINS) {
+    int slot = handler_slot(pin);
+    if (slot < 0) {
         return;
     }
-    s_handlers[pin] = h;
+    s_handlers[slot] = h;
     bl_sketch_add_pump(interrupt_pump);
     bl_gpio_attach_interrupt(pin, mode);
 }
@@ -83,8 +100,9 @@ void detachInterrupt(uint8_t pin)
     return;
 #endif
     bl_gpio_detach_interrupt(pin);
-    if (pin < MAX_PINS) {
-        s_handlers[pin] = PinHandler{};
+    int slot = handler_slot(pin);
+    if (slot >= 0) {
+        s_handlers[slot] = PinHandler{};
     }
 }
 

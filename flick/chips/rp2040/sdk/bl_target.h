@@ -12,7 +12,9 @@
 
 #define BL_TARGET_CHIP_NAME     "RP2040"
 #define BL_TARGET_CHIP_ID       0x2040      /* not an esp_chip_id_t: Espressif's IDs are small numbers */
-#define BL_TARGET_BOOT_PIN      (-1)        /* none: BOOTSEL is the flash chip select, not a GPIO */
+#define BL_TARGET_BOOT_PIN      100         /* BOOTSEL: the flash chip select, not a GPIO. Baseline reads
+                                             * it (Baselines after 0.4.0): pinMode, digitalRead (LOW when pressed),
+                                             * attachInterrupt (checked every 20 ms) */
 
 /* ---- Flash window ------------------------------------------------------
  * The Cortex-M0+ runs code straight from QSPI flash through the XIP cache, from

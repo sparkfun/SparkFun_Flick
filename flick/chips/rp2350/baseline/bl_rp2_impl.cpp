@@ -11,6 +11,9 @@
 #include <PIOProgram.h>
 #include <hardware/clocks.h>
 #include <hardware/pio.h>
+#include <hardware/structs/ioqspi.h>
+#include <hardware/structs/sio.h>
+#include <hardware/sync.h>
 #include "bl_rp2.h"
 
 /* ---- time ---- */
@@ -303,8 +306,65 @@ extern "C" void *bl_impl_rtc_memory(uint32_t *size)
 /* ---- GPIO ----
  * Pins 0 to __GPIOCNT-1 are the chip's; on boards with a CYW43 radio,
  * arduino-pico's pins 64+ are the radio's GPIOs (the STAT LED on 64). */
+/* BOOTSEL (BL_TARGET_BOOT_PIN): the button pulls the flash chip select low.
+ * Reading it lets go of the chip select for a moment, so it runs from RAM with
+ * interrupts off and the other core idle (arduino-pico's BOOTSEL does the same;
+ * the boot ROM reads it at reset). LOW while pressed, like a button to ground. */
+static bool __no_inline_not_in_flash_func(bootsel_pressed)(void)
+{
+    noInterrupts();
+    rp2040.idleOtherCore();
+    hw_write_masked(&ioqspi_hw->io[1].ctrl, GPIO_OVERRIDE_LOW << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
+                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+    for (volatile int i = 0; i < 1000; i++) {
+    }
+#if PICO_RP2040
+    bool pressed = !(sio_hw->gpio_hi_in & (1u << 1));
+#else
+    bool pressed = !(sio_hw->gpio_hi_in & SIO_GPIO_HI_IN_QSPI_CSN_BITS);
+#endif
+    hw_write_masked(&ioqspi_hw->io[1].ctrl, GPIO_OVERRIDE_NORMAL << IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_LSB,
+                    IO_QSPI_GPIO_QSPI_SS_CTRL_OEOVER_BITS);
+    rp2040.resumeOtherCore();
+    interrupts();
+    return pressed;
+}
+
+static int8_t s_bootsel_irq = -1;       /* attachInterrupt mode on BOOTSEL, -1: none */
+static int8_t s_bootsel_level = -1;     /* last level seen by the poll */
+static uint32_t s_bootsel_ms;
+
+static void bootsel_queue(void);
+
+/* From bl_poll(): BOOTSEL has no interrupt of its own, so it is read every
+ * 20 ms while an interrupt is attached to it. */
+void bl_bootsel_poll(void)
+{
+    if (s_bootsel_irq < 0 || millis() - s_bootsel_ms < 20) {
+        return;
+    }
+    s_bootsel_ms = millis();
+    int level = bootsel_pressed() ? 0 : 1;
+    int was = s_bootsel_level;
+    s_bootsel_level = (int8_t)level;
+    bool fire = false;
+    switch (s_bootsel_irq) {
+    case BL_RISING:  fire = was == 0 && level == 1; break;
+    case BL_FALLING: fire = was == 1 && level == 0; break;
+    case BL_CHANGE:  fire = was >= 0 && was != level; break;
+    case BL_ONLOW:   fire = level == 0; break;
+    case BL_ONHIGH:  fire = level == 1; break;
+    }
+    if (fire) {
+        bootsel_queue();
+    }
+}
+
 static bool pin_ok(int pin)
 {
+    if (pin == BL_TARGET_BOOT_PIN) {
+        return true;
+    }
 #ifdef PICO_CYW43_SUPPORTED
     if (pin >= 64 && pin <= 66) {
         return true;
@@ -322,6 +382,9 @@ extern "C" int bl_impl_gpio_mode(int pin, int mode)
     if (!pin_ok(pin)) {
         return BL_ERR_ARG;
     }
+    if (pin == BL_TARGET_BOOT_PIN) {
+        return mode == BL_OUTPUT || mode == BL_OUTPUT_OPEN_DRAIN ? BL_ERR_ARG : BL_OK;     /* a button: input only */
+    }
     release_ws2812(pin);
     switch (mode) {
     case BL_INPUT:            pinMode(pin, INPUT); break;
@@ -336,7 +399,7 @@ extern "C" int bl_impl_gpio_mode(int pin, int mode)
 
 extern "C" int bl_impl_gpio_write(int pin, int level)
 {
-    if (!pin_ok(pin)) {
+    if (!pin_ok(pin) || pin == BL_TARGET_BOOT_PIN) {
         return BL_ERR_ARG;
     }
     digitalWrite(pin, level ? HIGH : LOW);
@@ -347,6 +410,9 @@ extern "C" int bl_impl_gpio_read(int pin)
 {
     if (!pin_ok(pin)) {
         return BL_ERR_ARG;
+    }
+    if (pin == BL_TARGET_BOOT_PIN) {
+        return bootsel_pressed() ? 0 : BL_HIGH;
     }
     return digitalRead(pin) ? BL_HIGH : 0;
 }
@@ -366,8 +432,18 @@ static void pin_isr(void *arg)
     }
 }
 
+static void bootsel_queue(void)
+{
+    pin_isr((void *)(uintptr_t)BL_TARGET_BOOT_PIN);
+}
+
 extern "C" int bl_impl_gpio_attach_interrupt(int pin, int mode)
 {
+    if (pin == BL_TARGET_BOOT_PIN && mode >= BL_RISING && mode <= BL_ONHIGH) {
+        s_bootsel_level = -1;
+        s_bootsel_irq = (int8_t)mode;
+        return BL_OK;
+    }
     if (pin < 0 || pin >= __GPIOCNT || mode < BL_RISING || mode > BL_ONHIGH) {
         return BL_ERR_ARG;
     }
@@ -378,6 +454,10 @@ extern "C" int bl_impl_gpio_attach_interrupt(int pin, int mode)
 
 extern "C" int bl_impl_gpio_detach_interrupt(int pin)
 {
+    if (pin == BL_TARGET_BOOT_PIN) {
+        s_bootsel_irq = -1;
+        return BL_OK;
+    }
     if (pin < 0 || pin >= __GPIOCNT) {
         return BL_ERR_ARG;
     }

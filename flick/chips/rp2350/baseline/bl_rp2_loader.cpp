@@ -975,6 +975,7 @@ void bl_poll(void)
     }
     busy = true;
     bl_timers_poll();
+    bl_bootsel_poll();
     bl_net_poll();
     console_release();
     if (s_running) {
