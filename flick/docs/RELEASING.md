@@ -27,7 +27,7 @@ flick/          tools/flick.py, tools/tests/, sdk/, chips/, targets/, docs/ (3 f
 - **The kit alone** cannot replace Baseline: users flash it once (the page, or `flick baseline flash --file`), then update it over the air.
 
 The kit contains no Baseline source and needs no ESP-IDF.
-- `flick setup` downloads the sketch compiler (Espressif's GCC, the same release Baseline is built with).
+- `flick setup` downloads the sketch compiler, the same release Baseline is built with: Espressif's GCC, arduino-pico's (RP2040/RP2350), or Teensyduino's with its core and libraries (Teensy 4.x, chip.json 	eensy_download).
 - `flick lib install` installs Arduino libraries from the Library Manager.
 
 ## Cutting a release

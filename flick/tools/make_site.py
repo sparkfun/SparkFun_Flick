@@ -65,6 +65,22 @@ def board_name(target_dir):
     return m.group(1) if m else target_dir.name
 
 
+# Teensyduino's code_size per flash size: the flash Teensy's bootloader writes
+# (teensy_loader_cli).
+TEENSY_CODE_SIZE = {2: 2031616, 8: 8126464, 16: 16515072}
+
+
+def teensy_model(header):
+    """BL_BOARD_TEENSY_MODEL from a bl_board.h, following a variant's #include
+    of its base board's: the model Teensy's bootloader reports (HID usage)."""
+    text = header.read_text()
+    m = re.search(r"#define\s+BL_BOARD_TEENSY_MODEL\s+(0x[0-9A-Fa-f]+|\d+)", text)
+    if m:
+        return int(m.group(1), 0)
+    inc = re.search(r'#include\s+"([^"]+/bl_board\.h)"', text)
+    return teensy_model(header.parent / inc.group(1)) if inc else None
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--out", default="site_build")
@@ -182,8 +198,7 @@ def main():
             elif t["chip"] == "esp32s3":
                 notes.append("For modules with quad PSRAM (R2) or none. With octal PSRAM (R8), pick the octal entry.")
         if image.suffix == ".hex":
-            # Teensyduino's code_size: the flash Teensy's bootloader writes (teensy_loader_cli).
-            code_size = {2: 2031616, 8: 8126464, 16: 16515072}[flash_mb]
+            code_size = TEENSY_CODE_SIZE[flash_mb]
             install = (f'<button class="teensy-flash" data-target="{name}" data-code-size="{code_size}">Flash</button>'
                        '<div class="flash-status"></div>'
                        '<p class="note-small">Chrome or Edge, with the Teensy Loader app closed (it takes the '
@@ -239,20 +254,29 @@ def main():
     rp2_text = ("Not sure which RP2040 or RP2350 board you've got? Auto-detect asks the board, or reads the chip "
                 "from its boot ROM and asks you when two SparkFun boards share it. The first time, hold the BOOTSEL "
                 "button while you plug the board in.")
+    # Teensy 4.x (flashTeensy()): the target a Baseline on the board reports,
+    # else the model its bootloader reports (HID usage), which names the board.
+    teensy = [{"target": name, "name": board, "model": teensy_model(ROOT / "targets" / name / "sdk" / "bl_board.h"),
+               "code_size": TEENSY_CODE_SIZE[flash_mb], "hid": name.endswith("_hid")}
+              for board, name, t, flash_mb, image, _ in sorted(rows, key=sort_key) if image.suffix == ".hex"]
+    teensy_text = ("Not sure which Teensy 4.x you've got? Auto-detect asks the board, or reads the model from its "
+                   "bootloader. Chrome or Edge, with the Teensy Loader app closed.")
     auto_option = []
     for key, label, have, text, cls in (
             ("auto-sparkfun", "SparkFun ESP32 board - Auto-detect", sparkfun, auto_text, "flash"),
             ("auto-generic", "Generic ESP32 board - Auto-detect", generic, auto_text, "flash"),
-            ("auto-rp2", "SparkFun RP2040 / RP2350 board - Auto-detect", rp2, rp2_text, "flash rp2")):
+            ("auto-rp2", "SparkFun RP2040 / RP2350 board - Auto-detect", rp2, rp2_text, "flash rp2"),
+            ("auto-teensy", "Teensy 4.x board - Auto-detect", teensy, teensy_text, "teensy-flash")):
         if not have:
             continue
-        chips = sorted({g["chip"] for g in have}, key=lambda c: list(CHIP_FAMILY.values()).index(c))
+        chips = sorted({g.get("chip", "i.MX RT1062") for g in have},
+                       key=lambda c: list(CHIP_FAMILY.values()).index(c) if c in CHIP_FAMILY.values() else 99)
         auto_option.append(f'    <option value="{key}">{html.escape(label)}</option>')
         panels.insert(len(auto_option) - 1, f"""      <div class="board" data-target="{key}" hidden>
         <div class="board-title">{html.escape(label)}</div>
         <div class="facts">{' · '.join(chips)}</div>
         <p class="note-small">{html.escape(text)}</p>
-        <button class="{cls}" data-target="{key}" data-chip="" data-flash-mb="0">Flash</button>
+        <button class="{cls}" data-target="{key}" data-chip="" data-flash-mb="0" data-code-size="0">Flash</button>
         <div class="flash-status"></div>
       </div>""")
     none = ("Pick a board above. SparkFun boards come first in each group; for another board, pick the generic entry "
@@ -264,7 +288,7 @@ def main():
                               f"      <p class=\"note-small\" id=\"board-none\">{none}</p>", "  </div>"])
 
     flick_cfg = json.dumps({"abi": ".".join(abi), "version": version, "boards": boards, "builds": builds, "generic": generic,
-                            "sparkfun": sparkfun, "rp2": rp2})
+                            "sparkfun": sparkfun, "rp2": rp2, "teensy": teensy})
     kit_button = (f'<a class="btn" href="{kit_link}">Download the kit ({html.escape(kit.name)})</a>'
                   if kit_link else "")
     page = f"""<!doctype html>

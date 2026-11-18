@@ -213,12 +213,11 @@ extern "C" int bl_impl_last_crash(char *buf, size_t size)
  * Deep sleep: Baseline waits for a wake source, then restarts as an ESP32 wakes
  * (RTC memory survives); light sleep returns to the sketch. Wake sources: a
  * timer, one pin at a level (EXT0, or GPIO for light sleep) or several (EXT1).
- * BL_USE_SNOOZE 1 sleeps the chip in Snooze's low-power modes instead of
- * waiting; it is off because in Baseline the chip resets when Snooze's timer
- * should wake it (TESTING.md, deep sleep on Teensy). Waiting keeps USB alive,
- * so uploads work during a sleep. */
+ * BL_USE_SNOOZE 1 (the default) sleeps the chip in Snooze's low-power WAIT
+ * mode (bl_teensy_snooze.cpp): USB stops answering until it wakes. 0 waits
+ * instead, with USB and uploads alive. */
 #ifndef BL_USE_SNOOZE
-#define BL_USE_SNOOZE 0
+#define BL_USE_SNOOZE 1
 #endif
 
 #define WAKE_TIMER  4           /* esp_sleep_wakeup_cause_t */
@@ -235,11 +234,10 @@ static int s_light_cause;
 static uint64_t s_ext1_status;
 
 #if BL_USE_SNOOZE
-#include <Snooze.h>
-#define SLEEP_STEP_S 120        /* the watchdog keeps counting: stretch it, wake to feed it */
-static SnoozeTimer s_snz_timer;
-static SnoozeDigital s_snz_digital;
-static SnoozeBlock s_snz(s_snz_timer, s_snz_digital);
+#define SLEEP_STEP_S 120        /* wake now and then to serve the loader */
+int bl_snooze_sleep(uint32_t timer_s);  /* bl_teensy_snooze.cpp */
+void bl_snooze_pin(int pin, bool high);
+void bl_snooze_timer_off(void);
 
 /* Snooze.sleep until a pin wakes the chip or the whole time has passed.
  * Returns what Snooze returned last. */
@@ -251,12 +249,7 @@ static int sleep_steps(bool deep)
     int who;
     do {
         uint32_t step = left_s > SLEEP_STEP_S ? SLEEP_STEP_S : (uint32_t)left_s;
-        if (step) {
-            s_snz_timer.setTimer(step);
-        } else {
-            s_snz_timer.isUsed = false;     /* pins only */
-        }
-        who = Snooze.sleep(s_snz);
+        who = bl_snooze_sleep(step);        /* 0: pins only */
         bl_poll();
         if (who != TIMER_WAKE_CODE) {
             break;
@@ -297,7 +290,7 @@ static void wake_pin(int pin, bool high)
 {
     s_wake_high = high;
 #if BL_USE_SNOOZE
-    s_snz_digital.pinMode(pin, high ? INPUT_PULLDOWN : INPUT_PULLUP, high ? RISING : FALLING);
+    bl_snooze_pin(pin, high);
 #else
     pinMode(pin, high ? INPUT_PULLDOWN : INPUT_PULLUP);
 #endif
@@ -335,7 +328,7 @@ extern "C" int bl_impl_sleep_disable_wake(int source)
     if (source == BL_WAKE_TIMER || source == BL_WAKE_ALL) {
         s_wake_us = 0;
 #if BL_USE_SNOOZE
-        s_snz_timer.isUsed = false;     /* Snooze keeps a set timer armed otherwise */
+        bl_snooze_timer_off();          /* Snooze keeps a set timer armed otherwise */
 #endif
     }
     if (source == BL_WAKE_EXT0 || source == BL_WAKE_GPIO || source == BL_WAKE_ALL) {

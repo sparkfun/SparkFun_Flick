@@ -19,17 +19,59 @@
         "-Wl,--no-warn-rwx-segments"
     ],
     "ldflags_note": "Code and rodata share one address window, so the sketch's one flash segment is RWX by design.",
-    "libs": ["-lc"],
+    "libs": [
+        "-lc"
+    ],
     "libs_note": "No ROM C library on this chip: newlib supplies memcpy, strlen, ... (the SDK's malloc/printf come first).",
-    "defines": ["-DARDUINO=10812", "-DFLICK_ARCH_IMXRT", "-D__IMXRT1062__"],
+    "defines": [
+        "-DARDUINO=10812",
+        "-DFLICK_ARCH_IMXRT",
+        "-D__IMXRT1062__"
+    ],
     "defines_note": "Not ARDUINO_ARCH_ESP32 or TEENSYDUINO: libraries would pick code paths for a core the SDK does not have. __IMXRT1062__ for imxrt.h, which sketches may include (Teensy's core folder is last on the include path).",
     "linker_script": "sdk/ld/sketch_esp.ld.in",
-    "sdk_sources": ["sketch_teensy.cpp"],
+    "sdk_sources": [
+        "sketch_teensy.cpp"
+    ],
     "usb_vids": [
         "16C0"
     ],
     "stop_detect": true,
     "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) instead of letting the watchdog roll it back (flick test step 4).",
     "ci_note": "CI builds these targets with arduino-cli and Teensyduino teensy_core (baseline.yml build-teensy, release.yml examples-build), not in the ESP-IDF image.",
-    "status": "bring-up"
+    "status": "bring-up",
+    "teensy_download": {
+        "root": "teensyduino-1.62.0",
+        "platform": {
+            "version": "1.62.0",
+            "url": "https://www.pjrc.com/teensy/td_162/teensy-package-1.62.0.tar.zst",
+            "sha256": "472d0a66708e366bf447c7870032edc549a496d671d651d51e2d3c3f28baffb9"
+        },
+        "compiler": {
+            "version": "15.2.1",
+            "files": {
+                "x86_64-w64-mingw32": {
+                    "url": "https://www.pjrc.com/teensy/td_162/teensy-compile-15.2.1-windows_x86_64.tar.zst",
+                    "sha256": "2fd6b810323592a374bba554bb4d39d7a023eab2dfb5f6de0456e7eee88354ef"
+                },
+                "x86_64-linux-gnu": {
+                    "url": "https://www.pjrc.com/teensy/td_162/teensy-compile-15.2.1-linux_x86_64.tar.zst",
+                    "sha256": "aebbfa9a5d0666f43478446459382aa150b1a42a565b16ccd3367a0570fee650"
+                },
+                "aarch64-linux-gnu": {
+                    "url": "https://www.pjrc.com/teensy/td_162/teensy-compile-15.2.1-linux_aarch64.tar.zst",
+                    "sha256": "c309866198938bf80216e33e9f040c1e77a2cdb52a618f15d2dbcba1ac5964b2"
+                },
+                "x86_64-apple-darwin": {
+                    "url": "https://www.pjrc.com/teensy/td_162/teensy-compile-15.2.1-macos_x86_64.tar.zst",
+                    "sha256": "4edf059d9f1c32fdbb16145d2cc733f200acfb53807461070e4ffbb1c7d2321d"
+                },
+                "aarch64-apple-darwin": {
+                    "url": "https://www.pjrc.com/teensy/td_162/teensy-compile-15.2.1-macos_arm64.tar.zst",
+                    "sha256": "3bf44f5bedeb145cc1b0b601afdd05a808139e7b14424dc52c8f58befa698b56"
+                }
+            }
+        }
+    },
+    "teensy_download_note": "flick setup installs these when Teensyduino isn't: the compiler, core and libraries of Teensyduino 1.62 (what Baseline is built with), from PJRC's Boards Manager index, in the Arduino package layout under ~/.flick/tools/<root>."
 }

@@ -52,5 +52,23 @@
    "bytes": 307088,
    "image": ".bin"
   }
+ },
+ "rp2": {
+  "board": "SparkFun Thing Plus - RP2350",
+  "target": "thing_plus_rp2350",
+  "date": "2026-11-18",
+  "flick": {
+   "compile": 0.5911689000058686,
+   "upload": 0.7230550999956904,
+   "total": 1.314224000001559,
+   "bytes": 17968
+  },
+  "arduino": {
+   "compile": 6.33387020000373,
+   "upload": 11.84278345000348,
+   "total": 18.17665365000721,
+   "bytes": 696832,
+   "image": ".uf2"
+  }
  }
 }

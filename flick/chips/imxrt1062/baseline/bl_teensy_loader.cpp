@@ -247,12 +247,16 @@ static void sketch_start(int slot)
 }
 
 /* ---- Watchdog: WDOG1 resets the chip if Baseline is not polled for 5 s
- * (a loop() that never returns or calls delay()). Once on, it stays on. */
+ * (a loop() that never returns or calls delay()). Once on, it stays on. It
+ * stops counting while the CPU is halted (WDBG: Teensy's bootloader chip halts
+ * it to program the flash, and a reset part way through spoils the flash) and
+ * while the chip sleeps (WDZST, WDW: Snooze). These bits are write-once. */
 static void wdog_start(void)
 {
     CCM_CCGR3 |= CCM_CCGR3_WDOG1(CCM_CCGR_ON);
     WDOG1_WMCR = 0;     // no power-down counter
-    WDOG1_WCR = WDOG_WCR_WT(WDOG_HALF_SECONDS - 1) | WDOG_WCR_WDA | WDOG_WCR_SRS | WDOG_WCR_WDE;
+    WDOG1_WCR = WDOG_WCR_WT(WDOG_HALF_SECONDS - 1) | WDOG_WCR_WDA | WDOG_WCR_SRS | WDOG_WCR_WDE |
+                WDOG_WCR_WDBG | WDOG_WCR_WDZST | WDOG_WCR_WDW;
 }
 
 static void wdog_feed(void)
@@ -445,8 +449,34 @@ int bl_sketch_rx_read(void)
     return c;
 }
 
+/* Teensyduino's USB serial drops what is written before the host has set the
+ * device up. Its startup waits 280 ms for that before setup(); Baseline is built
+ * without the wait (TEENSY_INIT_USB_DELAY_AFTER=0 in flick.py), so a sketch
+ * starts sooner after an upload, and output from before then is held here and
+ * sent once USB is up (from bl_poll()). */
+extern "C" volatile uint8_t usb_configuration;
+#define HOLD_SIZE 4096
+DMAMEM static uint8_t s_hold[HOLD_SIZE];
+static size_t s_hold_len;
+
+static void console_release(void)
+{
+    if (s_hold_len && usb_configuration) {
+        size_t n = s_hold_len;
+        s_hold_len = 0;
+        Serial.write(s_hold, n);
+    }
+}
+
 void bl_console_out(const void *data, size_t len)
 {
+    if (!usb_configuration) {
+        size_t n = len < HOLD_SIZE - s_hold_len ? len : HOLD_SIZE - s_hold_len;   /* full: the rest is dropped */
+        memcpy(s_hold + s_hold_len, data, n);
+        s_hold_len += n;
+        return;
+    }
+    console_release();
     Serial.write((const uint8_t *)data, len);
 }
 
@@ -712,6 +742,7 @@ void bl_poll(void)
         return;         // a loader command is running (it may call delay())
     }
     busy = true;
+    console_release();
     bl_timers_poll();
     bl_usbh_poll();
     if (s_running) {
@@ -753,15 +784,24 @@ void bl_poll(void)
 void bl_teensy_start(void)
 {
     keep_region_uncached();
+    // What reset the chip (sticky bits: cleared here, so each boot sees its own).
+    // A reset from outside (the reset pin, Teensy's bootloader after it programs
+    // the flash) while the sketch ran is no crash.
+    uint32_t srsr = SRC_SRSR;
+    SRC_SRSR = srsr;
+    bool by_watchdog = srsr & (SRC_SRSR_WDOG_RST_B | SRC_SRSR_WDOG3_RST_B);
     bool fresh = s_ni.magic != NOINIT_MAGIC;
     if (fresh) {
         memset(RTC_MEM, 0, RTC_MEM_SIZE);   // RTC memory: cleared at power-on, kept through resets
         memset(&s_ni, 0, sizeof(s_ni));
         s_ni.magic = NOINIT_MAGIC;
         s_ni.last_reason = 1;           // ESP_RST_POWERON
+    } else if (s_ni.in_sketch && s_ni.last_reason != 4 && !by_watchdog) {
+        s_ni.in_sketch = 0;
+        s_ni.last_reason = 2;           // ESP_RST_EXT
     } else if (s_ni.in_sketch) {
         s_ni.crashes++;
-        if (s_ni.last_reason != 4) {    // not a fault: the watchdog (or a reset we didn't make)
+        if (s_ni.last_reason != 4) {    // not a fault: the watchdog
             s_ni.last_reason = 6;       // ESP_RST_TASK_WDT
             strlcpy(s_ni.crash, "watchdog: the sketch ran 5 s without returning from loop() or calling delay()",
                     sizeof(s_ni.crash));

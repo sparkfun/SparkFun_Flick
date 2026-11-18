@@ -12,10 +12,12 @@ The time from saving a change to the sketch running on the board: compile, then 
 | **ESP32 (classic), USB-serial chip**: IoT RedBoard - ESP32, Thing Plus C, DataLogger IoT, RTK Postcard | 7.1 s + 7.1 s = **14.1 s** | 0.6 s + 0.4 s = **1.0 s** | **14x faster** |
 | **ESP32 with native USB**: Thing Plus S3, C5 and C6, Qwiic Pocket C6, Pro Micro C3, IoT RedBoard - ESP32-P4 | 5.1 s + 6.4 s = **11.5 s** | 0.6 s + 0.3 s = **0.9 s** | **13x faster** |
 | **Teensy 4.x**: Teensy 4.0, Teensy 4.1, MicroMod Teensy | 5.3 s + 6.4 s = **11.7 s** | 0.6 s + 0.4 s = **1.0 s** | **12x faster** |
+| **RP2040 / RP2350**: Thing Plus RP2350 and RP2040, Pro Micro RP2350 and RP2040 | 6.3 s + 11.8 s = **18.2 s** | 0.6 s + 0.7 s = **1.3 s** | **14x faster** |
 
 - ESP32 (classic), USB-serial chip: measured on the SparkFun DataLogger IoT (2026-11-17); the upload is 307,088 bytes with Arduino (.bin image), 13,264 with Flick (.flick).
 - ESP32 with native USB: measured on the SparkFun IoT RedBoard - ESP32-P4 (PoE) (2026-11-17); the upload is 357,488 bytes with Arduino (.bin image), 14,464 with Flick (.flick).
 - Teensy 4.x: measured on the SparkFun MicroMod Teensy (2026-11-17); the upload is 184,397 bytes with Arduino (.hex image), 11,480 with Flick (.flick).
+- RP2040 / RP2350: measured on the SparkFun Thing Plus - RP2350 (2026-11-18); the upload is 696,832 bytes with Arduino (.uf2 image), 17,968 with Flick (.flick).
 <!-- end of benchmark table -->
 
 How it's measured (`python flick/tools/board_benchmark.py`, results in [board_benchmark.json](board_benchmark.json)):
@@ -44,6 +46,10 @@ The rest of this page is about the boards themselves. Numbers in it come from Ba
 | Teensy 4.0 | i.MX RT1062, 600 MHz | 2 MB | none | native (Teensy) | Teensy Loader only | 384 KB | **128 KB** | 576 KB |
 | Teensy 4.1 | i.MX RT1062, 600 MHz | 8 MB | optional chips | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 3.75 MB |
 | MicroMod Teensy | i.MX RT1062, 600 MHz | 16 MB | none | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 11.75 MB |
+| Thing Plus RP2350 | RP2350, 2 cores, 150 MHz, + RM2 for WiFi and BLE | 16 MB | 8 MB | native | UF2 only (web page or BOOTSEL) | 512 KB | **64 KB** | 8 MB |
+| Pro Micro RP2350 | RP2350, 2 cores, 150 MHz | 16 MB | 8 MB | native | UF2 only | 512 KB | **64 KB** | 8 MB |
+| Thing Plus RP2040 | RP2040, 2 cores, 133 MHz | 16 MB | none | native | UF2 only | 512 KB | 32 KB | 8 MB |
+| Pro Micro RP2040 | RP2040, 2 cores, 133 MHz | 16 MB | none | native | UF2 only | 512 KB | 32 KB | 8 MB |
 
 - **Largest sketch** is the size of one sketch slot. A typical sketch is 1–7 KB, so this limit only matters for sketches with big libraries or data.
 - **Sketch RAM** is for the sketch's global and static variables. Larger buffers come from the heap with `malloc` or `new`, and on boards with PSRAM, `ps_malloc` puts them there.
@@ -203,10 +209,22 @@ RISC-V sketches are 5–25 % larger, partly because they're built without linker
 
 ### Teensy 4.x: Teensy 4.0, Teensy 4.1, MicroMod Teensy
 
-- **No WiFi or Bluetooth**, and no over-the-air updates: Baseline goes on with Teensy Loader (the web page offers the `.hex`; it can't flash a Teensy itself yet).
+- **No WiFi or Bluetooth**, and no over-the-air updates: Baseline goes on through the Teensy bootloader, from the web page's Flash button (Chrome or Edge) or with Teensy Loader.
 - **No ESP32 names:** `esp_*`, `ledc*`, `ESP.` and the like don't exist; sketches written for both use `#if defined(BL_PLATFORM_ESP32)`.
-- **Not every Teensy library yet:** the Audio library is built in; USB host (USBHost_t36) and Ethernet (QNEthernet) aren't.
-- **Upsides:** the fastest CPU here (Cortex-M7 at 600 MHz with a double-precision FPU), 128 KB of sketch RAM, sketch code may run real interrupt handlers (`attachInterrupt`, `IntervalTimer`), and the 16 MB MicroMod has the most room for files (11.75 MB).
+- **Ethernet is plain HTTP only** (Teensy 4.1, NativeEthernet): no TLS, so no `https://`.
+- **One USB type per Baseline:** the usual Baseline is Serial + MIDI + Audio; a sketch that is a USB keyboard, mouse or joystick needs the `_hid` Baseline instead.
+- **Sleep is Snooze's WAIT mode** (clocks slowed and gated, 0.04 % of the CPU cycles of being awake), not its deeper hibernate mode, and USB doesn't answer while the chip sleeps.
+- **Upsides:** the fastest CPU here (Cortex-M7 at 600 MHz with a double-precision FPU), 128 KB of sketch RAM, sketch code may run real interrupt handlers (`attachInterrupt`, `IntervalTimer`), the Audio library and USB host built in, CAN through FlexCAN_T4, and the 16 MB MicroMod has the most room for files (11.75 MB).
+
+### RP2040 / RP2350: Thing Plus RP2350 and RP2040, Pro Micro RP2350 and RP2040
+
+- **Baseline goes on as a UF2**, from the web page's Flash button or by copying the file to the board's drive in BOOTSEL mode. A board that already runs Baseline (or any arduino-pico sketch) restarts into its boot ROM by itself; a board fresh from the factory needs BOOTSEL held while it's plugged in, once. There are no over-the-air Baseline updates yet.
+- **No ESP32 names:** `esp_*`, `ledc*`, `ESP.` and `ps_malloc` don't exist (`malloc()` of more than 4 KB uses the PSRAM by itself on the RP2350 boards), and neither do arduino-pico's own APIs (`rp2040.*`, `PIO`, `<hardware/...>`).
+- **WiFi and BLE only on the Thing Plus RP2350** (its RM2 module). No ESP-NOW, Bluetooth Classic, touch, DAC or USB device mode on any of them.
+- **BLE is limited:** one central at a time, a 512-byte attribute table, and only the 2901/2902 descriptors.
+- **The RP2040 is the smaller chip:** 264 KB of RAM (the RP2350 has 520 KB), so 32 KB of sketch RAM against the RP2350's 64 KB, and Cortex-M0+ cores with no FPU. It also can't remap flash as the RP2350 does, so Baseline copies each new sketch into place when it becomes active.
+- **The BOOTSEL button is the flash chip's select line, not a GPIO.** Sketches read it as pin `BL_TARGET_BOOT_PIN` (100), checked every 20 ms for interrupts.
+- **Upsides:** 16 MB of flash on every board, 512 KB sketch slots and 8 MB for files; 8 MB of PSRAM on the RP2350 boards; small Baselines (about 170 KB; 900 KB on the Thing Plus RP2350 with WiFi, BLE and TLS) in a 4 MB Baseline area.
 
 ## Not measured yet
 

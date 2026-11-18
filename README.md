@@ -72,7 +72,7 @@ Install **[Python 3](https://www.python.org/downloads/)** (on Windows, tick "Add
 
 ### 3. Install the compiler (once)
 
-With the board plugged in, press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then **Setup: install the compiler (once)**. It downloads the compiler for your board's chip into `~/.flick`: Espressif's for the ESP32 boards (170 to 670 MB), arduino-pico's for the RP2040 and RP2350 boards (130 MB). If you already have the Arduino IDE with your board's core installed (ESP32 or Raspberry Pi Pico/RP2040/RP2350), Flick can use that compiler instead and you can skip this step.
+With the board plugged in, press **Ctrl+Shift+P**, choose **Tasks: Run Task**, then **Setup: install the compiler (once)**. It downloads the compiler for your board's chip into `~/.flick`: Espressif's for the ESP32 boards (170 to 670 MB), arduino-pico's for the RP2040 and RP2350 boards (130 MB), and Teensyduino's compiler, core and libraries for the Teensy 4.x boards (400 MB). If you already have the Arduino IDE with your board's core installed (ESP32, Raspberry Pi Pico/RP2040/RP2350 or Teensy), Flick can use that compiler instead and you can skip this step.
 
 ### 4. Try an example
 

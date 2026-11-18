@@ -172,6 +172,8 @@ def find_gcc(target):
         return env
     gcc_name = target["gcc"]
     exe = gcc_name + (".exe" if os.name == "nt" else "")
+    if target.get("builder") == "teensy":
+        return teensy_gcc(target, exe)
     if target.get("gcc_package"):
         found = package_gcc(target)
         if found:
@@ -196,14 +198,26 @@ def find_gcc(target):
         hits = sorted(glob.glob(str(r / "packages" / "esp32" / "tools" / "esp-*32" / "*" / "bin" / exe)))  # esp-x32, esp-rv32
         if hits:
             return hits[-1]
-    if gcc_name.startswith("arm-"):
-        # Teensyduino's compiler (Arduino IDE or arduino-cli Boards Manager)
-        for r in [*roots, *arduino_data_dirs()]:
-            hits = sorted(glob.glob(str(r / "packages" / "teensy" / "tools" / "teensy-compile" / "*" / "arm" / "bin" / exe)))
-            if hits:
-                return hits[-1]
-        sys.exit(f"error: {gcc_name} not found. Install Teensyduino (Arduino IDE Boards Manager: Teensy).")
     sys.exit(f"error: {gcc_name} not found. Run: {FLICK_CMD} setup")
+
+
+def teensy_gcc(target, exe, quiet=False):
+    """Teensyduino's compiler: from the Arduino IDE's or arduino-cli's Boards
+    Manager install, else the copy `flick setup` puts in ~/.flick/tools
+    (chip.json "teensy_download", laid out as an Arduino package, so
+    teensy_core_dir() finds the core and libraries next to it the same way)."""
+    roots = [*arduino_data_dirs()]
+    if os.environ.get("LOCALAPPDATA"):
+        roots.append(Path(os.environ["LOCALAPPDATA"]) / "Arduino15")
+    roots += [Path.home() / ".arduino15", Path.home() / "Library" / "Arduino15"]
+    pattern = Path("tools") / "teensy-compile" / "*" / "arm" / "bin" / exe
+    for base in [*(r / "packages" / "teensy" for r in roots), *TOOLS_HOME.glob("teensyduino-*")]:
+        hits = sorted(glob.glob(str(base / pattern)), key=lambda h: version_key(Path(h).parents[2].name))
+        if hits:
+            return hits[-1]
+    if quiet:
+        return None
+    sys.exit(f"error: {target['gcc']} (Teensyduino's) not found. Run: {FLICK_CMD} setup")
 
 
 def run(cmd, **kw):
@@ -877,15 +891,72 @@ def import_serial():
     return serial
 
 
-def find_port(port=None):
-    """The given port, or the single supported board that is plugged in."""
-    if port:
-        return port
+WAKE_WAIT_S = 60       # how long upload/safe wait for a board that is asleep
+
+
+def catch_waking_board(port=None):
+    """A board that doesn't answer on USB (asleep: a sketch in a deep-sleep loop
+    shows up for a moment after each wake): wait for it, and put it in safe mode
+    the moment it answers, before its sketch sleeps again. Returns the port once
+    the board is back in safe mode, or None if it never answered."""
     serial = import_serial()
+    vids = board_vids()
+    print(f"No answer from a board{f' on {port}' if port else ''}: waiting up to {WAKE_WAIT_S} s "
+          "(a board in deep sleep answers when it wakes; or plug one in)...", flush=True)
+    ok = f"{PROTO_PREFIX} OK".encode()
+    deadline = time.time() + WAKE_WAIT_S
+    dev = None
+    while time.time() < deadline and not dev:
+        found = [p.device for p in serial.tools.list_ports.comports()
+                 if (p.device == port if port else p.vid in vids)]
+        if not found:
+            time.sleep(0.01)
+            continue
+        try:
+            with open_port(found[0], 115200) as s:
+                got = b""
+                for _ in range(30):     # resend until the loader answers (it starts with Baseline)
+                    s.write(f"{PROTO_PREFIX} SAFE\n".encode())
+                    got += s.read(256)
+                    if ok in got:
+                        dev = found[0]
+                        break
+        except Exception:
+            pass                        # asleep again, or not open yet: wait for the next wake
+        if not dev:
+            time.sleep(0.05)
+    if not dev:
+        return None
+    print(f"Caught the board on {dev}: it restarts in safe mode (no sketch runs).")
+    time.sleep(0.5)
+    deadline = time.time() + 15
+    while time.time() < deadline:     # it restarts: wait for its port again
+        if any(p.device == dev for p in serial.tools.list_ports.comports()):
+            time.sleep(0.3)
+            return dev
+        time.sleep(0.05)
+    return None
+
+
+def find_port(port=None, wait=False):
+    """The given port, or the single supported board that is plugged in. With
+    wait, a board that isn't there (asleep) is waited for and put in safe mode."""
+    serial = import_serial()
+    if port:
+        deadline = time.time() + 3      # a board restarting after an upload is back soon
+        while not any(p.device == port for p in serial.tools.list_ports.comports()):
+            if time.time() > deadline:
+                if wait:
+                    return catch_waking_board(port) or sys.exit(f"error: {port} didn't appear.")
+                break
+            time.sleep(0.05)
+        return port
     vids = board_vids()
     found = [p for p in serial.tools.list_ports.comports() if p.vid in vids]
     if len(found) == 1:
         return found[0].device
+    if not found and wait:
+        return catch_waking_board() or sys.exit("error: no supported board appeared on USB.")
     if not found:
         sys.exit("error: no supported board found on USB. Plug in the board, or pass -p PORT.")
     names = ", ".join(f"{p.device} ({p.description})" for p in found)
@@ -913,6 +984,11 @@ def is_rp2_port(port):
     return any(p.device == port and p.vid in RP2_VIDS for p in serial.tools.list_ports.comports())
 
 
+def is_teensy_port(port):
+    serial = import_serial()
+    return any(p.device == port and p.vid == PJRC_VID for p in serial.tools.list_ports.comports())
+
+
 def open_port(port, baud):
     serial = import_serial()
     s = serial.Serial()
@@ -922,8 +998,10 @@ def open_port(port, baud):
     # A TinyUSB serial port is the exception: Arduino's USBCDC discards output
     # until the host raises DTR, and DTR alone never resets the chip there.
     # arduino-pico's USB serial (RP2040/RP2350) does the same; it reboots into
-    # the boot ROM only on 1200 baud, which flick never uses.
-    s.dtr = is_tinyusb_port(port) or is_rp2_port(port)
+    # the boot ROM only on 1200 baud, which flick never uses. A Teensy sends
+    # its first output about 1.5 s late while DTR is low; it reboots only on
+    # 134 baud.
+    s.dtr = is_tinyusb_port(port) or is_rp2_port(port) or is_teensy_port(port)
     s.rts = False
     s.open()
     return s
@@ -1035,7 +1113,7 @@ def open_link_port(args):
     if getattr(args, "host", None):
         conn = NetPort(args.host, args.password or os.environ.get("FLICK_OTA_PASSWORD"))
         return conn.port, conn
-    port = find_port(args.port)
+    port = find_port(args.port, wait=getattr(args, "wait", False))
     args.baud = console_baud(port, args.baud)
     return port, open_port(port, args.baud)
 
@@ -1148,7 +1226,7 @@ def describe_sketch_addresses(fields):
 
 
 def cmd_safe(args):
-    port = find_port(args.port)
+    port = find_port(args.port, wait=True)
     with open_port(port, console_baud(port, args.baud)) as s:
         Link(s).request("SAFE")
         print("rebooting into safe mode")
@@ -1159,10 +1237,38 @@ def info_fields(info):
     return dict(re.findall(r'(\w+)=("[^"]*"|\S+)', info))
 
 
+def awake_info(s):
+    """INFO's reply, or None if the board doesn't answer (or its port goes away)."""
+    try:
+        r = Link(s, echo=False).request_status("INFO", timeout=1.5)
+    except Exception:
+        return None
+    return r[1] if r and r[0] else None
+
+
 def cmd_upload(args):
     if args.host and args.monitor:
         sys.exit("error: --monitor needs the USB port; it cannot be combined with --host")
+    args.wait = True        # a board asleep in a deep-sleep loop is caught when it wakes
     port, s = open_link_port(args)
+    if not args.host and awake_info(s) is None:
+        s.close()
+        # A board that just restarted (an upload a moment ago) is back within a
+        # few seconds; only one that stays silent is asleep.
+        s = None
+        deadline = time.time() + 3
+        while time.time() < deadline and s is None:
+            time.sleep(0.1)
+            try:
+                s = open_port(port, args.baud)
+            except Exception:
+                continue
+            if awake_info(s) is None:
+                s.close()
+                s = None
+        if s is None:   # asleep (or going to sleep): catch it when it wakes
+            port = catch_waking_board(port) or sys.exit(f"error: no answer from a board on {port}.")
+            s = open_port(port, args.baud)
     with s:
         link = Link(s)
         info = link.request("INFO")
@@ -1390,7 +1496,7 @@ def reopen(port, baud, follow=False):
                 return p, open_port(p, baud)
             except (serial.SerialException, OSError):
                 pass
-        time.sleep(0.3)
+        time.sleep(0.05)
 
 
 def monitor(s, port, baud, link=None, follow=True):
@@ -1528,7 +1634,7 @@ def build_baseline_teensy(target, flash, serial_port=None):
     (user_dir / "libraries").mkdir(parents=True, exist_ok=True)
     os.environ["ARDUINO_DIRECTORIES_USER"] = str(user_dir)
     cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"], "--build-path", str(build_path),
-           "--build-property", f"build.flags.defs=-D__IMXRT1062__ -DTEENSYDUINO=160 {inc}",
+           "--build-property", f"build.flags.defs=-D__IMXRT1062__ -DTEENSYDUINO=160 -DTEENSY_INIT_USB_DELAY_AFTER=0 {inc}",
            "--build-property", f'build.flags.ld=-Wl,--gc-sections,--relax,--no-warn-rwx-segments "-T{ld}"',
            "--warnings", "default", str(sketch)]
     run(cmd)
@@ -2071,12 +2177,39 @@ def board_target(port=None):
     return LEGACY_TARGETS.get(board, board)
 
 
-def unpack(url, dest):
-    """Download an archive (kept in ~/.flick/downloads until unpacked) and unpack it into dest."""
+def zstd_reader(path):
+    """A .zst file as a stream: Python 3.14's compression.zstd, else the zstandard
+    package (installed if missing)."""
+    try:
+        from compression import zstd
+        return zstd.open(path, "rb")
+    except ImportError:
+        pass
+    try:
+        import zstandard
+    except ImportError:
+        print("installing zstandard (to unpack Teensyduino's .tar.zst archives)")
+        run([sys.executable, "-m", "pip", "install", "zstandard"])
+        import zstandard
+    return zstandard.ZstdDecompressor().stream_reader(open(path, "rb"))
+
+
+def unpack(url, dest, strip=None, sha256=None):
+    """Download an archive (kept in ~/.flick/downloads until unpacked) and unpack it
+    into dest. strip: only the members under this folder, without it."""
     archive = FLICK_HOME / "downloads" / url.rsplit("/", 1)[1]
     if not archive.exists():
         print(f"downloading {archive.name}")
         download(url, archive)
+    if sha256:
+        import hashlib
+        h = hashlib.sha256()
+        with open(archive, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        if h.hexdigest() != sha256.lower():
+            archive.unlink()
+            sys.exit(f"error: {archive.name} is damaged (SHA-256 differs): run setup again")
     print(f"unpacking into {dest}")
     if archive.name.endswith(".zip"):
         import zipfile
@@ -2084,16 +2217,30 @@ def unpack(url, dest):
             z.extractall(dest)
     else:
         import tarfile
-        with tarfile.open(archive) as t:
-            # "tar" filter: keep the toolchain's symlinks, refuse paths outside dest
-            t.extractall(dest, **({"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}))
+        # "tar" filter: keep the toolchain's symlinks, refuse paths outside dest
+        safe = {"filter": "tar"} if hasattr(tarfile, "tar_filter") else {}
+        import contextlib
+        zst = archive.name.endswith(".zst")
+        with (zstd_reader(archive) if zst else contextlib.nullcontext()) as stream, \
+                (tarfile.open(fileobj=stream, mode="r|") if zst else tarfile.open(archive)) as t:
+            if strip is None:
+                t.extractall(dest, **safe)
+            else:
+                prefix = strip.rstrip("/") + "/"
+                for m in t:
+                    if m.name.startswith(prefix):
+                        m.name = m.name[len(prefix):]
+                        if m.islnk() and m.linkname.startswith(prefix):   # hard links name the full path
+                            m.linkname = m.linkname[len(prefix):]
+                        t.extract(m, dest, **safe)
     archive.unlink()
 
 
 def cmd_setup(args):
     """Download the compiler for the targets' chips (Espressif's Xtensa or RISC-V GCC for the
-    ESP32 family; arduino-pico's for the RP2040/RP2350). Without -t: for the plugged-in
-    board, else for every chip. Installs pyserial if missing."""
+    ESP32 family; arduino-pico's for the RP2040/RP2350; Teensyduino's compiler, core and
+    libraries for the Teensy 4.x). Without -t: for the plugged-in board, else for every
+    chip. Installs pyserial if missing."""
     try:
         import serial  # noqa: F401
     except ImportError:
@@ -2130,6 +2277,25 @@ def cmd_setup(args):
             sys.exit(f"error: no {t['gcc']} download for this computer ({host}). Install the Arduino core "
                      f"for {t['chip']} with the Arduino IDE instead.")
         unpack(dl["url"].format(file=dl["files"][host]), TOOLS_HOME / dl["release"])
+    # Teensyduino's compiler, core and libraries (chip.json "teensy_download"), unless installed
+    for t in {t["chip"]: t for t in targets if t.get("teensy_download")}.values():
+        exe = t["gcc"] + (".exe" if os.name == "nt" else "")
+        if teensy_gcc(t, exe, quiet=True):
+            print(f"Teensyduino for {t['chip']}: already installed")
+            continue
+        dl = t["teensy_download"]
+        if host not in dl["compiler"]["files"]:
+            sys.exit(f"error: no Teensyduino download for this computer ({host}). Install Teensyduino "
+                     "with the Arduino IDE's Boards Manager instead.")
+        root = TOOLS_HOME / dl["root"]
+        comp = dl["compiler"]
+        f = comp["files"][host]
+        unpack(f["url"], root / "tools" / "teensy-compile" / comp["version"], strip="tools", sha256=f["sha256"])
+        for sub in root.glob("tools/teensy-compile/*/*"):
+            if sub.name != "arm":       # the archive also holds an AVR compiler Teensy 4 doesn't use
+                shutil.rmtree(sub, ignore_errors=True)
+        plat = dl["platform"]
+        unpack(plat["url"], root / "hardware" / "avr" / plat["version"], strip="avr", sha256=plat["sha256"])
     for t in targets:
         try:
             print(f"  {t['name']}: {find_gcc(t)}")

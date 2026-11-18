@@ -835,13 +835,25 @@ async function halfkayWrite(dev, report, timeoutMs) {
   }
 }
 
+// The bootloader names the board: its HID usage (page 0xFF9C) is Teensyduino's
+// model ID, BL_BOARD_TEENSY_MODEL (0x24 Teensy 4.0, 0x25 4.1, 0x26 MicroMod).
+function halfkayModel(dev) {
+  const c = (dev.collections || []).find((c) => c.usagePage === 0xff9c);
+  return c ? c.usage : 0;
+}
+
 async function flashTeensy(btn) {
-  const target = btn.dataset.target, codeSize = Number(btn.dataset.codeSize);
+  let target = btn.dataset.target, codeSize = Number(btn.dataset.codeSize);
+  const auto = target === "auto-teensy";
+  const teensys = (window.FLICK && window.FLICK.teensy) || [];
+  let pick = auto ? null : teensys.find((b) => b.target === target) || null;
+  const panel = btn.closest("div.board");
   const status = btn.parentElement.querySelector(".flash-status");
   const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
   if (!needs("hid") || !needs("serial")) return;
   if (state.busy) { say("Busy: wait for the upload or flash in progress to finish.", "bad"); return; }
   if (state.link) await disconnect();
+  if (auto) foundLine(status, "");
   // 1. A Teensy already in its bootloader (its button pressed) skips the reboot.
   let dev = (await navigator.hid.getDevices()).find((d) => d.vendorId === HALFKAY.vendorId && d.productId === HALFKAY.productId);
   let port = null;
@@ -853,6 +865,19 @@ async function flashTeensy(btn) {
       port = null;
     }
     if (port) {
+      // A Teensy running Baseline names its board (and keeps a _hid variant).
+      say("Asking the board whether it already runs Baseline...");
+      const running = await baselineInfo(port);
+      const board = running && teensys.find((b) => b.target === running.target);
+      if (board && auto) {
+        pick = board;
+        foundLine(status, `Found: ${board.name}, running Baseline ${running.baseline}.`);
+        showAs(panel, board.target);
+      } else if (board && pick && board.model !== pick.model) {
+        say(`This board is a ${board.name}, not a ${pick.name}: pick it in the menu (or Auto-detect), then Flash.`, "bad");
+        return;
+      }
+      await sleep(300);                 // the INFO link's close must finish first
       say("Restarting the Teensy into its bootloader...");
       try {
         await port.open({ baudRate: 134 });     // Teensyduino's request to reboot into HalfKay
@@ -888,11 +913,37 @@ async function flashTeensy(btn) {
     });
     if (!dev) { say("Not flashed: no bootloader chosen."); return; }
   }
+  // 3. The model the bootloader reports: picks the board for Auto-detect (one
+  // without Baseline yet), and keeps another board's image off this one.
+  const model = halfkayModel(dev);
+  const byModel = teensys.filter((b) => b.model === model);
+  if (!pick) {
+    pick = byModel.find((b) => !b.hid) || byModel[0] || null;
+    if (!pick) {
+      say(`This Teensy's bootloader reports model 0x${model.toString(16)}, which isn't a board on this page ` +
+          "(Teensy 4.0, 4.1 or MicroMod Teensy).", "bad");
+      return;
+    }
+    foundLine(status, `Found: ${pick.name} (from its bootloader).`);
+    showAs(panel, pick.target);
+  } else if (model && pick.model !== model) {
+    const is = byModel.find((b) => !b.hid) || byModel[0];
+    say(`This Teensy is ${is ? `a ${is.name}` : `model 0x${model.toString(16)}`}, not a ${pick.name}: ` +
+        "pick it in the menu (or Auto-detect), then Flash.", "bad");
+    return;
+  }
+  target = pick.target;
+  codeSize = pick.code_size || codeSize;
+  if (auto) {
+    const found = status.previousElementSibling && status.previousElementSibling.classList.contains("flash-found")
+      ? status.previousElementSibling.textContent : "";
+    foundLine(status, `${found} Installing Baseline ${NEW_VERSION()} for ${pick.name}.`.trim());
+  }
   state.busy = true;
   render();
   for (const b of document.querySelectorAll(FLASH_BUTTONS)) b.disabled = true;
   try {
-    say(`Downloading Baseline ${NEW_VERSION()}...`);
+    say(`Downloading Baseline ${NEW_VERSION()}${auto ? ` for ${pick.name}` : ""}...`);
     const hexUrl = new URL(`firmware/${target}/baseline-${target}.hex`, location.href);
     const res = await fetch(hexUrl, FRESH);
     if (!res.ok) throw new Error(`can't download the .hex (${res.status})`);
@@ -916,10 +967,14 @@ async function flashTeensy(btn) {
     try { await dev.sendReport(0, boot); } catch (e) {}           // it restarts at once
     try { await dev.close(); } catch (e) {}
     const secs = ((performance.now() - t0) / 1000).toFixed(0);
-    let done = `Done in ${secs} s.`;
-    say(done + " Connecting...", "good");
+    let done = (auto ? `Flashed ${pick.name}. ` : "") + `Done in ${secs} s.`;
+    // Auto-detect: the flashed board's own panel takes over (its examples, its Flash button).
+    const line = auto ? (showBoard(target), [...document.querySelectorAll("div.board")]
+      .find((d) => d.dataset.target === target).querySelector(".flash-status")) : status;
+    const tell = (text, cls) => { line.textContent = text; line.className = "flash-status " + (cls || ""); };
+    tell(done + " Connecting...", "good");
     const ok = port ? await connectAfterFlash(port) : false;
-    say(done + (ok ? " Connected: its examples are below." : " Press Connect below to try the examples."), "good");
+    tell(done + (ok ? " Connected: its examples are below." : " Press Connect below to try the examples."), "good");
   } catch (e) {
     say(`Failed: ${e.message}`, "bad");
   } finally {

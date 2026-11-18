@@ -60,6 +60,11 @@ GROUPS = {
         "boards": "Teensy 4.0, Teensy 4.1, MicroMod Teensy",
         "core": "teensy",
     },
+    "rp2": {
+        "title": "RP2040 / RP2350",
+        "boards": "Thing Plus RP2350 and RP2040, Pro Micro RP2350 and RP2040",
+        "core": "rp2",
+    },
 }
 # The plain-Arduino board for each Flick target that can stand for its group.
 FQBN = {
@@ -74,6 +79,10 @@ FQBN = {
     "teensy_micromod": "teensy:avr:teensyMM",
     "teensy40": "teensy:avr:teensy40",
     "teensy41": "teensy:avr:teensy41",
+    "thing_plus_rp2350": "rp2040:rp2040:sparkfun_thingplusrp2350",
+    "pro_micro_rp2350": "rp2040:rp2040:sparkfun_promicrorp2350",
+    "thing_plus_rp2040": "rp2040:rp2040:sparkfun_thingplusrp2040",
+    "pro_micro_rp2040": "rp2040:rp2040:sparkfun_promicrorp2040",
 }
 PJRC_VID = 0x16C0
 
@@ -93,14 +102,16 @@ def edit():
     time.sleep(1.1)         # a new modification time even on coarse file systems
 
 
-def port_now(port, teensy):
+def port_now(port, core):
     """A Teensy changes COM port when its USB type changes (Baseline: Serial +
-    MIDI + Audio; an Arduino sketch: Serial): find it again by vendor ID."""
-    if not teensy:
+    MIDI + Audio; an Arduino sketch: Serial), and an RP2 board can come back on
+    another one after its boot ROM: find it again by vendor ID."""
+    vids = {"teensy": (PJRC_VID,), "rp2": flick.RP2_VIDS}.get(core)
+    if not vids:
         return port
     serial = flick.import_serial()
     for p in serial.tools.list_ports.comports():
-        if p.vid == PJRC_VID:
+        if p.vid in vids:
             return p.device
     return port
 
@@ -133,7 +144,7 @@ def bench_flick(target, port):
     return {"compile": compile_s, "upload": max(total - compile_s, 0.0), "total": total, "bytes": size}
 
 
-def bench_arduino(fqbn, port, env, teensy):
+def bench_arduino(fqbn, port, env, core):
     with tempfile.TemporaryDirectory() as build:
         base = ["arduino-cli", "compile", "--fqbn", fqbn, "--build-path", build, str(SKETCH)]
         timed(base, env)                                            # warm: core and library cached
@@ -143,20 +154,22 @@ def bench_arduino(fqbn, port, env, teensy):
             compiles.append(timed(base, env)[0])
         uploads = []
         for _ in range(2):
-            p = port_now(port, teensy)
+            p = port_now(port, core)
             uploads.append(timed(["arduino-cli", "upload", "--fqbn", fqbn, "--input-dir", build, "-p", p,
                                   str(SKETCH)], env)[0])
             time.sleep(3)
-        image = next(Path(build).glob(f"{SKETCH.name}.ino.bin"), None) or next(Path(build).glob(f"{SKETCH.name}.ino.hex"))
+        # What the upload sends: the .uf2 on RP2 boards (they also get a .bin).
+        kinds = (".uf2",) if core == "rp2" else (".bin", ".hex")
+        image = next(f for k in kinds for f in Path(build).glob(f"{SKETCH.name}.ino{k}"))
         size = image.stat().st_size
     compile_s, upload = statistics.median(compiles), statistics.median(uploads)
     return {"compile": compile_s, "upload": upload, "total": compile_s + upload, "bytes": size,
             "image": image.suffix}
 
 
-def restore_baseline(target, port, teensy):
+def restore_baseline(target, port, core):
     time.sleep(2)
-    p = port_now(port, teensy)
+    p = port_now(port, core)
     timed(flick_cmd("baseline", "flash", "-t", target, "-p", p))
 
 
@@ -206,7 +219,7 @@ def main():
             key, _, port = spec.partition("=")
             if key not in GROUPS or not port:
                 sys.exit(f"--board {spec}: use GROUP=PORT with GROUP one of {', '.join(GROUPS)}")
-            teensy = GROUPS[key]["core"] == "teensy"
+            core = GROUPS[key]["core"]
             target = info_target(port)
             if target not in FQBN:
                 sys.exit(f"{target}: no plain-Arduino board known for it (FQBN in {Path(__file__).name})")
@@ -221,10 +234,10 @@ def main():
             print(f"  Flick: {fmt(f)}")
             print("  Arduino (replaces Baseline; flashed back after) ...")
             try:
-                a = bench_arduino(FQBN[target], port, env, teensy)
+                a = bench_arduino(FQBN[target], port, env, core)
             finally:
                 print("  flashing Baseline back ...")
-                restore_baseline(target, port, teensy)
+                restore_baseline(target, port, core)
             print(f"  Arduino: {fmt(a)}")
             results[key] = {"board": name, "target": target, "date": date.today().isoformat(),
                             "flick": f, "arduino": a}

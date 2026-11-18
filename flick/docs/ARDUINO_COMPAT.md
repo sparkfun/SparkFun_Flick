@@ -137,8 +137,9 @@ work on every board.
 - **USB:** Baseline's USB type is Serial + MIDI + Audio (Teensy's "Serial + MIDI
   + Audio"); keyboard/mouse need a different Baseline.
 - **Timing:** `IntervalTimer` (4 PIT channels, shared with `tone()`),
-  `elapsedMillis`/`elapsedMicros`. `digitalWriteFast()` works but is a normal
-  `digitalWrite()` for now.
+  `elapsedMillis`/`elapsedMicros`. `digitalWriteFast()`, `digitalReadFast()` and
+  `digitalToggleFast()` write the pin's GPIO register directly, as on a plain
+  Teensy (2 cycles with a constant pin; call `pinMode()` first).
 - **Registers:** `#include <imxrt.h>` works; `attachInterruptVector()`,
   `NVIC_*`, `ARM_DWT_CYCCNT` and direct register access too. Baseline's vector
   table is at a fixed address for that.
@@ -153,7 +154,9 @@ work on every board.
   (not `ledc*`), `extmem_malloc()` (not `ps_malloc`), `tempmonGetTemp()` (not
   `temperatureRead`), `SD.begin(BUILTIN_SDCARD)` on the 4.1 (not `SD_MMC`).
   `esp_*` and `ESP.` don't exist here. Examples: `examples/08_teensy`.
-- **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
+- **Sleep** (`<Snooze.h>`: `Snooze.sleep()`, `deepSleep()`, `hibernate()`) puts the chip in Snooze's low-power WAIT mode until the timer or a pin wakes it;
+  deep sleep then restarts the sketch, and RTC memory (1 KB) survives it. USB
+  doesn't answer while the chip sleeps; `flick upload` waits for it to wake.
 - **No WiFi, BLE or ESP-NOW:** those calls return errors.
 
 ## RP2040 and RP2350 (`pro_micro_rp2040`, `thing_plus_rp2040`, `pro_micro_rp2350`, `thing_plus_rp2350`)

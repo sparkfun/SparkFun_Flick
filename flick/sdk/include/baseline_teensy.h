@@ -53,10 +53,29 @@ static inline float tempmonGetTemp(void) { return BL_CALL(temperature_read)(); }
 #define BUILTIN_SDCARD BL_BOARD_SD_BUILTIN      /* SD.begin(BUILTIN_SDCARD): the 4.1's slot */
 #endif
 
-/* The same as digitalWrite()/digitalRead() for now (a call into Baseline). */
-static inline void digitalWriteFast(uint8_t pin, uint8_t val) { digitalWrite(pin, val); }
-static inline uint8_t digitalReadFast(uint8_t pin) { return digitalRead(pin); }
-static inline void digitalToggleFast(uint8_t pin) { digitalWrite(pin, !digitalRead(pin)); }
+/* Straight to the pin's fast GPIO register (GPIO6-9; Teensyduino's start-up
+ * routes every pin there), as on a plain Teensy: one store when the pin is a
+ * constant. The pin must already be set up with pinMode(). */
+#include <bl_teensy_pins.h>
+static inline __attribute__((always_inline)) volatile uint32_t *bl_teensy_gpio(uint8_t pin)
+{
+    return (volatile uint32_t *)(0x42000000u + 0x4000u * (bl_teensy_pins[pin] >> 5));
+}
+static inline __attribute__((always_inline)) void digitalWriteFast(uint8_t pin, uint8_t val)
+{
+    if (pin >= BL_TEENSY_NUM_DIGITAL) return;
+    bl_teensy_gpio(pin)[val ? 0x84 / 4 : 0x88 / 4] = 1u << (bl_teensy_pins[pin] & 31);   /* DR_SET / DR_CLEAR */
+}
+static inline __attribute__((always_inline)) uint8_t digitalReadFast(uint8_t pin)
+{
+    if (pin >= BL_TEENSY_NUM_DIGITAL) return 0;
+    return (bl_teensy_gpio(pin)[0x08 / 4] >> (bl_teensy_pins[pin] & 31)) & 1;           /* PSR */
+}
+static inline __attribute__((always_inline)) void digitalToggleFast(uint8_t pin)
+{
+    if (pin >= BL_TEENSY_NUM_DIGITAL) return;
+    bl_teensy_gpio(pin)[0x8C / 4] = 1u << (bl_teensy_pins[pin] & 31);                   /* DR_TOGGLE */
+}
 
 /* ---- more ports: Serial3-Serial7 (Serial8 on the 4.1), Wire2 (sketch_teensy.cpp) ---- */
 extern HardwareSerial Serial3;
