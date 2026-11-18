@@ -132,6 +132,8 @@ def main():
                 fw = out / "firmware" / name
                 fw.mkdir(parents=True)
                 shutil.copy2(other, fw / other.name)
+                if bsu.exists():                # RP2040/RP2350: Flash sends it over serial (rp2SerialUpdate)
+                    shutil.copy2(bsu, fw / bsu.name)
                 rows.append((board, name, t, flash_mb, other, bsu))
             else:
                 print(f"skipping {name}: {bin_} not built", file=sys.stderr)

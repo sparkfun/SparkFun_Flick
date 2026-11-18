@@ -232,9 +232,9 @@ async function attach(port, quiet) {
 // After a flash the board restarts into Baseline: connect to it without asking
 // again (the browser remembers the port), so its examples show at once. A
 // native USB board comes back as a new port object with the same IDs.
-async function connectAfterFlash(port) {
+async function connectAfterFlash(port, tries = 20) {
   const ids = port.getInfo();
-  for (let i = 0; i < 20 && !state.link; i++) {
+  for (let i = 0; i < tries && !state.link; i++) {
     await sleep(500);
     const ports = await navigator.serial.getPorts();
     const again = ports.find((p) => p === port) || ports.find((p) => {
@@ -1221,10 +1221,19 @@ async function askButton(status, text, label) {
 }
 
 // No WebUSB (or the device can't be opened): save the .uf2 onto the boot drive.
+// Windows has no driver for the RP2040 boot ROM's PICOBOOT interface (the
+// RP2350's asks for WinUSB itself), so WebUSB can't use it there: the page
+// saves the .uf2 onto the boot ROM's drive instead.
+function rp2RomNeedsDrive(chip) {
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.userAgent;
+  return chip === "RP2040" && /Windows/i.test(platform);
+}
+
 async function saveUf2(status, name, buf, chip) {
   const drive = chip === "RP2350" ? "RP2350" : "RPI-RP2";
-  if (!await askButton(status, `This browser can't write to the board directly. Save the .uf2 onto the ${drive} ` +
-                       "drive that the board shows in BOOTSEL mode; the board installs it and restarts.", "Save the .uf2...")) {
+  const why = rp2RomNeedsDrive(chip) ? "Windows can't give this page the RP2040's boot ROM, so " : "This browser can't write to the board directly, so ";
+  if (!await askButton(status, `${why}save the .uf2 onto the ${drive} drive (it appears once the board is in ` +
+                       "BOOTSEL mode). The board installs it and restarts.", "Save the .uf2...")) {
     return false;
   }
   const blob = new Blob([buf], { type: "application/octet-stream" });
@@ -1338,6 +1347,52 @@ async function rp2UpToDate(btn, status, say, target, port, detail) {
   status.append(" ", again);
 }
 
+// A board whose Baseline updates itself (INFO update=file: RP2040/RP2350 since
+// the OTA support) takes the new Baseline over its serial port, the way
+// `flick baseline update` sends it: the .bsu goes into LittleFS, and
+// arduino-pico's OTA stub installs it at the restart (docs/OTA.md). No
+// BOOTSEL, no boot ROM, no drive; a new Baseline that fails its 10 s trial is
+// rolled back. Returns Baseline's reply to UEND; throws on any refusal.
+// UDATA lines in flight. The board sets the pace (about 30 KB/s on an RP2040,
+// the same with 1 or 8 in flight); 2 hides the reply's round trip.
+const RP2_UPDATE_WINDOW = 2;
+async function rp2SerialUpdate(port, target, say) {
+  const name = `baseline-${target}.bsu`;
+  const resp = await fetch(`firmware/${target}/${name}`, FRESH);
+  if (!resp.ok) throw new Error(`can't download ${name} (${resp.status})`);
+  const pkg = new Uint8Array(await resp.arrayBuffer());
+  const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", pkg)))
+    .map((b) => b.toString(16).padStart(2, "0")).join("");
+  const r0 = await openLink(port);
+  if (!r0) throw new Error("the board stopped answering");
+  const link = r0.link;
+  const t0 = Date.now();
+  try {
+    const check = (r, what) => { if (!r || !r.ok) throw new Error(r ? r.text : `no reply ${what}`); };
+    check(await link.request(`UBEGIN bsu ${pkg.length} ${hash}`, 60000), "to UBEGIN");
+    const replies = [];
+    let shown = -1;
+    for (let off = 0; off < pkg.length; off += CHUNK) {
+      replies.push(link.expect(15000));
+      await link.send(`UDATA ${off} ${b64(pkg.subarray(off, off + CHUNK))}`);
+      while (replies.length >= RP2_UPDATE_WINDOW) check(await replies.shift(), `at byte ${off}`);
+      const pct = Math.floor((off * 100) / pkg.length);
+      if (pct !== shown && pct % 5 === 0) {
+        shown = pct;
+        say(`Sending Baseline ${NEW_VERSION()} to the board: ${pct}%`);
+      }
+    }
+    while (replies.length) check(await replies.shift(), "to UDATA");
+    say("Checking the update on the board...");
+    const r = await link.request("UEND", 60000);
+    check(r, "to UEND");
+    log(`--- Baseline update sent in ${((Date.now() - t0) / 1000).toFixed(1)} s: ${r.text}`, "note");
+    return r.text;
+  } finally {
+    await link.close();       // the board restarts; its port goes away
+  }
+}
+
 // A port of this kind the page was allowed before (it comes back without asking).
 async function knownRp2Port() {
   const known = (await navigator.serial.getPorts()).filter((p) => RP2_VIDS.includes(p.getInfo().usbVendorId));
@@ -1393,6 +1448,28 @@ async function flashRp2(btn) {
           await rp2UpToDate(btn, status, say, pick.target, port, ` (${running.baseline})`);
           return;
         }
+        // A Baseline that updates itself takes the new one over this port.
+        if (running && running.update === "file" && pick && running.target === pick.target) {
+          try {
+            if (auto) foundLine(status, `Found: ${pick.name}, running Baseline ${running.baseline}. ` +
+                                        `Installing Baseline ${NEW_VERSION()}.`);
+            const reply = await rp2SerialUpdate(port, pick.target, say);
+            say("Sent. The board installs it and restarts (about 15 s)...", "good");
+            showBoard(pick.target);
+            const line = [...document.querySelectorAll("div.board")].find((d) => d.dataset.target === pick.target)
+              .querySelector(".flash-status");
+            const note = /no rollback/.test(reply) ? " (no rollback: no room for a backup on the board)" : "";
+            const msg = [...(auto ? notes : []), `Updated over USB serial${note}.`].join(" ");
+            line.textContent = `${msg} Waiting for the board...`;
+            line.className = "flash-status good";
+            const ok = await connectAfterFlash(port, 60);
+            line.textContent = `${msg} ${ok ? "Connected: its examples are below." : "Press Connect below to try the examples."}`;
+            return;
+          } catch (e) {
+            log(`--- the board didn't take the update over serial (${e.message}): using its boot ROM instead`, "note");
+            await sleep(500);
+          }
+        }
         say("Restarting the board into its boot ROM...");
         // arduino-pico restarts as soon as it sees 1200 baud, which can be
         // before Chrome has finished opening the port: the open then fails
@@ -1407,13 +1484,15 @@ async function flashRp2(btn) {
         }
         // A boot ROM this page was allowed before comes back by itself; else the user picks it.
         const allowed = "usb" in navigator && (await navigator.usb.getDevices()).some((d) => RP2_BOOT[d.productId]);
-        for (let i = 0; i < (allowed ? 10 : 3) && !dev; i++) {
+        for (let i = 0; i < (pick && rp2RomNeedsDrive(pick.chip) ? 0 : allowed ? 10 : 3) && !dev; i++) {
           await sleep(500);
           dev = await knownBootRom();
         }
       }
     }
-    if (!dev && "usb" in navigator) {
+    if (!dev && pick && rp2RomNeedsDrive(pick.chip)) {
+      log("--- RP2040 on Windows: no WebUSB access to the boot ROM; saving the .uf2 onto its drive", "note");
+    } else if (!dev && "usb" in navigator) {
       // The browser shows a board in BOOTSEL only once it has been chosen here.
       // Straight after the port chooser the click still counts, so the USB
       // chooser opens at once; later (after a restart) it needs a button.
@@ -1434,9 +1513,15 @@ async function flashRp2(btn) {
         }
         dev = await chooseBootRom();
       }
-      if (!dev) {
+      if (!dev && pick) {
+        // Which board is known (its Baseline said, or the menu): the .uf2 can go onto the drive.
+        log("--- no boot ROM chosen: saving the .uf2 onto its drive instead", "note");
+      } else if (!dev) {
         if (openError) {
           say(`Can't open the board's port (${openError}). Close any other tab or program using it, then Flash again.`, "bad");
+        } else if (rp2RomNeedsDrive("RP2040")) {
+          say("No board picked. On Windows an RP2040 board in BOOTSEL mode can't be picked here: choose your board " +
+              "in the menu above, then Flash (the page saves the .uf2 onto its RPI-RP2 drive).");
         } else {
           say("No board picked. Hold BOOTSEL while you plug the board in (a drive named RP2350 or RPI-RP2 appears), then Flash again.");
         }

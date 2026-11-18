@@ -172,6 +172,7 @@ static struct {
     bl_sha256_t all, comp;
     uint8_t hdr[BSU_HDR_SIZE];
     File file;
+    uint32_t wfill;                     /* bytes waiting in s_wbuf */
     char err[96];
 } s_rx;
 
@@ -294,6 +295,15 @@ static const char *check_header(void)
     return NULL;
 }
 
+static uint8_t s_wbuf[4096];
+
+static bool rx_flush(void)
+{
+    bool ok = !s_rx.wfill || s_rx.file.write(s_wbuf, s_rx.wfill) == s_rx.wfill;
+    s_rx.wfill = 0;
+    return ok;
+}
+
 static const char *rx_data(const uint8_t *data, uint32_t len)
 {
     if (!s_rx.active) {
@@ -318,10 +328,20 @@ static const char *rx_data(const uint8_t *data, uint32_t len)
             return rx_fail("the .bsu holds no gzip stream (made by an older flick?)");
         }
         bl_sha256_update(&s_rx.comp, data, len);
-        if (s_rx.file.write(data, len) != len) {
-            return rx_fail("LittleFS write failed (full?)");
-        }
         s_rx.next += len;
+        // Written to LittleFS a flash sector (4 KB) at a time: small writes cost
+        // LittleFS a lot more flash work.
+        while (len) {
+            uint32_t n = sizeof(s_wbuf) - s_rx.wfill;
+            n = n < len ? n : len;
+            memcpy(s_wbuf + s_rx.wfill, data, n);
+            s_rx.wfill += n;
+            data += n;
+            len -= n;
+            if (s_rx.wfill == sizeof(s_wbuf) && !rx_flush()) {
+                return rx_fail("LittleFS write failed (full?)");
+            }
+        }
     }
     return NULL;
 }
@@ -366,6 +386,9 @@ static const char *rx_end(char *note, size_t note_size)
     bl_sha256_final(&s_rx.comp, digest);
     if (memcmp(digest, s_rx.hdr + 48, 32) != 0) {
         return rx_fail("the .bsu is damaged (sha256 of its data)");
+    }
+    if (!rx_flush()) {
+        return rx_fail("LittleFS write failed (full?)");
     }
     s_rx.file.close();
     s_rx.active = false;
