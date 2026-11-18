@@ -261,3 +261,36 @@ abi_major=1
 7|int|baseline_update_mode|void
 7|int|ota_pull_sketch|const char *url
 7|int|ota_pull_baseline|const char *url, const char *sketch_url
+8|int|isr_attach_pin|int pin, int mode, bl_callback_t fn, void *arg
+8|int|isr_detach_pin|int pin
+8|int|isr_timer_begin|bl_callback_t fn, void *arg, float period_us
+8|int|isr_timer_update|int h, float period_us
+8|void|isr_timer_end|int h
+8|int|isr_timer_priority|int h, int priority
+8|int|dma_channel_alloc|void
+8|void|dma_channel_free|int channel
+8|int|audio_memory|int blocks
+8|int|audio_create|int type, const bl_audio_arg_t *args, int nargs
+8|int|audio_connect|int src, int src_port, int dst, int dst_port
+8|int|audio_disconnect|int connection
+8|int|audio_reconnect|int connection
+8|int|audio_call|int h, int method, const bl_audio_arg_t *args, int nargs, bl_audio_arg_t *ret
+8|float|audio_stat|int what
+8|void|audio_interrupts|int enable
+9|int|usbh_begin|void
+9|int|usbh_info|int kind, int index, bl_usbh_info_t *info
+9|int|usbh_key_take|int index, bl_usbh_key_t *ev
+9|int|usbh_keyboard_leds|int index, int leds
+9|int|usbh_mouse_take|int index, bl_usbh_mouse_t *m
+9|int|usbh_joystick_take|int index, bl_usbh_joystick_t *j
+9|int|usbh_midi_read|int index, uint8_t *msg
+9|int|usbh_midi_send|int index, uint8_t type, uint8_t data1, uint8_t data2, uint8_t channel, uint8_t cable
+9|int|usbh_serial_begin|int index, uint32_t baud, uint32_t format
+9|int|usbh_serial_available|int index
+9|int|usbh_serial_read|int index, uint8_t *buf, size_t len
+9|int|usbh_serial_write|int index, const uint8_t *buf, size_t len
+9|int|eth_begin|const uint8_t *mac, uint32_t ip, uint32_t dns, uint32_t gateway, uint32_t subnet, uint32_t timeout_ms
+9|int|eth_status|int what
+9|uint32_t|eth_ip|int which
+9|int|eth_mac|uint8_t *mac
+9|int|eth_maintain|void
