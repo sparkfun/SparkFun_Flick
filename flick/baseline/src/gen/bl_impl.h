@@ -305,6 +305,25 @@ int bl_impl_eth_status(int what);
 uint32_t bl_impl_eth_ip(int which);
 int bl_impl_eth_mac(uint8_t *mac);
 int bl_impl_eth_maintain(void);
+void * bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core);
+void bl_impl_task_delete(void *task);
+void * bl_impl_task_current(void);
+const char * bl_impl_task_name(void *task);
+uint32_t bl_impl_task_stack_free(void *task);
+int bl_impl_task_priority(void *task, int priority);
+void bl_impl_task_suspend(void *task, int suspend);
+int bl_impl_task_info(int what);
+void * bl_impl_sem_create(int type, uint32_t max, uint32_t initial);
+int bl_impl_sem_take(void *sem, uint32_t ticks, int recursive);
+int bl_impl_sem_give(void *sem, int recursive);
+int bl_impl_sem_count(void *sem);
+void bl_impl_sem_delete(void *sem);
+void * bl_impl_queue_create(uint32_t length, uint32_t item_size);
+int bl_impl_queue_send(void *queue, const void *item, uint32_t ticks, int where);
+int bl_impl_queue_receive(void *queue, void *item, uint32_t ticks, int peek);
+int bl_impl_queue_count(void *queue, int spaces);
+int bl_impl_queue_reset(void *queue);
+void bl_impl_queue_delete(void *queue);
 
 #ifdef __cplusplus
 }

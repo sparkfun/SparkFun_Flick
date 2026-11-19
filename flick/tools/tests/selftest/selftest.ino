@@ -169,6 +169,13 @@ static void check_storage()
         Serial.printf("LittleFS total %u used %u\n", (unsigned)LittleFS.totalBytes(), (unsigned)LittleFS.usedBytes());
 #ifdef BL_BOARD_FS_SIZE     // a board that sets its LittleFS size (Teensy 4.x)
         CHECK("LittleFS has the board's size", LittleFS.totalBytes() >= BL_BOARD_FS_SIZE * 9 / 10);
+#elif defined(BL_PLATFORM_ESP32)
+        // The userfs partition by flash size: 4 MB 1.19 MB, 8 MB 384 KB (two 1 MB sketch slots), 16 MB 7.9 MB.
+        {
+            uint32_t flash = bl_system_info(BL_INFO_FLASH_SIZE);
+            uint32_t least = flash >= 16u << 20 ? 7000000 : flash >= 8u << 20 ? 350000 : 1000000;
+            CHECK("LittleFS has the partition's size", LittleFS.totalBytes() > least);
+        }
 #else
         CHECK("LittleFS has over 1 MB", LittleFS.totalBytes() > 1000000);
 #endif

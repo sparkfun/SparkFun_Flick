@@ -72,8 +72,16 @@ void bl_sketch_add_pump(void (*pump)(void))
     }
 }
 
+/* Set by sketch_rtos.c once the sketch starts a task of its own: delay() and
+ * yield() in those tasks only wait, so callbacks stay on the sketch's task. */
+void *(*bl_sdk_current_task)(void);
+void *bl_sdk_sketch_task;
+
 static void run_pumps(void)
 {
+    if (bl_sdk_current_task && bl_sdk_current_task() != bl_sdk_sketch_task) {
+        return;
+    }
     if (s_pumping) {
         return;     // a callback called delay(): don't re-enter
     }

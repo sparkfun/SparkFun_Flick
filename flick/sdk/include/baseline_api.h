@@ -5,7 +5,7 @@
 #include "baseline_types.h"
 
 #define BL_ABI_MAJOR 1
-#define BL_ABI_MINOR 9
+#define BL_ABI_MINOR 10
 
 typedef struct bl_api {
     uint16_t abi_major;
@@ -326,6 +326,27 @@ typedef struct bl_api {
     uint32_t (*eth_ip)(int which);
     int (*eth_mac)(uint8_t *mac);
     int (*eth_maintain)(void);
+
+    /* ---- added in 1.10 ---- */
+    void * (*task_create)(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core);
+    void (*task_delete)(void *task);
+    void * (*task_current)(void);
+    const char * (*task_name)(void *task);
+    uint32_t (*task_stack_free)(void *task);
+    int (*task_priority)(void *task, int priority);
+    void (*task_suspend)(void *task, int suspend);
+    int (*task_info)(int what);
+    void * (*sem_create)(int type, uint32_t max, uint32_t initial);
+    int (*sem_take)(void *sem, uint32_t ticks, int recursive);
+    int (*sem_give)(void *sem, int recursive);
+    int (*sem_count)(void *sem);
+    void (*sem_delete)(void *sem);
+    void * (*queue_create)(uint32_t length, uint32_t item_size);
+    int (*queue_send)(void *queue, const void *item, uint32_t ticks, int where);
+    int (*queue_receive)(void *queue, void *item, uint32_t ticks, int peek);
+    int (*queue_count)(void *queue, int spaces);
+    int (*queue_reset)(void *queue);
+    void (*queue_delete)(void *queue);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -652,6 +673,25 @@ extern const bl_api_t *BL;
 #define BL_MINOR_eth_ip 9
 #define BL_MINOR_eth_mac 9
 #define BL_MINOR_eth_maintain 9
+#define BL_MINOR_task_create 10
+#define BL_MINOR_task_delete 10
+#define BL_MINOR_task_current 10
+#define BL_MINOR_task_name 10
+#define BL_MINOR_task_stack_free 10
+#define BL_MINOR_task_priority 10
+#define BL_MINOR_task_suspend 10
+#define BL_MINOR_task_info 10
+#define BL_MINOR_sem_create 10
+#define BL_MINOR_sem_take 10
+#define BL_MINOR_sem_give 10
+#define BL_MINOR_sem_count 10
+#define BL_MINOR_sem_delete 10
+#define BL_MINOR_queue_create 10
+#define BL_MINOR_queue_send 10
+#define BL_MINOR_queue_receive 10
+#define BL_MINOR_queue_count 10
+#define BL_MINOR_queue_reset 10
+#define BL_MINOR_queue_delete 10
 
 /* Milliseconds since boot. */
 static inline uint32_t millis(void) { return BL_CALL(millis)(); }
@@ -1606,6 +1646,82 @@ static inline int bl_eth_mac(uint8_t *mac) { return BL_CALL(eth_mac)(mac); }
 #if defined(BL_HAS_ETHERNET)
 /* Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound). */
 static inline int bl_eth_maintain(void) { return BL_CALL(eth_maintain)(); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Start a task running fn(arg) (xTaskCreatePinnedToCore). stack_bytes is raised to at least 3072; priority is capped at BL_TASK_MAX_PRIORITY (10); core 0 or 1, or -1 for either. A task whose fn returns is deleted. Returns the task, or NULL. */
+static inline void * bl_task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core) { return BL_CALL(task_create)(fn, name, stack_bytes, arg, priority, core); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Delete a task; NULL = the calling task (then it doesn't return). Deleting the sketch's own task (vTaskDelete(NULL) at the end of setup()) ends loop() and leaves the sketch's other tasks running. */
+static inline void bl_task_delete(void *task) { BL_CALL(task_delete)(task); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* The calling task. */
+static inline void * bl_task_current(void) { return BL_CALL(task_current)(); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* A task's name; NULL = the calling task. */
+static inline const char * bl_task_name(void *task) { return BL_CALL(task_name)(task); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* The least free stack the task has had, in bytes (uxTaskGetStackHighWaterMark); NULL = the calling task. */
+static inline uint32_t bl_task_stack_free(void *task) { return BL_CALL(task_stack_free)(task); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Set a task's priority (capped at BL_TASK_MAX_PRIORITY); -1 only reads it. NULL = the calling task. Returns the priority. */
+static inline int bl_task_priority(void *task, int priority) { return BL_CALL(task_priority)(task, priority); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* vTaskSuspend (suspend 1) or vTaskResume (0). NULL = the calling task. */
+static inline void bl_task_suspend(void *task, int suspend) { BL_CALL(task_suspend)(task, suspend); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* BL_TASK_INFO_CORE: the core the caller runs on (xPortGetCoreID). BL_TASK_INFO_COUNT: how many tasks exist, Baseline's included. BL_TASK_INFO_CORES: the chip's cores. */
+static inline int bl_task_info(int what) { return BL_CALL(task_info)(what); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* New semaphore: BL_SEM_MUTEX, BL_SEM_RECURSIVE (recursive mutex), BL_SEM_BINARY (starts empty) or BL_SEM_COUNTING (max and initial count). Returns it, or NULL. */
+static inline void * bl_sem_create(int type, uint32_t max, uint32_t initial) { return BL_CALL(sem_create)(type, max, initial); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Take it, waiting up to ticks. recursive 1 for a BL_SEM_RECURSIVE mutex. 1 taken, 0 timed out. */
+static inline int bl_sem_take(void *sem, uint32_t ticks, int recursive) { return BL_CALL(sem_take)(sem, ticks, recursive); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Give it back. 1, or 0 if it couldn't be given (not the holder, or already full). */
+static inline int bl_sem_give(void *sem, int recursive) { return BL_CALL(sem_give)(sem, recursive); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* The count (uxSemaphoreGetCount): for a mutex, 1 free, 0 taken. */
+static inline int bl_sem_count(void *sem) { return BL_CALL(sem_count)(sem); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Delete it. */
+static inline void bl_sem_delete(void *sem) { BL_CALL(sem_delete)(sem); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* New queue of length items of item_size bytes, copied in and out. Returns it, or NULL. */
+static inline void * bl_queue_create(uint32_t length, uint32_t item_size) { return BL_CALL(queue_create)(length, item_size); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Copy item in: where = BL_QUEUE_BACK, BL_QUEUE_FRONT or BL_QUEUE_OVERWRITE (length-1 queues). Waits up to ticks for room. 1 sent, 0 full. */
+static inline int bl_queue_send(void *queue, const void *item, uint32_t ticks, int where) { return BL_CALL(queue_send)(queue, item, ticks, where); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Copy the first item out (and remove it, unless peek is 1), waiting up to ticks for one. 1 received, 0 empty. */
+static inline int bl_queue_receive(void *queue, void *item, uint32_t ticks, int peek) { return BL_CALL(queue_receive)(queue, item, ticks, peek); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Items waiting (spaces 0) or free places (spaces 1). */
+static inline int bl_queue_count(void *queue, int spaces) { return BL_CALL(queue_count)(queue, spaces); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Empty it. Returns 1. */
+static inline int bl_queue_reset(void *queue) { return BL_CALL(queue_reset)(queue); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* Delete it. */
+static inline void bl_queue_delete(void *queue) { BL_CALL(queue_delete)(queue); }
 #endif
 #endif /* BASELINE_FIRMWARE */
 

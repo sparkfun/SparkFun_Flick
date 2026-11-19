@@ -99,6 +99,27 @@ short, make shared variables `volatile`, guard multi-variable reads with
 `noInterrupts()`/`interrupts()`). `Ticker` callbacks still run on the sketch's
 own context.
 
+## Tasks, mutexes and queues (ESP32 family)
+
+FreeRTOS's own names work without an include (`<freertos/FreeRTOS.h>`,
+`task.h`, `semphr.h` and `queue.h` may be included too): `xTaskCreate`,
+`xTaskCreatePinnedToCore`, `vTaskDelete`, `vTaskDelay`, `vTaskDelayUntil`,
+`xTaskGetTickCount`, `xTaskGetCurrentTaskHandle`, `pcTaskGetName`,
+`uxTaskGetStackHighWaterMark`, `uxTaskPriorityGet`/`vTaskPrioritySet`,
+`vTaskSuspend`/`vTaskResume`, `uxTaskGetNumberOfTasks`, `xPortGetCoreID`,
+`xPortGetFreeHeapSize`, `xPortGetMinimumEverFreeHeapSize`; mutexes, recursive
+mutexes, binary and counting semaphores (`xSemaphoreCreateMutex`, `Take`,
+`Give`, ...); queues (`xQueueCreate`, `xQueueSend`, `SendToFront`,
+`Overwrite`, `Receive`, `Peek`, `uxQueueMessagesWaiting`, `xQueueReset`, ...).
+
+- A sketch's tasks run its code at the same time as `loop()`: guard shared data with a mutex.
+- Callbacks (Ticker, ESP-NOW, BLE, WiFi events) still arrive only on the sketch's own task; `delay()` in another task just waits.
+- One tick is 1 ms. Priorities are capped at 10 (Baseline's network, timer and IPC tasks run above), and stacks are at least 3072 bytes.
+- Sketch code never runs in an interrupt, so the `...FromISR` calls are the ordinary ones.
+- `vTaskDelete(NULL)` at the end of `setup()` ends `loop()` and keeps the sketch's other tasks running (`flick info` says `running: loop() ended by vTaskDelete`).
+- A crash in any of the sketch's tasks rolls the sketch back like a crash in `loop()`. A task that spins on core 0 without waiting trips the idle task's watchdog after 5 s (a crash too); on core 1 it only slows the sketch.
+- Not there: software timers (`xTimerCreate`), event groups, task notifications, stream and message buffers, `portENTER_CRITICAL`, `vTaskSuspendAll`, task snapshots. Use `Ticker` for timers.
+
 ## What each board has
 
 Each chip's `bl_target.h` says what it has, and the SDK declares only those
@@ -119,6 +140,7 @@ a line from flick saying why. Compat headers for a missing feature stop with
 | `BL_HAS_DAC` | classic ESP32 | `dacWrite` |
 | `BL_HAS_USB_DEVICE` | ESP32-S3 | USB keyboard, mouse, gamepad, MIDI |
 | `BL_HAS_AUDIO` | Teensy 4.0, 4.1 | the Teensy Audio library |
+| `BL_HAS_RTOS` | every ESP32 chip | FreeRTOS tasks, semaphores, queues (above) |
 
 Ticker, Servo, `tone()`, Preferences, LittleFS, SD, Wire, SPI and the UARTs
 work on every board.

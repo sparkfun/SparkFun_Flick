@@ -148,6 +148,9 @@ static inline bool psramFound(void) { return bl_system_info(BL_INFO_PSRAM_SIZE) 
 }
 #endif
 
+/* FreeRTOS names (xTaskCreate, xSemaphoreTake, ...) where the board has them */
+#include "baseline_rtos.h"
+
 /* C++ sketches (.ino/.cpp): Serial, String, WiFi, HTTPClient, Wire, ESP, esp_now, ... */
 #include "baseline_arduino.h"
 

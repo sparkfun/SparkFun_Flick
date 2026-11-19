@@ -1,4 +1,4 @@
-# Baseline API reference (ABI 1.9)
+# Baseline API reference (ABI 1.10)
 
 Generated from `api/baseline_api.txt` by `tools/gen_api.py`. Do not edit.
 
@@ -301,3 +301,22 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_eth_ip` | `uint32_t eth_ip(int which)` | 1.9 | IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS. |
 | `bl_eth_mac` | `int eth_mac(uint8_t *mac)` | 1.9 | The MAC address in use (6 bytes). |
 | `bl_eth_maintain` | `int eth_maintain(void)` | 1.9 | Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound). |
+| `bl_task_create` | `void * task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core)` | 1.10 | Start a task running fn(arg) (xTaskCreatePinnedToCore). stack_bytes is raised to at least 3072; priority is capped at BL_TASK_MAX_PRIORITY (10); core 0 or 1, or -1 for either. A task whose fn returns is deleted. Returns the task, or NULL. |
+| `bl_task_delete` | `void task_delete(void *task)` | 1.10 | Delete a task; NULL = the calling task (then it doesn't return). Deleting the sketch's own task (vTaskDelete(NULL) at the end of setup()) ends loop() and leaves the sketch's other tasks running. |
+| `bl_task_current` | `void * task_current(void)` | 1.10 | The calling task. |
+| `bl_task_name` | `const char * task_name(void *task)` | 1.10 | A task's name; NULL = the calling task. |
+| `bl_task_stack_free` | `uint32_t task_stack_free(void *task)` | 1.10 | The least free stack the task has had, in bytes (uxTaskGetStackHighWaterMark); NULL = the calling task. |
+| `bl_task_priority` | `int task_priority(void *task, int priority)` | 1.10 | Set a task's priority (capped at BL_TASK_MAX_PRIORITY); -1 only reads it. NULL = the calling task. Returns the priority. |
+| `bl_task_suspend` | `void task_suspend(void *task, int suspend)` | 1.10 | vTaskSuspend (suspend 1) or vTaskResume (0). NULL = the calling task. |
+| `bl_task_info` | `int task_info(int what)` | 1.10 | BL_TASK_INFO_CORE: the core the caller runs on (xPortGetCoreID). BL_TASK_INFO_COUNT: how many tasks exist, Baseline's included. BL_TASK_INFO_CORES: the chip's cores. |
+| `bl_sem_create` | `void * sem_create(int type, uint32_t max, uint32_t initial)` | 1.10 | New semaphore: BL_SEM_MUTEX, BL_SEM_RECURSIVE (recursive mutex), BL_SEM_BINARY (starts empty) or BL_SEM_COUNTING (max and initial count). Returns it, or NULL. |
+| `bl_sem_take` | `int sem_take(void *sem, uint32_t ticks, int recursive)` | 1.10 | Take it, waiting up to ticks. recursive 1 for a BL_SEM_RECURSIVE mutex. 1 taken, 0 timed out. |
+| `bl_sem_give` | `int sem_give(void *sem, int recursive)` | 1.10 | Give it back. 1, or 0 if it couldn't be given (not the holder, or already full). |
+| `bl_sem_count` | `int sem_count(void *sem)` | 1.10 | The count (uxSemaphoreGetCount): for a mutex, 1 free, 0 taken. |
+| `bl_sem_delete` | `void sem_delete(void *sem)` | 1.10 | Delete it. |
+| `bl_queue_create` | `void * queue_create(uint32_t length, uint32_t item_size)` | 1.10 | New queue of length items of item_size bytes, copied in and out. Returns it, or NULL. |
+| `bl_queue_send` | `int queue_send(void *queue, const void *item, uint32_t ticks, int where)` | 1.10 | Copy item in: where = BL_QUEUE_BACK, BL_QUEUE_FRONT or BL_QUEUE_OVERWRITE (length-1 queues). Waits up to ticks for room. 1 sent, 0 full. |
+| `bl_queue_receive` | `int queue_receive(void *queue, void *item, uint32_t ticks, int peek)` | 1.10 | Copy the first item out (and remove it, unless peek is 1), waiting up to ticks for one. 1 received, 0 empty. |
+| `bl_queue_count` | `int queue_count(void *queue, int spaces)` | 1.10 | Items waiting (spaces 0) or free places (spaces 1). |
+| `bl_queue_reset` | `int queue_reset(void *queue)` | 1.10 | Empty it. Returns 1. |
+| `bl_queue_delete` | `void queue_delete(void *queue)` | 1.10 | Delete it. |

@@ -18,11 +18,12 @@
  * table per CPU, so Baseline maps the active slot four times: the IRAM0 and
  * DROM0 windows below, on both cores. Offset N of the slot then appears at
  * IBUS_BASE+N (code) and DBUS_BASE+N (header, rodata, .data initializers).
- * Both windows are the top 512 KB of their regions (MMU entries 120-127 and
- * 56-63); Baseline's own code and rodata start at the bottom. */
-#define BL_SKETCH_IBUS_BASE     0x40380000
-#define BL_SKETCH_DBUS_BASE     0x3F780000
-#define BL_SKETCH_MAX_SIZE      0x80000     /* 512 KB */
+ * Both windows are the top 1 MB of their regions (MMU entries 112-127 and
+ * 48-63); Baseline's own code and rodata start at the bottom and must end
+ * below them (code ends near 0x40252000, rodata near 0x3F45D000). */
+#define BL_SKETCH_IBUS_BASE     0x40300000
+#define BL_SKETCH_DBUS_BASE     0x3F700000
+#define BL_SKETCH_MAX_SIZE      0x100000    /* 1 MB */
 
 /* ---- RAM window --------------------------------------------------------
  * Sketch .data + .bss, reserved out of the heap by Baseline. Static DRAM ends
@@ -49,6 +50,7 @@
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
 #define BL_HAS_LED_STRIP      1       /* WS2812-type LEDs: rgbLedWrite, FastLED.h (RMT or bit-banged) */
+#define BL_HAS_RTOS           1       /* FreeRTOS tasks, semaphores, queues (xTaskCreate, ...) */
 #define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, WiFi OTA */
 #define BL_HAS_NET            1       /* sockets and HTTP (WiFiClient, WiFiUDP, HTTPClient) */
 #define BL_HAS_TLS            1       /* WiFiClientSecure, HTTPS */

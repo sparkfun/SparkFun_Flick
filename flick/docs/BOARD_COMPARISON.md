@@ -32,17 +32,17 @@ The rest of this page is about the boards themselves. Numbers in it come from Ba
 
 | Board | Chip | Flash | PSRAM | USB | Baseline updates | Largest sketch | Sketch RAM | Files (LittleFS) |
 |---|---|---|---|---|---|---|---|---|
-| Thing Plus C6 | ESP32-C6, 1 core | 16 MB | none | native | dual (keeps the sketch) | 512 KB | 32 KB | 8.9 MB |
-| Thing Plus C5 | ESP32-C5, 1 core | 8 MB | 8 MB | native | dual | 512 KB | 32 KB | 1.4 MB |
+| Thing Plus C6 | ESP32-C6, 1 core | 16 MB | none | native | dual (keeps the sketch) | 1 MB | 32 KB | 7.9 MB |
+| Thing Plus C5 | ESP32-C5, 1 core | 8 MB | 8 MB | native | dual | 1 MB | 32 KB | 384 KB |
 | Thing Plus S3 | ESP32-S3, 2 cores | 4 MB | 2 MB | native | staged (erases the sketch and files) | 256 KB | **64 KB** | 1.19 MB |
 | Qwiic Pocket C6 | ESP32-C6, 1 core | 4 MB | none | native | staged | 256 KB | 32 KB | 1.19 MB |
 | Pro Micro C3 | ESP32-C3, 1 core | 4 MB | none | native | staged | 256 KB | 32 KB | 1.19 MB |
-| IoT RedBoard - ESP32 | ESP32, 2 cores | 16 MB | none | CH340 | dual | 512 KB | 32 KB | 8.9 MB |
-| DataLogger IoT | ESP32, 2 cores | 16 MB | none | CH340 | dual | 512 KB | 32 KB | 8.9 MB |
-| Thing Plus C (ESP32 WROOM) | ESP32, 2 cores | 16 MB | none | CH340 | dual | 512 KB | 32 KB | 8.9 MB |
-| RTK Postcard | ESP32 (PICO), 2 cores | 8 MB | 2 MB | CH342 | dual | 512 KB | 32 KB | 1.4 MB |
-| IoT RedBoard - ESP32-P4 (PoE) | ESP32-P4, 2 cores | 16 MB | 32 MB | native | dual | 512 KB | 32 KB | 8.9 MB |
-| IoT RedBoard - ESP32-P4 (WiFi BLE) | ESP32-P4, 2 cores, + ESP32-C5 for WiFi 6 and BLE | 16 MB | 32 MB | native | dual | 512 KB | 32 KB | 8.9 MB |
+| IoT RedBoard - ESP32 | ESP32, 2 cores | 16 MB | none | CH340 | dual | 1 MB | 32 KB | 7.9 MB |
+| DataLogger IoT | ESP32, 2 cores | 16 MB | none | CH340 | dual | 1 MB | 32 KB | 7.9 MB |
+| Thing Plus C (ESP32 WROOM) | ESP32, 2 cores | 16 MB | none | CH340 | dual | 1 MB | 32 KB | 7.9 MB |
+| RTK Postcard | ESP32 (PICO), 2 cores | 8 MB | 2 MB | CH342 | dual | 1 MB | 32 KB | 384 KB |
+| IoT RedBoard - ESP32-P4 (PoE) | ESP32-P4, 2 cores | 16 MB | 32 MB | native | dual | 1 MB | 32 KB | 7.9 MB |
+| IoT RedBoard - ESP32-P4 (WiFi BLE) | ESP32-P4, 2 cores, + ESP32-C5 for WiFi 6 and BLE | 16 MB | 32 MB | native | dual | 1 MB | 32 KB | 7.9 MB |
 | Teensy 4.0 | i.MX RT1062, 600 MHz | 2 MB | none | native (Teensy) | Teensy Loader only | 384 KB | **128 KB** | 576 KB |
 | Teensy 4.1 | i.MX RT1062, 600 MHz | 8 MB | optional chips | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 3.75 MB |
 | MicroMod Teensy | i.MX RT1062, 600 MHz | 16 MB | none | native (Teensy) | Teensy Loader only | 1 MB | **128 KB** | 11.75 MB |
@@ -165,7 +165,7 @@ RISC-V sketches are 5–25 % larger, partly because they're built without linker
 - **RGB LED and LED strips are bit-banged** rather than driven by the RMT hardware, a holdover from when IRAM was scarcer. It works, but it hasn't been checked on a long strip.
 - **Shared pins:** the IoT RedBoard's STAT LED shares GPIO 18 with SPI's SCK. The Postcard's STAT LED is also its BOOT button (GPIO 0).
 - **The DataLogger** powers its Qwiic port and microSD slot from a switched 3.3 V rail on GPIO 32, which Baseline turns on at boot.
-- **Upsides:** these are the only boards with Bluetooth Classic (`BluetoothSerial`) and a DAC (`dacWrite`); they have touch pins; and the 16 MB boards have the most room for files (8.9 MB).
+- **Upsides:** these are the only boards with Bluetooth Classic (`BluetoothSerial`) and a DAC (`dacWrite`); they have touch pins; and the 16 MB boards have the most room for files (7.9 MB).
 
 ### ESP32-S3: Thing Plus S3
 
@@ -189,13 +189,13 @@ RISC-V sketches are 5–25 % larger, partly because they're built without linker
 - **The Thing Plus C6's only LED is the RGB one.** Since 0.3.0, `digitalWrite(LED_BUILTIN, …)` lights it white, but `analogWrite` dimming is a white level rather than PWM.
 - **The Qwiic Pocket C6 is a 4 MB board.** Its Baseline slot is 93 % full (155 KB left), updates are staged, and it has no RGB LED.
 - **No touch pins, no Bluetooth Classic, no DAC.**
-- **Upsides:** WiFi 6. The Thing Plus C6 has 16 MB, with dual Baseline slots and 8.9 MB for files.
+- **Upsides:** WiFi 6. The Thing Plus C6 has 16 MB, with dual Baseline slots and 7.9 MB for files.
 
 ### ESP32-C5: Thing Plus C5
 
 - **One core**, and the same WiFi-during-erase limit as the other single-core chips.
 - **The newest chip here** (revision 1.0), so its ESP-IDF and Arduino support has had the least time in use. Its BOOT-button pin for safe mode (GPIO 28) hasn't been confirmed on the board yet.
-- **8 MB of flash:** 1.4 MB for files, and a 2.75 MB Baseline slot that's 76 % full.
+- **8 MB of flash:** 384 KB for files (the two 1 MB sketch slots take the rest), and a 2.75 MB Baseline slot that's 76 % full.
 - **Its only LED is the RGB one**, as on the Thing Plus C6. No touch pins, Bluetooth Classic or DAC.
 - **Upsides:** dual-band WiFi 6 (2.4 and 5 GHz), 8 MB of PSRAM, and dual Baseline slots.
 

@@ -64,6 +64,21 @@
 /* ---- Callbacks run synchronously on the sketch task ---- */
 typedef void (*bl_callback_t)(void *arg);
 
+/* ---- FreeRTOS (ABI 1.10: task_*, sem_*, queue_*) ---- */
+#define BL_WAIT_FOREVER         0xFFFFFFFFu     /* ticks: portMAX_DELAY */
+#define BL_TASK_MAX_PRIORITY    10              /* above it run Baseline's network, timer and IPC tasks */
+#define BL_TASK_MIN_STACK       3072            /* bytes */
+#define BL_TASK_INFO_CORE       0
+#define BL_TASK_INFO_COUNT      1
+#define BL_TASK_INFO_CORES      2
+#define BL_SEM_MUTEX            0
+#define BL_SEM_RECURSIVE        1
+#define BL_SEM_BINARY           2
+#define BL_SEM_COUNTING         3
+#define BL_QUEUE_BACK           0
+#define BL_QUEUE_FRONT          1
+#define BL_QUEUE_OVERWRITE      2
+
 /* An argument or result of bl_audio_create()/bl_audio_call() (ABI 1.8):
  * which member is used is fixed by the method (baseline_audio.h). */
 typedef union {

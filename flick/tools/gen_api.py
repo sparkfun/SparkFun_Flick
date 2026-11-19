@@ -162,6 +162,7 @@ WRAPPER_PREFIX_REQUIRES = [
     (("audio_",), "BL_HAS_AUDIO"),
     (("usbh_",), "BL_HAS_USB_HOST"),
     (("isr_", "dma_channel_"), "BL_TARGET_SKETCH_ISR"),
+    (("task_", "sem_", "queue_"), "BL_HAS_RTOS"),
 ]
 # Arduino-ESP32 names (not bl_*) that would mislead elsewhere.
 WRAPPER_NAME_REQUIRES = {

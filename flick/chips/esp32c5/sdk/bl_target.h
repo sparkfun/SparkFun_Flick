@@ -21,7 +21,7 @@
  * bottom; the sketch window sits 24 MB in (as on the S3), so IBUS == DBUS. */
 #define BL_SKETCH_IBUS_BASE     0x43800000
 #define BL_SKETCH_DBUS_BASE     0x43800000
-#define BL_SKETCH_MAX_SIZE      0x80000     /* 512 KB */
+#define BL_SKETCH_MAX_SIZE      0x100000    /* 1 MB */
 
 /* ---- RAM window --------------------------------------------------------
  * Sketch .data + .bss, reserved out of the heap by Baseline. Just below the
@@ -35,6 +35,7 @@
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_ESP32     1       /* Arduino-ESP32 / ESP-IDF names (esp_*, ESP, ledc*, ps_malloc, ...) */
 #define BL_HAS_LED_STRIP      1       /* WS2812-type LEDs: rgbLedWrite, FastLED.h (RMT or bit-banged) */
+#define BL_HAS_RTOS           1       /* FreeRTOS tasks, semaphores, queues (xTaskCreate, ...) */
 #define BL_HAS_WIFI           1       /* WiFi, HTTP, web server, MQTT, mDNS, WiFi OTA */
 #define BL_HAS_NET            1       /* sockets and HTTP (WiFiClient, WiFiUDP, HTTPClient) */
 #define BL_HAS_TLS            1       /* WiFiClientSecure, HTTPS */

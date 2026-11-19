@@ -32,6 +32,7 @@ arduino-cli: $FLICK_ARDUINO_CLI, PATH, then the copy bundled with Arduino IDE 2.
 """
 import argparse
 import base64
+import bisect
 import codecs
 import glob
 import gzip
@@ -406,7 +407,7 @@ def _blank_comments_and_strings(text):
     i, n = 0, len(text)
     while i < n:
         c = text[i]
-        if text.startswith("//", i) or (c == "#" and (i == 0 or text[i - 1] == "\n" or text[:i].rstrip(" \t").endswith("\n"))):
+        if text.startswith("//", i) or (c == "#" and not text[text.rfind("\n", 0, i) + 1:i].strip(" \t")):
             j = i
             while j < n and text[j] != "\n":
                 if text[j] == "\\" and j + 1 < n and text[j + 1] == "\n":
@@ -458,12 +459,34 @@ def _conditionals(text):
     return per_line
 
 
-def ino_with_prototypes(src):
+def merge_inos(inos, main):
+    """A sketch's .ino files as one text, the way the Arduino IDE compiles them:
+    the main file first, then the others in alphabetical order, each starting
+    with a #line so messages name the original file. Returns the text and a
+    function mapping a line of the text to (file, line in that file)."""
+    parts, starts, line = [], [], 1
+    for f in [main] + sorted((f for f in inos if f != main), key=lambda f: f.name):
+        body = f.read_text(errors="ignore")
+        if not body.endswith("\n"):
+            body += "\n"
+        parts.append(f'#line 1 "{f.as_posix()}"\n' + body)
+        starts.append((line, f.as_posix()))          # the #line itself is on this line
+        line += 1 + body.count("\n")
+
+    def where(n):
+        start, name = next(s for s in reversed(starts) if s[0] <= n)
+        return name, n - start
+    return "".join(parts), where
+
+
+def ino_with_prototypes(src, text=None, where=None):
     """The .ino's text with prototypes added, or None if it needs none. A
     function defined inside #if/#ifdef gets its prototype inside the same
     conditions, so two versions of one function (#ifdef USE_SPI ... #else ...)
-    declare only the one that is compiled, as with the Arduino IDE."""
-    text = src.read_text(errors="ignore")
+    declare only the one that is compiled, as with the Arduino IDE.
+    text/where: several .ino files merged by merge_inos()."""
+    if text is None:
+        text = src.read_text(errors="ignore")
     conds = _conditionals(text)
     clean = _blank_comments_and_strings(text)
     # Top level only: blank out everything inside braces (keeping the braces).
@@ -499,18 +522,32 @@ def ino_with_prototypes(src):
                 flat.append(ch if depth == 0 else " ")
         flat.append("\n")
     flat = "".join(flat)[:len(clean)]
+    # Blanked function bodies leave long runs of whitespace, over which the
+    # regex is slow (quadratic in the run's length). Search a copy where each run
+    # is one character ("\n" if it held a newline), mapping offsets back with pos.
+    short, pos = [], []
+    for m in re.finditer(r"\s+|\S+", flat):
+        s = m.group()
+        if s[0].isspace():
+            short.append("\n" if "\n" in s else " ")
+            pos.append(m.start())
+        else:
+            short.append(s)
+            pos.extend(range(m.start(), m.end()))
+    short = "".join(short)
+    newlines = [i for i, c in enumerate(text) if c == "\n"]
     protos, first = [], None
-    for m in FUNC_DEF_RE.finditer(flat):
+    for m in FUNC_DEF_RE.finditer(short):
         sig, name, args = m.group(1), m.group(2), m.group(3)
         head = sig[: sig.rfind(name)].strip()
         if name in PROTO_KEYWORDS or not head or re.search(r"\b(class|struct|enum|union|namespace|template|operator)\b|\[", sig):
             continue
         if first is None:
-            first = m.start(1)          # prototypes go before the first function, even setup()
+            first = pos[m.start(1)]     # prototypes go before the first function, even setup()
         if name in PROTO_DECLARED or "=" in args:
             continue                    # already declared / default arguments may not be repeated
         proto = " ".join(sig.split()) + ";"
-        groups = conds[text.count("\n", 0, m.start(2))]
+        groups = conds[bisect.bisect_left(newlines, pos[m.start(2)])]
         if groups:
             proto = "\n".join([*(d for g in groups for d in g), proto, *["#endif"] * len(groups)])
         protos.append(proto)
@@ -519,8 +556,13 @@ def ino_with_prototypes(src):
     line = text.count("\n", 0, first) + 1
     # Insert at the start of the line that holds the first definition.
     cut = text.rfind("\n", 0, first) + 1
-    name = src.as_posix()
-    return (f'#line 1 "{name}"\n' + text[:cut] + "\n".join(protos) + "\n" +
+    if where:
+        name, line = where(line)
+        head = ""                       # merged text starts with its own #line
+    else:
+        name = src.as_posix()
+        head = f'#line 1 "{name}"\n'
+    return (head + text[:cut] + "\n".join(protos) + "\n" +
             f'#line {line} "{name}"\n' + text[cut:])
 
 
@@ -646,6 +688,9 @@ FEATURE_NAMES = [
     (r"dacWrite", "a DAC", "BL_HAS_DAC"),
     (r"rgbLedWrite|neopixelWrite|FastLED|CRGB\w*|CHSV", "WS2812 LED support", "BL_HAS_LED_STRIP"),
     (r"USB\w*", "USB device mode in this Baseline", "BL_HAS_USB_DEVICE"),
+    (r"x(Task|Semaphore|Queue|Port)\w*|v(Task|Semaphore|Queue)\w*|ux(Task|Semaphore|Queue)\w*|pcTask\w*|"
+     r"(Task|Semaphore|Queue)Handle_t|(U)?BaseType_t|TickType_t|portMAX_DELAY|portTICK_\w+|pdMS_TO_TICKS|pd(TRUE|FALSE|PASS|FAIL)",
+     "FreeRTOS", "BL_HAS_RTOS"),
     (r"esp_\w+|ESP_\w+|ESP|EspClass|ledc\w+|ps_(m|c|re)alloc|psramFound|temperatureRead|analogReadMilliVolts|"
      r"analogSet(Pin)?Attenuation|timer(Begin|End|Start|Stop|Alarm|AttachInterrupt\w*)|"
      r"hw_timer_t|I2SClass|SD_MMC|getLocalTime|getCpuFrequencyMhz|log_[ewidv]|gpio_num_t|GPIO_NUM_\w+",
@@ -736,7 +781,17 @@ def build(proj, target_name=None):
             sys.exit(r.returncode)
 
     objs = []
-    for src in user + [SDK / "src" / "sketch_crt.c"]:     # crt carries the sketch's name/stack
+    if len(inos) > 1:
+        # Several .ino files are one translation unit, as in the Arduino IDE:
+        # they share globals, types and functions without headers.
+        main = proj / (proj.name + ".ino")
+        text, where = merge_inos(inos, main if main in inos else inos[0])
+        gen = out / (proj.name + ".ino.merged.cpp")
+        gen.write_text(ino_with_prototypes(main, text, where) or text)
+        obj = out / (proj.name + ".ino.o")
+        compile_one(gen, obj, ["-include", "baseline.h", *defs])
+        objs.append(str(obj))
+    for src in ([] if len(inos) > 1 else inos) + user[len(inos):] + [SDK / "src" / "sketch_crt.c"]:
         obj = out / (src.name + ".o")
         if src.suffix == ".ino":
             with_protos = ino_with_prototypes(src)
@@ -769,7 +824,7 @@ def build(proj, target_name=None):
                                                  *(f for d in target["sdk_dirs"] for f in d.glob("*")),
                                                  target["dir"] / "target.json",
                                                  target["chip_dir"] / "chip.json", Path(__file__)])
-    shared = ["sketch_libc.c", "sketch_time.c", "sketch_ctype.c", *target["sdk_sources"]] + (
+    shared = ["sketch_libc.c", "sketch_time.c", "sketch_ctype.c", "sketch_rtos.c", *target["sdk_sources"]] + (
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
          "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp",
@@ -2097,8 +2152,17 @@ def build_baseline_idf(target, core):
                       target["idf_target"]], env=env)
     run(idf_py + [f"-DFLICK_INCLUDE_DIRS={inc}", "build"], env=env)
 
-    # One blob at 0x0: bootloader + partition table + Baseline.
+    # Baseline's code and rodata are mapped from the bottom of the flash address
+    # range; they must end below the sketch windows (bl_target.h).
     b = proj / "build"
+    elf = (b / "baseline.elf").read_bytes()
+    for sym, base, what in (("_instruction_reserved_end", target["ibus"], "code"),
+                            ("_rodata_reserved_end", target["dbus"], "rodata")):
+        end = elf_symbol(elf, sym)
+        if end and end[0] > base:
+            sys.exit(f"error: Baseline's {what} ends at 0x{end[0]:08X}, inside the sketch window at 0x{base:08X}")
+
+    # One blob at 0x0: bootloader + partition table + Baseline.
     args = json.loads((b / "flasher_args.json").read_text())
     out = DIST / target["name"] / f"baseline-{target['name']}.bin"
     out.parent.mkdir(parents=True, exist_ok=True)

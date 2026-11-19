@@ -342,6 +342,18 @@ void sketch_wdt_resume(bool paused)
     }
 }
 
+/* The sketch is deleting its own task (vTaskDelete(NULL) at the end of setup(),
+ * as Arduino-ESP32 sketches do to keep only the tasks they started). Take it off
+ * the task watchdog first, or the watchdog would call the missing feeds a hang. */
+void sketch_task_deleting(void *task)
+{
+    TaskHandle_t t = task ? (TaskHandle_t)task : xTaskGetCurrentTaskHandle();
+    if (s_task && t == s_task) {
+        esp_task_wdt_delete(t);
+        s_status = "running: loop() ended by vTaskDelete";
+    }
+}
+
 const char *sketch_status(void)
 {
     return s_status;

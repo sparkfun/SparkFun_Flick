@@ -296,3 +296,22 @@ extern "C" __attribute__((weak)) int bl_impl_eth_status(int what) { return BL_ER
 extern "C" __attribute__((weak)) uint32_t bl_impl_eth_ip(int which) { return 0; }
 extern "C" __attribute__((weak)) int bl_impl_eth_mac(uint8_t *mac) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) int bl_impl_eth_maintain(void) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void * bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core) { return NULL; }
+extern "C" __attribute__((weak)) void bl_impl_task_delete(void *task) {}
+extern "C" __attribute__((weak)) void * bl_impl_task_current(void) { return NULL; }
+extern "C" __attribute__((weak)) const char * bl_impl_task_name(void *task) { return NULL; }
+extern "C" __attribute__((weak)) uint32_t bl_impl_task_stack_free(void *task) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_task_priority(void *task, int priority) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void bl_impl_task_suspend(void *task, int suspend) {}
+extern "C" __attribute__((weak)) int bl_impl_task_info(int what) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void * bl_impl_sem_create(int type, uint32_t max, uint32_t initial) { return NULL; }
+extern "C" __attribute__((weak)) int bl_impl_sem_take(void *sem, uint32_t ticks, int recursive) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_sem_give(void *sem, int recursive) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_sem_count(void *sem) { return 0; }
+extern "C" __attribute__((weak)) void bl_impl_sem_delete(void *sem) {}
+extern "C" __attribute__((weak)) void * bl_impl_queue_create(uint32_t length, uint32_t item_size) { return NULL; }
+extern "C" __attribute__((weak)) int bl_impl_queue_send(void *queue, const void *item, uint32_t ticks, int where) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_queue_receive(void *queue, void *item, uint32_t ticks, int peek) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_queue_count(void *queue, int spaces) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_queue_reset(void *queue) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void bl_impl_queue_delete(void *queue) {}

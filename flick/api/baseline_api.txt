@@ -430,3 +430,28 @@ abi_major = 1
 9 | uint32_t    | eth_ip            | int which                                  | bl_eth_ip            | IPv4 address, first octet in the low byte. which: BL_IP_STA (local), BL_IP_GATEWAY, BL_IP_SUBNET, BL_IP_DNS.
 9 | int         | eth_mac           | uint8_t *mac                               | bl_eth_mac           | The MAC address in use (6 bytes).
 9 | int         | eth_maintain      | void                                       | bl_eth_maintain      | Renew the DHCP lease if due (Ethernet.maintain(): 0 nothing, 1 renew failed, 2 renewed, 3 rebind failed, 4 rebound).
+
+# ======================= ABI 1.10 =========================================
+# ---- FreeRTOS tasks, semaphores and queues (BL_HAS_RTOS: the ESP32 family; baseline/src/bl_impl_rtos.cpp).
+# Sketches use FreeRTOS's own names (sdk/include/baseline_rtos.h). Sketch code runs on the tasks it
+# creates, never in an interrupt; callbacks (Ticker, ESP-NOW, WiFi events, ...) still run on the
+# sketch's own task. Handles are FreeRTOS's; times are in ticks (1 tick = 1 ms), BL_WAIT_FOREVER = portMAX_DELAY.
+10 | void *      | task_create       | bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core | bl_task_create | Start a task running fn(arg) (xTaskCreatePinnedToCore). stack_bytes is raised to at least 3072; priority is capped at BL_TASK_MAX_PRIORITY (10); core 0 or 1, or -1 for either. A task whose fn returns is deleted. Returns the task, or NULL.
+10 | void        | task_delete       | void *task                                 | bl_task_delete       | Delete a task; NULL = the calling task (then it doesn't return). Deleting the sketch's own task (vTaskDelete(NULL) at the end of setup()) ends loop() and leaves the sketch's other tasks running.
+10 | void *      | task_current      | void                                       | bl_task_current      | The calling task.
+10 | const char *| task_name         | void *task                                 | bl_task_name         | A task's name; NULL = the calling task.
+10 | uint32_t    | task_stack_free   | void *task                                 | bl_task_stack_free   | The least free stack the task has had, in bytes (uxTaskGetStackHighWaterMark); NULL = the calling task.
+10 | int         | task_priority     | void *task, int priority                   | bl_task_priority     | Set a task's priority (capped at BL_TASK_MAX_PRIORITY); -1 only reads it. NULL = the calling task. Returns the priority.
+10 | void        | task_suspend      | void *task, int suspend                    | bl_task_suspend      | vTaskSuspend (suspend 1) or vTaskResume (0). NULL = the calling task.
+10 | int         | task_info         | int what                                   | bl_task_info         | BL_TASK_INFO_CORE: the core the caller runs on (xPortGetCoreID). BL_TASK_INFO_COUNT: how many tasks exist, Baseline's included. BL_TASK_INFO_CORES: the chip's cores.
+10 | void *      | sem_create        | int type, uint32_t max, uint32_t initial   | bl_sem_create        | New semaphore: BL_SEM_MUTEX, BL_SEM_RECURSIVE (recursive mutex), BL_SEM_BINARY (starts empty) or BL_SEM_COUNTING (max and initial count). Returns it, or NULL.
+10 | int         | sem_take          | void *sem, uint32_t ticks, int recursive   | bl_sem_take          | Take it, waiting up to ticks. recursive 1 for a BL_SEM_RECURSIVE mutex. 1 taken, 0 timed out.
+10 | int         | sem_give          | void *sem, int recursive                   | bl_sem_give          | Give it back. 1, or 0 if it couldn't be given (not the holder, or already full).
+10 | int         | sem_count         | void *sem                                  | bl_sem_count         | The count (uxSemaphoreGetCount): for a mutex, 1 free, 0 taken.
+10 | void        | sem_delete        | void *sem                                  | bl_sem_delete        | Delete it.
+10 | void *      | queue_create      | uint32_t length, uint32_t item_size        | bl_queue_create      | New queue of length items of item_size bytes, copied in and out. Returns it, or NULL.
+10 | int         | queue_send        | void *queue, const void *item, uint32_t ticks, int where | bl_queue_send | Copy item in: where = BL_QUEUE_BACK, BL_QUEUE_FRONT or BL_QUEUE_OVERWRITE (length-1 queues). Waits up to ticks for room. 1 sent, 0 full.
+10 | int         | queue_receive     | void *queue, void *item, uint32_t ticks, int peek | bl_queue_receive | Copy the first item out (and remove it, unless peek is 1), waiting up to ticks for one. 1 received, 0 empty.
+10 | int         | queue_count       | void *queue, int spaces                    | bl_queue_count       | Items waiting (spaces 0) or free places (spaces 1).
+10 | int         | queue_reset       | void *queue                                | bl_queue_reset       | Empty it. Returns 1.
+10 | void        | queue_delete      | void *queue                                | bl_queue_delete      | Delete it.
