@@ -108,7 +108,8 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 - ✅ Baseline updating itself to a new build of the same version over USB.
 - ✅ Pulls that must fail, over HTTPS from GitHub: a file that isn't a `.bsu` is refused at its header, a missing file gives HTTP 404, a non-sketch is refused by `ota_pull_sketch`. No file is left behind, and Baseline sets the clock itself first (no `configTime()` in the sketch).
 - ✅ `flick test` 37/0/1 on the OTA Baseline.
-- ⬜ A successful pull (needs the `.bsu` on a server the board's WiFi reaches), a power cut during the stub's copy, RP2040 and Pico 2 boards, the Pico 2 W's no-backup case.
+- ✅ A successful pull from the v0.4.0 GitHub release (issue 28).
+- ⬜ A power cut during the stub's copy, RP2040 and Pico 2 boards, the Pico 2 W's no-backup case.
 
 ## Beginner path (2026-10-23)
 
@@ -196,3 +197,8 @@ Every example in `examples/` builds for the S3, the classic ESP32 and the C6 (`t
 28. **RP2040 / RP2350 Baseline updates (2026-11-18, Thing Plus RP2350).** Built on arduino-pico's OTA stub (`chips/rp2350/baseline/bl_rp2_update.cpp`, docs/OTA.md). Found on the way:
    - **A good install was reported as "NOT installed".** The new Baseline checks its flash against the update's SHA-256, and one 4 KB sector never matched: arduino-pico keeps BTstack's Bluetooth bond store (`__bluetooth_tlv`, 8 KB, zeros in the `.bin`) inside the image, and BTstack writes its header there at every start. **Fixed:** flick reads the store's place from the ELF and puts it in a 16-byte extension after the `.bsu` header; the check counts that range as zeros. Consequence: an update clears Bluetooth bonds, as a USB flash does.
    - **HTTPS pulls failed right after WiFi came up:** BearSSL checks certificate dates and the clock wasn't set. **Fixed:** pulls start NTP (default servers, unless the sketch started it) and wait up to 10 s.
+   - **Pull from the v0.4.0 GitHub release (2026-11-18): works** with the fixes below. The board downloaded the 631 KB `.bsu` (GitHub redirects to its file storage) in about 14 s, staged it, the stub installed it, and the release's own Baseline (build `3d72d45dc30d60eb`, the same ID as the release `.uf2`) ran its trial and confirmed itself. Four bugs found on the way, fixed after v0.4.0 (released RP Baselines still have them):
+     - **Every HTTP body was cut short.** arduino-pico's `HTTPClient::writeToPrint()` copies a byte at a time and stops at the first moment no byte is waiting, or after 5 s in all: 15 KB of 631 KB, still with status 200. `http_do()` (`bl_rp2_net.cpp`) now reads a body with a Content-Length in blocks until all of it is there (10 s without data = time-out, `BL_ERR_TIMEOUT` if short). Chunked bodies without a length still go through `writeToPrint()`.
+     - **A download was refused as "no gzip stream"** when a network chunk ended one byte after the `.bsu` header: the gzip magic is now checked across chunks.
+     - **A pull during a new Baseline's trial was refused** ("an update is still being installed"): a new update now confirms the one on trial.
+     - **A sketch's `http.getString()` of a big body was empty:** Arduino Strings grow with `realloc()`, which never used PSRAM on RP boards. `bl_impl_realloc()` now puts a big new block, or one that outgrows internal RAM, in PSRAM: a 631 KB `getString()` works (3-4 s).

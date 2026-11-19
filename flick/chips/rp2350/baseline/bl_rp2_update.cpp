@@ -220,6 +220,9 @@ static const char *rx_begin(uint32_t size, const uint8_t *sha)
         return rx_fail("LittleFS did not mount");
     }
     state_load();
+    if (s_st.state == ST_TRIAL) {
+        bl_update_confirm();    // running well enough to take another update: keep it
+    }
     if (s_st.state != ST_IDLE) {
         return rx_fail("an update is still being installed: restart the board first");
     }
@@ -323,10 +326,14 @@ static const char *rx_data(const uint8_t *data, uint32_t len)
             }
         }
     }
-    if (len) {
-        if (s_rx.next == BSU_HDR_SIZE && (len < 2 || data[0] != 0x1f || data[1] != 0x8b)) {
+    // The first two bytes after the header are gzip's magic. They may arrive in
+    // separate pieces (a download comes in whatever chunks the network gives).
+    for (uint32_t i = 0; i < len && s_rx.next + i < BSU_HDR_SIZE + 2; i++) {
+        if (data[i] != (s_rx.next + i == BSU_HDR_SIZE ? 0x1f : 0x8b)) {
             return rx_fail("the .bsu holds no gzip stream (made by an older flick?)");
         }
+    }
+    if (len) {
         bl_sha256_update(&s_rx.comp, data, len);
         s_rx.next += len;
         // Written to LittleFS a flash sector (4 KB) at a time: small writes cost

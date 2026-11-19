@@ -484,8 +484,36 @@ static int http_do(const char *method, const char *url, const char *headers, con
             }
         }
         int code = http.sendRequest(method, body, body_len);
-        if (code > 0) {
-            http.writeToPrint(&sink);
+        int size = code > 0 ? http.getSize() : -1;
+        if (code > 0 && size >= 0) {
+            // A known length: read it all. (HTTPClient's writeToPrint copies a byte
+            // at a time and stops at the first moment no byte is waiting, or after
+            // 5 s in all: big downloads came back cut short.) The time-out counts
+            // only time without data.
+            WiFiClient *s = http.getStreamPtr();
+            uint8_t buf[1460];
+            int got = 0;
+            uint32_t last = millis();
+            while (s && got < size && millis() - last < HTTP_TIMEOUT_MS) {
+                int n = s->available();
+                if (n > 0) {
+                    n = s->read(buf, (size_t)min(min(n, (int)sizeof(buf)), size - got));
+                    if (n > 0) {
+                        if (sink.write(buf, (size_t)n) != (size_t)n) {
+                            break;      // the sink refused (an update that failed a check)
+                        }
+                        got += n;
+                        last = millis();
+                    }
+                } else if (!s->connected()) {
+                    break;
+                } else {
+                    delay(1);
+                }
+            }
+            result = got == size ? code : BL_ERR_TIMEOUT;
+        } else if (code > 0) {
+            http.writeToPrint(&sink);       // chunked or no length: small bodies (API replies)
             result = code;
         } else {
             result = (code == HTTPC_ERROR_READ_TIMEOUT) ? BL_ERR_TIMEOUT : BL_ERR_FAIL;

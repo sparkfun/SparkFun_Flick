@@ -5,6 +5,7 @@
  * other entry is a weak stub (bl_rp2_weak.cpp), which answers like a chip
  * without the hardware (BL_ERR_UNSUPPORTED, 0, -1 or NULL).
  */
+#include <malloc.h>
 #include <stdarg.h>
 #include <sys/time.h>
 #include <time.h>
@@ -177,10 +178,26 @@ extern "C" void *bl_impl_calloc(size_t n, size_t size)
     return calloc(n, size);
 }
 
-/* arduino-pico's realloc() and free() recognize PSRAM blocks themselves. */
+/* arduino-pico's realloc() and free() recognize PSRAM blocks themselves. A
+ * block that starts big, or outgrows internal RAM, goes to PSRAM as malloc()'s
+ * would (Arduino Strings grow with realloc: a 600 KB HTTP body came back empty). */
 extern "C" void *bl_impl_realloc(void *ptr, size_t size)
 {
-    return realloc(ptr, size);
+    if (!ptr) {
+        return bl_impl_malloc(size);
+    }
+    void *p = realloc(ptr, size);
+#ifdef RP2350_PSRAM_CS
+    if (!p && size > PSRAM_ABOVE) {
+        p = pmalloc(size);
+        if (p) {
+            size_t old = malloc_usable_size(ptr);
+            memcpy(p, ptr, old < size ? old : size);
+            free(ptr);
+        }
+    }
+#endif
+    return p;
 }
 
 extern "C" void bl_impl_free(void *ptr)
