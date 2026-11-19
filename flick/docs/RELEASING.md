@@ -32,7 +32,7 @@ The kit contains no Baseline source and needs no ESP-IDF.
 
 ## Cutting a release
 
-1. **Set the version:** `BASELINE_VERSION` in `baseline/src/bl_main.h`.
+1. **Set the version:** `BASELINE_VERSION` in `baseline/src/bl_main.h`, `chips/imxrt1062/baseline/bl_teensy.h` and `chips/rp2350/baseline/bl_rp2.h` (all three must match; `make_site.py` stops otherwise).
    - Bump the minor or major version for user-visible changes.
    - The ABI version is separate: `api/baseline_api.txt`, locked with `python flick/tools/gen_api.py --lock`.
 2. **Commit, tag and push:**
@@ -51,6 +51,8 @@ The kit contains no Baseline source and needs no ESP-IDF.
 
 The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow by hand (Actions > Release > Run workflow) rebuilds the page without a release.
 
+4. **Deploy the page from `main`:** the `github-pages` environment only accepts deploys from `main`, so the tag's run publishes the release but its `deploy` job fails ("Tag ... is not allowed to deploy to github-pages due to environment protection rules"). Run the workflow by hand on `main` (Actions > Release > Run workflow, branch `main`): it rebuilds the page with the new version and deploys it, without making a second release. To deploy from the tag's run instead, add a `v*` tag rule under Settings > Environments > github-pages > Deployment branches and tags.
+
 ## One-time setup on GitHub
 
 - **Pages:** Settings > Pages > Source: **GitHub Actions**.
@@ -64,7 +66,7 @@ The tag must match `BASELINE_VERSION`; the workflow checks. Running the workflow
 2. **Look at the page before anyone else does:** Actions > Release > Run workflow on `main`, then download the `download-page` artifact, serve it with `python -m http.server -d <folder>` and try Flash and Run on `localhost` (Web Serial works there).
 3. **Make the repository public:** Settings > General > Danger Zone > Change visibility. Everything in the history becomes public, so check it first: no secrets, private paths or private network addresses.
 4. **Turn on Pages:** Settings > Pages > Source: **GitHub Actions**.
-5. **Release:** raise `BASELINE_VERSION` (`baseline/src/bl_main.h`), commit, tag `v<version>` and push the tag. The workflow builds everything, makes the GitHub release and deploys https://sparkfun.github.io/SparkFun_Flick/ (`WEB_PAGE` in `tools/flick.py`; flick's error messages point there).
+5. **Release:** raise `BASELINE_VERSION` (`baseline/src/bl_main.h`), commit, tag `v<version>` and push the tag. The workflow builds everything and makes the GitHub release; a run on `main` (step 4 of "Cutting a release") deploys https://sparkfun.github.io/SparkFun_Flick/ (`WEB_PAGE` in `tools/flick.py`; flick's error messages point there).
 6. **Check the live page:** Flash a board, Run `01_hello_flick` on a native-USB board and on a CH340 board, download the kit and build from it.
 
 ## Workflows
