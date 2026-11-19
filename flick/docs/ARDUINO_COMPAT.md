@@ -111,6 +111,7 @@ a line from flick saying why. Compat headers for a missing feature stop with
 | `BL_PLATFORM_ESP32` | every ESP32 chip | Arduino-ESP32 / ESP-IDF names: `esp_*` (sleep, timer, random, restart, reset reason, ESP-NOW), `ESP`, `ESP_LOGx`/`log_x`, `ledc*`, `hw_timer`, `ps_malloc`, `psramFound`, `temperatureRead`, `analogReadMilliVolts`, attenuation, I2S, `SD_MMC`, `rgbLedWrite`, FastLED |
 | `BL_PLATFORM_TEENSY` | Teensy 4.0, 4.1 | Teensyduino names (below) |
 | `BL_PLATFORM_RP2` | RP2040 and RP2350 boards | `rgbLedWrite`, FastLED (below) |
+| `BL_PLATFORM_APOLLO3` | Artemis boards (Apollo3 Blue) | the classic Arduino names only (below) |
 | `BL_HAS_WIFI` | ESP32, S3, C3, C5, C6; the IoT RedBoard - ESP32-P4 (WiFi BLE); the Thing Plus - RP2350; the Pico 2 W | WiFi, HTTP, web server, DNS, mDNS, MQTT, WiFi OTA, NTP |
 | `BL_HAS_ESPNOW` | ESP32, S3, C3, C5, C6 (not through ESP-Hosted) | ESP-NOW |
 | `BL_HAS_BLE` | ESP32, S3, C3, C5, C6; the Thing Plus - RP2350; the Pico 2 W | `BLESerial`, the BLE library |
@@ -199,6 +200,43 @@ sketches use the same classic Arduino names as on the ESP32.
   and the Arduino-ESP32 names (`esp_*`, `ESP.`, `ps_malloc`,
   `temperatureRead`, `SD_MMC`).
 - **Deep sleep** is a timed restart for now; RTC memory (1 KB) survives it.
+
+## Artemis (`redboard_artemis_atp`)
+
+Baseline for these boards is built on SparkFun's Apollo3 Arduino core (Mbed OS
+underneath); sketches use the classic Arduino names.
+
+- **Putting Baseline on:** the web page's Flash button or `python flick.py
+  baseline flash -t redboard_artemis_atp` write it through the SparkFun
+  Variable Loader (SVL) every Artemis board ships with: no button to press.
+  SVL stays on the board.
+- **Pins** are the pad numbers printed on the board. `A0`-`A7` are the ADC
+  pads 16, 29, 11, 31, 32, 33, 34, 35 (`analogRead()` takes any of them by pad
+  number too; 12 bits, 0-2.0 V).
+- **Memory:** sketch globals up to 64 KB, code up to 128 KB; LittleFS has
+  112 KB (Preferences are files in it).
+- **Ports:** `Serial1` (UART1; D0/D1 by default), `Wire`/`Wire1` and `SPI`
+  take any pads the chip allows; each of the six IOM blocks is either an I2C
+  or an SPI bus, not both. There is no `Serial2`: UART0 is the console.
+  `analogWrite()`, `tone()` and `Servo` keep their own frequency per pin (down
+  to 3 Hz).
+- **Deep sleep** waits for the timer or a pin (EXT0), then restarts the sketch
+  without resetting the chip: Baseline frees the sketch's heap, closes its
+  files and stops its buses, timers and interrupts. RTC memory (1 KB) and
+  Preferences survive.
+- **Resets:** this chip clears all of RAM at every reset, so RTC memory does
+  not survive a restart (an upload, `bl_restart()`) or the reset button.
+- **Bluetooth LE** (`BL_HAS_BLE`): `BLESerial`, the `BLEDevice` server,
+  scanning and the client, on ArduinoBLE inside Baseline. Up to three
+  connections, one of them as a client; centrals share one subscription
+  (CCCD) per characteristic; values up to 512 bytes; a service's
+  characteristics and descriptors are fixed once it is started; a remote read
+  or write is one packet (MTU 242 here, so up to 241 / 239 bytes). Starting
+  BLE takes about 3 s (the radio's firmware loads). RSSI values read about
+  40 dB higher than a PC's adapter reports for the same devices.
+- **Not here (yet):** microSD, WiFi (none on the chip), USB device mode
+  (the USB port is a CH340), and the Arduino-ESP32 names (`esp_*`, `ESP.`,
+  `ledc*`, `ps_malloc`, `temperatureRead`).
 
 ## Differences from plain Arduino
 

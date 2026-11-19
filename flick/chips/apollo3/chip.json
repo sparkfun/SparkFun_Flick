@@ -1,0 +1,62 @@
+{
+    "description": "Ambiq Apollo3 Blue (SparkFun Artemis: Cortex-M4F 48/96 MHz, 1 MB flash, 384 KB RAM, BLE 5)",
+    "baseline_source": "chips/apollo3/baseline",
+    "builder": "apollo3",
+    "core_version": "2.2.1",
+    "core_note": "SparkFun's Apollo3 Arduino core (Mbed OS 6 underneath), the version releases are built with.",
+    "core_index": "https://raw.githubusercontent.com/sparkfun/Arduino_Apollo3/main/package_sparkfun_apollo3_index.json",
+    "gcc": "arm-none-eabi-gcc",
+    "gcc_package": "SparkFun/tools/arm-none-eabi-gcc",
+    "gcc_note": "The Apollo3 core's own toolchain (GCC 8-2018-q4), the one Baseline is built with: the same libc, libm and libstdc++.",
+    "gcc_download": {
+        "release": "sparkfun-arm-none-eabi-gcc-8-2018-q4-major",
+        "url": "https://cdn.sparkfun.com/large/{file}",
+        "files": {
+            "x86_64-w64-mingw32": "gcc-arm-none-eabi-8-2018-q4-major-win32-modified.zip",
+            "x86_64-linux-gnu": "gcc-arm-none-eabi-8-2018-q4-major-linux.tar.bz2",
+            "x86_64-apple-darwin": "gcc-arm-none-eabi-8-2018-q4-major-mac.tar.bz2",
+            "aarch64-apple-darwin": "gcc-arm-none-eabi-8-2018-q4-major-mac.tar.bz2"
+        }
+    },
+    "gcc_download_note": "For flick setup (no Arduino IDE): the compiler the Apollo3 core 2.2.1 installs (its package index, tool arm-none-eabi-gcc 8-2018-q4-major). The Intel Mac build also runs on Apple silicon (Rosetta); there is no ARM Linux build.",
+    "cflags": [
+        "-mthumb",
+        "-mcpu=cortex-m4",
+        "-mfloat-abi=hard",
+        "-mfpu=fpv4-sp-d16"
+    ],
+    "cflags_note": "As the core builds Baseline: hard-float calls, so float arguments pass in FPU registers on both sides of the API table.",
+    "ldflags": [
+        "-mthumb",
+        "-mcpu=cortex-m4",
+        "-mfloat-abi=hard",
+        "-mfpu=fpv4-sp-d16"
+    ],
+    "libs": [
+        "-lc"
+    ],
+    "libs_note": "newlib supplies memcpy, strlen, ... (the SDK's malloc/printf come first).",
+    "defines": [
+        "-DARDUINO=10812",
+        "-DFLICK_ARCH_APOLLO3"
+    ],
+    "defines_note": "Not ARDUINO_ARCH_APOLLO3: libraries would pick code paths for a core the SDK does not have.",
+    "baseline_libraries": [
+        "ArduinoBLE@2.1.0"
+    ],
+    "baseline_libraries_note": "Libraries inside Baseline, at these versions, installed by flick into Baseline's own sketchbook (%LOCALAPPDATA%/Flick/apollo3-sketchbook): ArduinoBLE is the BLE host (LGPL-2.1).",
+    "baseline_defines": [
+        "-DFAKE_GAP",
+        "-DFAKE_ATT"
+    ],
+    "baseline_defines_note": "ArduinoBLE then leaves out its GAP and ATT objects; bl_apollo3_ble.cpp supplies subclasses of them.",
+    "linker_script": "sdk/ld/sketch_esp.ld.in",
+    "sdk_sources": [],
+    "usb_vids": [
+        "1A86"
+    ],
+    "usb_vids_note": "The Artemis boards' USB serial is a CH340.",
+    "status": "bring-up",
+    "stop_detect": true,
+    "stop_detect_note": "Baseline parks a sketch spinning in an empty while(1) instead of letting the watchdog roll it back (flick test step 4)."
+}
