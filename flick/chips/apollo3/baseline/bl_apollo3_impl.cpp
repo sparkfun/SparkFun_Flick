@@ -482,11 +482,27 @@ extern "C" int bl_impl_adc_read_mv(int pin)
     return v < 0 ? v : (int)((uint32_t)v * 2000 / 4095);   // the Apollo3 ADC's 2.0 V reference
 }
 
+/* analogWrite(): 8 bits at the core's usual period (12 MHz / 65535, 183 Hz) on
+ * a pad with a CTIMER output (marked ~ on the boards). On a pad without one
+ * (the ATP's STAT LED, pad 5) it acts as on a classic Arduino: on at 128 and
+ * above, off below. */
+extern "C" int bl_impl_ledc_attach(int pin, uint32_t freq, int resolution);
+extern "C" int bl_impl_ledc_write(int pin, uint32_t duty);
+static uint64_t s_no_pwm;       /* pads found without a CTIMER output */
+
 extern "C" int bl_impl_pwm_write(int pin, int value)
 {
     if (!pin_ok(pin)) {
         return BL_ERR_ARG;
     }
-    analogWrite((pin_size_t)pin, constrain(value, 0, 255));
+    value = constrain(value, 0, 255);
+    if (!(s_no_pwm & (1ull << pin))) {
+        if (bl_impl_ledc_write(pin, (uint32_t)value) || (bl_impl_ledc_attach(pin, 183, 8) && bl_impl_ledc_write(pin, (uint32_t)value))) {
+            return BL_OK;
+        }
+        s_no_pwm |= 1ull << pin;
+    }
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, value >= 128 ? HIGH : LOW);
     return BL_OK;
 }

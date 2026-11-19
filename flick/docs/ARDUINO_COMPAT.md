@@ -215,11 +215,18 @@ underneath); sketches use the classic Arduino names.
   number too; 12 bits, 0-2.0 V).
 - **Memory:** sketch globals up to 64 KB, code up to 128 KB; LittleFS has
   112 KB (Preferences are files in it).
-- **Ports:** `Serial1` (UART1; D0/D1 by default), `Wire`/`Wire1` and `SPI`
+- **Ports:** `Serial1` (UART1; the pins printed TX1 / RX1, pads 24 / 25, by
+  default), `Wire` (SCL / SDA, pads 39 / 40, also the Qwiic connector)/`Wire1`
+  and `SPI` (SCK / MISO / MOSI, pads 5 / 6 / 7)
   take any pads the chip allows; each of the six IOM blocks is either an I2C
   or an SPI bus, not both. There is no `Serial2`: UART0 is the console.
   `analogWrite()`, `tone()` and `Servo` keep their own frequency per pin (down
-  to 3 Hz).
+  to 3 Hz). `analogWrite()` needs a pin marked ~ on the board; on any other
+  pin (the STAT LED, pad 5, among them) it switches the pin on at 128 and above,
+  off below, as a classic Arduino does.
+- **The web page** restarts the sketch when it connects: opening a serial port
+  in the browser raises DTR, which resets an Artemis (flick doesn't: it opens
+  the port with DTR low). Its uploads run at 115200 for the same reason.
 - **Deep sleep** waits for the timer or a pin (EXT0), then restarts the sketch
   without resetting the chip: Baseline frees the sketch's heap, closes its
   files and stops its buses, timers and interrupts. RTC memory (1 KB) and

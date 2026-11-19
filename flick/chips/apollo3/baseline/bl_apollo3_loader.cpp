@@ -61,7 +61,8 @@ static const char s_build[] = "BLBUILD=" BL_BUILD_ID;
  * working copy; kept_save() writes it back. */
 #define KEPT_MAGIC      0xB5u
 struct kept_state {
-    uint32_t crashes;           /* in a row (0-15) */
+    uint32_t crashes;           /* in a row (0-7) */
+    uint32_t faulted;           /* Baseline's fault handler reset the chip: the next boot counts a crash */
     uint32_t in_sketch;         /* a sketch was running: a reset now is a crash */
     uint32_t safe_request;      /* @BSK SAFE */
     uint32_t clean_restart;     /* Baseline restarted on purpose */
@@ -89,7 +90,8 @@ static bool kept_load(void)
     if ((v >> 24) != KEPT_MAGIC || (v & 0xFF) != build_tag()) {
         return false;
     }
-    s_ni.crashes = (v >> 20) & 0xF;
+    s_ni.faulted = (v >> 23) & 1;
+    s_ni.crashes = (v >> 20) & 0x7;
     s_ni.in_sketch = (v >> 19) & 1;
     s_ni.safe_request = (v >> 18) & 1;
     s_ni.clean_restart = (v >> 17) & 1;
@@ -100,8 +102,8 @@ static bool kept_load(void)
 
 static void kept_save(void)
 {
-    uint32_t c = s_ni.crashes > 15 ? 15 : s_ni.crashes;
-    MCUCTRL->SCRATCH1 = KEPT_MAGIC << 24 | c << 20 | (s_ni.in_sketch & 1) << 19 | (s_ni.safe_request & 1) << 18 |
+    uint32_t c = s_ni.crashes > 7 ? 7 : s_ni.crashes;
+    MCUCTRL->SCRATCH1 = KEPT_MAGIC << 24 | (s_ni.faulted & 1) << 23 | c << 20 | (s_ni.in_sketch & 1) << 19 | (s_ni.safe_request & 1) << 18 |
                         (s_ni.clean_restart & 1) << 17 | (s_ni.last_reason & 0x1F) << 12 | (s_ni.wake_cause & 0xF) << 8 |
                         build_tag();
 }
@@ -525,6 +527,7 @@ extern "C" __attribute__((used)) void bl_fault_c(const uint32_t *frame, uint32_t
              (unsigned long)frame[2], (unsigned long)frame[3], (unsigned long)frame[4], (unsigned long)frame);
     s_ni.in_sketch = 1;         // counted as a crash at the next boot
     s_ni.last_reason = 4;       // ESP_RST_PANIC
+    s_ni.faulted = 1;
     crash_save();
     hard_reset();
 }
@@ -550,6 +553,7 @@ extern "C" void mbed_error_hook(const mbed_error_ctx *ctx)
              ctx->thread_id && s_thread && ctx->thread_id == (uint32_t)s_thread->get_id() ? "sketch" : "Baseline");
     s_ni.in_sketch = 1;
     s_ni.last_reason = 4;
+    s_ni.faulted = 1;
     crash_save();
     hard_reset();
 }
@@ -1026,27 +1030,28 @@ void bl_apollo3_start(void)
     if (fresh) {
         memset(&s_ni, 0, offsetof(kept_state, crash));
         s_ni.last_reason = 1;           // ESP_RST_POWERON
-    } else if (s_ni.in_sketch && !external) {
+    } else if (s_ni.in_sketch && (s_ni.faulted || wdt)) {
+        // A crash only on evidence: Baseline's fault handler marked it, or the
+        // watchdog fired. Any other reset while a sketch ran is the reset pin or
+        // DTR: SVL, which runs first at every reset, ends with a software reset
+        // of its own, so those reach Baseline as one (RSTGEN STAT 0x10), not as
+        // an external reset.
         s_ni.crashes++;
-        if (s_ni.last_reason != 4) {    // not a fault: the watchdog (or a reset we didn't make)
+        if (!s_ni.faulted) {
             s_ni.last_reason = 6;       // ESP_RST_TASK_WDT
-            if (wdt) {
-                strlcpy(s_ni.crash, "watchdog: the sketch ran 5 s without returning from loop() or calling delay()",
-                        sizeof(s_ni.crash));
-            } else {
-                snprintf(s_ni.crash, sizeof(s_ni.crash), "reset while the sketch ran (RSTGEN STAT 0x%02lx)",
-                         (unsigned long)s_reset_stat);
-            }
+            strlcpy(s_ni.crash, "watchdog: the sketch ran 5 s without returning from loop() or calling delay()",
+                    sizeof(s_ni.crash));
             crash_save();
         }
-    } else if (external) {
-        s_ni.last_reason = 2;           // ESP_RST_EXT
+    } else if (external || s_ni.in_sketch) {
+        s_ni.last_reason = 2;           // ESP_RST_EXT: the reset pin, DTR (through SVL)
     } else if (s_ni.clean_restart) {
         s_ni.last_reason = 3;           // ESP_RST_SW
     } else {
         s_ni.last_reason = 1;
     }
-    bool crashed = !fresh && s_ni.in_sketch && !external;
+    bool crashed = !fresh && s_ni.in_sketch && (s_ni.faulted || wdt);
+    s_ni.faulted = 0;
     s_wake_cause = (int)s_ni.wake_cause;
     s_ni.wake_cause = 0;
     s_ni.in_sketch = 0;

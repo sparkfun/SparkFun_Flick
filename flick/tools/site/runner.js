@@ -166,8 +166,15 @@ async function openLink(port) {
     await link.open(baud);
     // The newline ends whatever a probe at a wrong rate left half-received.
     await link.writer.write(new TextEncoder().encode("\n"));
-    const r = await link.request("INFO", 2000);
-    if (r && r.ok) {
+    // Asked again until it answers: opening the port raises DTR (the browser
+    // can't open it with DTR low), and on an Artemis that resets the board,
+    // which answers about 1.4 s later, once SVL and Baseline have started.
+    const end = performance.now() + (USB_SERIAL_CHIPS.includes(info.usbVendorId) ? 3500 : 2000);
+    let r = null;
+    while (!r && performance.now() < end) {
+      r = await link.request("INFO", Math.min(500, Math.max(100, end - performance.now())));
+    }
+    if (r && r.ok && infoFields(r.text).baseline) {
       state.baud = baud;
       return { link, info: infoFields(r.text) };
     }
@@ -480,7 +487,9 @@ async function sendSketch(img, hash) {
     // many lines may be in flight, and the rate it took (a chip whose UART can't
     // reach UPLOAD_BAUD picks a lower one). Older Baselines answer ERR: one at a time.
     let window = 1;
-    if (USB_SERIAL_CHIPS.includes(state.port.getInfo().usbVendorId)) {
+    // Not on an Artemis: a new rate means reopening the port, and opening it
+    // resets the board (DTR), which comes back at 115200 without the upload.
+    if (USB_SERIAL_CHIPS.includes(state.port.getInfo().usbVendorId) && state.board && state.board.chip !== "apollo3") {
       const r = await link.request(`BAUD ${UPLOAD_BAUD}`, 2000);
       if (r && r.ok) {
         const f = infoFields(r.text);

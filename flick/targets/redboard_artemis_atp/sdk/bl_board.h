@@ -37,7 +37,7 @@
 #define BL_BOARD_FS_SIZE        (BL_APOLLO3_FS_END - BL_APOLLO3_FS_START)
 
 /* ---- Baseline defaults ---- */
-#define BL_SERIAL1_RX           0           /* UART1 on the D0/D1 header pads */
-#define BL_SERIAL1_TX           1
+#define BL_SERIAL1_RX           25          /* UART1: the header pins printed RX1 / TX1 (pads 25 / 24) */
+#define BL_SERIAL1_TX           24
 #define BL_SERIAL2_RX           (-1)        /* the Apollo3 has two UARTs: UART0 is the console */
 #define BL_SERIAL2_TX           (-1)
