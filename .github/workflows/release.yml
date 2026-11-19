@@ -188,6 +188,30 @@ jobs:
         with:
           name: examples
           path: dist/examples
+      # A run on main (by hand, to deploy the page) can't read the tag run's
+      # caches, so it built its own Baselines; ESP builds aren't byte-identical
+      # between runs, and the page's build IDs would then differ from the
+      # boards' that pulled the release. Use the release's files instead when
+      # a release for this BASELINE_VERSION exists (Teensy .hex isn't a release
+      # asset; its build ID is a hash of the sources, so the built one matches).
+      - name: The release's Baselines, when this version is released
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(python3 -c 'import re; print(re.search(r"BASELINE_VERSION \"([^\"]+)\"", open("flick/baseline/src/bl_main.h").read()).group(1))')
+          if ! gh release view "v$version" --repo "${{ github.repository }}" > /dev/null 2>&1; then
+            echo "no release v$version yet: using the Baselines built here"
+            exit 0
+          fi
+          mkdir -p rel
+          gh release download "v$version" --repo "${{ github.repository }}" --dir rel --pattern 'baseline-*'
+          n=0
+          for f in rel/baseline-*; do
+            name=$(basename "$f"); target=${name#baseline-}; target=${target%.*}
+            if [ -d "dist/$target" ]; then cp "$f" "dist/$target/$name"; n=$((n + 1)); fi
+          done
+          echo "took $n Baseline files from release v$version"
       - name: Download page
         run: python flick/tools/make_site.py --out site_build --dist dist --kit "$(ls dist/kit/*.zip | head -1)"
       - name: GitHub release
