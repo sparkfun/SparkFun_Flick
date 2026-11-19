@@ -210,8 +210,9 @@ underneath); sketches use the classic Arduino names.
   baseline flash -t redboard_artemis_atp` write it through the SparkFun
   Variable Loader (SVL) every Artemis board ships with: no button to press.
   SVL stays on the board.
-- **Pins** are the pad numbers printed on the board. `A0`-`A7` are the ADC
-  pads 16, 29, 11, 31, 32, 33, 34, 35 (`analogRead()` takes any of them by pad
+- **Pins** are the pad numbers printed on the board. `A0`-`A5` are the pins
+  printed in the Uno's A0-A5 positions (A29 A11 A34 A33 A16 A31: pads 29, 11,
+  34, 33, 16, 31), `A6`/`A7` pads 32/35 (`analogRead()` takes any of them by pad
   number too; 12 bits, 0-2.0 V).
 - **Memory:** sketch globals up to 64 KB, code up to 128 KB; LittleFS has
   112 KB (Preferences are files in it).
@@ -221,9 +222,8 @@ underneath); sketches use the classic Arduino names.
   take any pads the chip allows; each of the six IOM blocks is either an I2C
   or an SPI bus, not both. There is no `Serial2`: UART0 is the console.
   `analogWrite()`, `tone()` and `Servo` keep their own frequency per pin (down
-  to 3 Hz). `analogWrite()` needs a pin marked ~ on the board; on any other
-  pin (the STAT LED, pad 5, among them) it switches the pin on at 128 and above,
-  off below, as a classic Arduino does.
+  to 3 Hz). `analogWrite()` on a pad without a timer output switches it on at
+  128 and above, off below, as a classic Arduino does.
 - **The web page** restarts the sketch when it connects: opening a serial port
   in the browser raises DTR, which resets an Artemis (flick doesn't: it opens
   the port with DTR low). Its uploads run at 115200 for the same reason.

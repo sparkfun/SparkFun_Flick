@@ -59,6 +59,7 @@
  * that uses something this chip lacks fails to compile with a clear message
  * (sdk/include/baseline_features.h). */
 #define BL_PLATFORM_APOLLO3   1
+#define BL_TARGET_ADC_MV      2000    /* the ADC's full scale: 0-2.0 V (14-bit, read as 0-4095) */
 #define BL_HAS_BLE            1       /* Bluetooth LE (BLESerial, BLEDevice, ...): ArduinoBLE on the chip's own radio */
 
 #define BL_TARGET_CHIP          "apollo3"     /* chips/<chip> */

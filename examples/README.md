@@ -13,7 +13,7 @@ Sketches marked **WiFi** need your network name and password. Set them once with
 | `01_hello_flick` | Blinks the LED and prints `Hello flick!`. Start here. |
 | `02_fade` | Fades the LED in and out with `analogWrite`. |
 | `03_button_interrupt` | Counts presses of the BOOT button with `attachInterrupt`. |
-| `04_analog_read` | Reads pin A0 and prints the value and the voltage. |
+| `04_analog_read` | Reads pin A0 (A31 on the RedBoard Artemis ATP) and prints the value and the voltage. |
 | `05_rgb_led` | Cycles the board's RGB LED through colors. |
 | `06_timers` | `Ticker`, a hardware timer and `esp_timer` side by side. |
 

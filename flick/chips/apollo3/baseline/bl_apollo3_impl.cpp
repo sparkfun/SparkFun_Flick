@@ -482,10 +482,10 @@ extern "C" int bl_impl_adc_read_mv(int pin)
     return v < 0 ? v : (int)((uint32_t)v * 2000 / 4095);   // the Apollo3 ADC's 2.0 V reference
 }
 
-/* analogWrite(): 8 bits at the core's usual period (12 MHz / 65535, 183 Hz) on
- * a pad with a CTIMER output (marked ~ on the boards). On a pad without one
- * (the ATP's STAT LED, pad 5) it acts as on a classic Arduino: on at 128 and
- * above, off below. */
+/* analogWrite(): 8 bits at 183 Hz on a pad with a CTIMER output, through
+ * Baseline's per-pin PWM (bl_apollo3_hw.cpp; the core's own analogWrite() left
+ * the ATP's STAT LED, pad 5, dark). On a pad without one it acts as on a
+ * classic Arduino: on at 128 and above, off below. */
 extern "C" int bl_impl_ledc_attach(int pin, uint32_t freq, int resolution);
 extern "C" int bl_impl_ledc_write(int pin, uint32_t duty);
 static uint64_t s_no_pwm;       /* pads found without a CTIMER output */

@@ -22,16 +22,21 @@
 #define BL_BOARD_MISO           6   /* POCI */
 #define BL_BOARD_MOSI           7   /* PICO */
 #define BL_BOARD_SS             11
-/* A0-A7: the Apollo3's ADC channels 0-7 in order (the ATP labels pads, not An;
- * analogRead() takes any ADC pad number too). To confirm against the board. */
-#define BL_BOARD_A0             16
-#define BL_BOARD_A1             29
-#define BL_BOARD_A2             11
-#define BL_BOARD_A3             31
-#define BL_BOARD_A4             32
-#define BL_BOARD_A5             33
-#define BL_BOARD_A6             34
+/* A0-A5: the analog pins in the Uno's A0-A5 positions, as printed there
+ * (A29 A11 A34 A33 A16 A31); A6/A7: the other two ADC pads (A32, A35).
+ * analogRead() takes any ADC pad by number too. */
+#define BL_BOARD_A0             29
+#define BL_BOARD_A1             11
+#define BL_BOARD_A2             34
+#define BL_BOARD_A3             33
+#define BL_BOARD_A4             16
+#define BL_BOARD_A5             31
+#define BL_BOARD_A6             32
 #define BL_BOARD_A7             35
+
+/* 04_analog_read reads this pin: the last analog pin on the bottom header. */
+#define BL_BOARD_ANALOG_DEMO_PIN  31
+#define BL_BOARD_ANALOG_DEMO_NAME "A31"
 
 /* LittleFS: the region bl_target.h gives it (112 KB of the 1 MB flash). */
 #define BL_BOARD_FS_SIZE        (BL_APOLLO3_FS_END - BL_APOLLO3_FS_START)
