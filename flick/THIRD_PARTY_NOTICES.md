@@ -43,6 +43,19 @@ The Teensy 4.0, 4.1 and MicroMod Teensy images (`.hex`):
 | [NativeEthernet](https://github.com/vjmuzik/NativeEthernet) (Tino Hernandez) | MIT | Ethernet (Teensy 4.1) |
 | [FNET](https://github.com/butok/FNET) (in NativeEthernet) | Apache-2.0 | TCP/IP (Teensy 4.1) |
 
+The SparkFun Artemis (Apollo3) images (`.bin`, behind SparkFun's SVL bootloader):
+
+| Project | License | Used for |
+|---|---|---|
+| [SparkFun Apollo3 core](https://github.com/sparkfun/Arduino_Apollo3) 2.2.1 (SparkFun Electronics) | MIT (SparkFun's code); ArduinoCore-API LGPL-2.1 | The Arduino core inside Baseline |
+| [Mbed OS](https://github.com/ARMmbed/mbed-os) 6 (in the core, Arm) | Apache-2.0 | RTOS (RTX), drivers, the Cordio HCI driver and WSF |
+| AmbiqSuite HAL (in Mbed OS, Ambiq Micro) | BSD-3-Clause | Flash, UART, the BLE controller interface |
+| [ArduinoBLE](https://github.com/arduino-libraries/ArduinoBLE) 2.1.0 (Arduino SA) | LGPL-2.1 | The Bluetooth LE host (HCI, ATT/GATT, GAP), linked into Baseline |
+
+ArduinoBLE is LGPL-2.1 and linked statically into the Artemis Baseline images. Its source is the unmodified 2.1.0 release (Baseline only replaces its GAP and ATT objects with subclasses, through the library's own `FAKE_GAP` / `FAKE_ATT` switches); Baseline's own source is in this repository, so an image can be rebuilt against a changed ArduinoBLE with `python flick.py baseline build -t <target>`, as the LGPL asks.
+
+Artemis sketches are compiled with the Arm GNU toolchain (GCC 8-2018-q4-major) that SparkFun's Apollo3 core installs, or that `flick setup` downloads from SparkFun (GPL-3.0 with the GCC Runtime Library Exception: sketches are not affected). The page's Artemis Flash button uses no third-party code: it speaks the protocol of SparkFun's SVL bootloader, which stays on the board, over Web Serial.
+
 Teensy sketches are compiled with the GCC that Teensyduino installs (GPL-3.0 with the GCC Runtime Library Exception). The page's Teensy Flash button uses no third-party code: it speaks PJRC's HalfKay bootloader protocol over WebHID, written from the protocol, not from Teensy Loader's source.
 
 The sketch compilers that `flick setup` downloads, Espressif's GCC (crosstool-NG) and arduino-pico's (pico-quick-toolchain), are GPL-3.0 with the GCC Runtime Library Exception: sketches built with them are not affected. The page's RP2040/RP2350 Flash button uses no third-party code (WebUSB and the boot ROM's PICOBOOT interface).

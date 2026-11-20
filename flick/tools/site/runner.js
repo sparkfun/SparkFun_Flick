@@ -166,8 +166,15 @@ async function openLink(port) {
     await link.open(baud);
     // The newline ends whatever a probe at a wrong rate left half-received.
     await link.writer.write(new TextEncoder().encode("\n"));
-    const r = await link.request("INFO", 2000);
-    if (r && r.ok) {
+    // Asked again until it answers: opening the port raises DTR (the browser
+    // can't open it with DTR low), and on an Artemis that resets the board,
+    // which answers about 1.4 s later, once SVL and Baseline have started.
+    const end = performance.now() + (USB_SERIAL_CHIPS.includes(info.usbVendorId) ? 3500 : 2000);
+    let r = null;
+    while (!r && performance.now() < end) {
+      r = await link.request("INFO", Math.min(500, Math.max(100, end - performance.now())));
+    }
+    if (r && r.ok && infoFields(r.text).baseline) {
       state.baud = baud;
       return { link, info: infoFields(r.text) };
     }
@@ -477,14 +484,19 @@ async function sendSketch(img, hash) {
   let fast = false;
   try {
     // A UART console goes to UPLOAD_BAUD for the upload; Baseline's reply says how
-    // many lines may be in flight. Older Baselines answer ERR: one at a time.
+    // many lines may be in flight, and the rate it took (a chip whose UART can't
+    // reach UPLOAD_BAUD picks a lower one). Older Baselines answer ERR: one at a time.
     let window = 1;
-    if (USB_SERIAL_CHIPS.includes(state.port.getInfo().usbVendorId)) {
+    // Not on an Artemis: a new rate means reopening the port, and opening it
+    // resets the board (DTR), which comes back at 115200 without the upload.
+    if (USB_SERIAL_CHIPS.includes(state.port.getInfo().usbVendorId) && state.board && state.board.chip !== "apollo3") {
       const r = await link.request(`BAUD ${UPLOAD_BAUD}`, 2000);
       if (r && r.ok) {
-        window = Math.max(1, parseInt(infoFields(r.text).window || "1", 10));
-        if (state.baud !== UPLOAD_BAUD) {
-          link = await reopen(UPLOAD_BAUD);
+        const f = infoFields(r.text);
+        window = Math.max(1, parseInt(f.window || "1", 10));
+        const rate = parseInt(f.baud || String(UPLOAD_BAUD), 10) || UPLOAD_BAUD;
+        if (state.baud !== rate) {
+          link = await reopen(rate);
           fast = true;
         }
       }
@@ -1008,6 +1020,211 @@ async function halfkayBoot(dev) {
 async function knownTeensyPort() {
   const known = (await navigator.serial.getPorts()).filter((p) => p.getInfo().usbVendorId === PJRC);
   return known.length === 1 ? known[0] : null;
+}
+
+// ---- SparkFun Artemis (Apollo3): the SparkFun Variable Loader (SVL) ----
+// SVL stays on the board (0xC000) and runs at every reset: a 'U' within its
+// short wait sets the baud rate, then packets of [length (2 bytes, big end),
+// command, data, CRC-16 (poly 0x8005, big end)]; the board asks for each 2 KB
+// frame of the image (written at 0x10000), then starts it. The board resets
+// when DTR is raised (the CH340's DTR line pulses RESET).
+const SVL = { VER: 1, BL: 2, NEXT: 3, FRAME: 4, RETRY: 5, DONE: 6 };
+const SVL_FRAME = 2048;
+const SVL_CRC = (() => {
+  const t = new Uint16Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i << 8;
+    for (let b = 0; b < 8; b++) c = c & 0x8000 ? ((c << 1) ^ 0x8005) & 0xffff : (c << 1) & 0xffff;
+    t[i] = c;
+  }
+  return t;
+})();
+function svlCrc(bytes) {
+  let crc = 0;
+  for (const b of bytes) crc = ((crc << 8) & 0xffff) ^ SVL_CRC[(b ^ (crc >> 8)) & 0xff];
+  return crc;
+}
+
+// Bytes from a serial port with a timeout per read.
+class ByteReader {
+  constructor(port) {
+    this.reader = port.readable.getReader();
+    this.buf = new Uint8Array(0);
+    this.pending = null;
+  }
+  async read(n, ms) {
+    const end = performance.now() + ms;
+    while (this.buf.length < n) {
+      const left = end - performance.now();
+      if (left <= 0) return null;
+      if (!this.pending) this.pending = this.reader.read();
+      const r = await Promise.race([this.pending, sleep(left).then(() => null)]);
+      if (!r) return null;
+      this.pending = null;
+      if (r.done) return null;
+      const joined = new Uint8Array(this.buf.length + r.value.length);
+      joined.set(this.buf);
+      joined.set(r.value, this.buf.length);
+      this.buf = joined;
+    }
+    const out = this.buf.slice(0, n);
+    this.buf = this.buf.slice(n);
+    return out;
+  }
+  drop() { this.buf = new Uint8Array(0); }
+  async close() {
+    try { await this.reader.cancel(); } catch (e) { /* closed already */ }
+    this.reader.releaseLock();
+  }
+}
+
+async function svlPacket(rd, ms) {
+  const n = await rd.read(2, ms);
+  if (!n) return null;
+  const len = (n[0] << 8) | n[1];
+  if (len < 3) return null;
+  const p = await rd.read(len, ms);
+  if (!p || svlCrc(p) !== 0) return null;         // the CRC over payload + CRC is 0 when it is right
+  return { cmd: p[0], data: p.subarray(1, len - 2) };
+}
+
+async function svlSend(writer, cmd, data) {
+  const payload = new Uint8Array(1 + data.length + 2);
+  payload[0] = cmd;
+  payload.set(data, 1);
+  const crc = svlCrc(payload.subarray(0, 1 + data.length));
+  payload[1 + data.length] = crc >> 8;
+  payload[2 + data.length] = crc & 0xff;
+  const len = payload.length;
+  await writer.write(new Uint8Array([len >> 8, len & 0xff]));
+  await writer.write(payload);
+}
+
+// One SVL session at a baud rate: reset, catch the bootloader, send the image.
+// Resolves to true when the whole image went over, false when SVL didn't answer.
+async function svlUpload(port, image, baud, say) {
+  await port.open({ baudRate: baud, bufferSize: 8192 });
+  const rd = new ByteReader(port);
+  const writer = port.writable.getWriter();
+  try {
+    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    await sleep(50);
+    await port.setSignals({ dataTerminalReady: true });      // reset: SVL starts
+    await sleep(150);
+    rd.drop();
+    await writer.write(new Uint8Array([0x55]));               // 'U': SVL measures the baud rate on it
+    const ver = await svlPacket(rd, 500);
+    if (!ver || ver.cmd !== SVL.VER) return false;
+    await svlSend(writer, SVL.BL, new Uint8Array(0));
+    const frames = Math.ceil(image.length / SVL_FRAME);
+    let frame = 0, retries = 0;
+    for (;;) {
+      const p = await svlPacket(rd, 2000);
+      if (!p) throw new Error("the board stopped answering during the upload");
+      if (p.cmd === SVL.NEXT) {
+        frame++;
+        retries = 0;
+      } else if (p.cmd === SVL.RETRY) {
+        if (++retries >= 4) throw new Error("the board kept asking for the same frame again");
+      } else {
+        throw new Error(`unexpected reply ${p.cmd} from the bootloader`);
+      }
+      if (frame > frames) {
+        await svlSend(writer, SVL.DONE, new Uint8Array(0));
+        return true;
+      }
+      await svlSend(writer, SVL.FRAME, image.subarray((frame - 1) * SVL_FRAME, frame * SVL_FRAME));
+      if (frame % 8 === 0 || frame === frames) say(`Writing Baseline ${NEW_VERSION()}: ${Math.floor((frame / frames) * 100)}%`);
+    }
+  } finally {
+    writer.releaseLock();
+    await rd.close();
+    await port.setSignals({ dataTerminalReady: false }).catch(() => {});
+    await port.close().catch(() => {});
+  }
+}
+
+async function flashArtemis(btn) {
+  const target = btn.dataset.target;
+  const force = btn.dataset.force === "1";        // "Reinstall anyway": flash even if up to date
+  delete btn.dataset.force;
+  const status = btn.parentElement.querySelector(".flash-status");
+  const say = (text, cls) => { status.textContent = text; status.className = "flash-status " + (cls || ""); };
+  const boards = (window.FLICK && window.FLICK.boards) || {};
+  if (!needs("serial")) return;
+  if (state.busy) { say("Busy: wait for the upload or flash in progress to finish.", "bad"); return; }
+  if (state.link) await disconnect();
+  let port;
+  try {
+    port = await navigator.serial.requestPort({ filters: USB_SERIAL_CHIPS.map((v) => ({ usbVendorId: v })) });
+  } catch (e) {
+    say("No port picked.");
+    return;
+  }
+  say("Asking the board whether it already runs Baseline...");
+  const running = await baselineInfo(port);
+  if (running && running.target && running.target !== target) {
+    const name = boards[running.target] || running.target;
+    if (running.chip !== "apollo3") {
+      say(`This board runs Baseline for ${name}, not for an Artemis board: pick the right board in the menu.`, "bad");
+      return;
+    }
+  }
+  const latest = (window.FLICK.builds || {})[target];
+  if (!force && running && latest && running.target === target && running.build === latest) {
+    foundLine(status, `Found: ${boards[target] || target}, already running the latest Baseline (${running.baseline}).`);
+    say("Nothing to update. Connecting...", "good");
+    await sleep(300);
+    const ok = await connectAfterFlash(port);
+    say(ok ? "Nothing to update. Connected: its examples are below."
+           : "Nothing to update. Press Connect below to try the examples.", "good");
+    const again = document.createElement("button");
+    again.textContent = "Reinstall anyway";
+    again.className = "choice";
+    again.onclick = () => { btn.dataset.force = "1"; flashArtemis(btn); };
+    status.append(" ", again);
+    return;
+  }
+  await sleep(300);                     // the INFO link's close must finish first
+  state.busy = true;
+  render();
+  for (const b of document.querySelectorAll(FLASH_BUTTONS)) b.disabled = true;
+  try {
+    say(`Downloading Baseline ${NEW_VERSION()}...`);
+    const res = await fetch(`firmware/${target}/baseline-${target}.bin`, FRESH);
+    if (!res.ok) throw new Error(`can't download the image (${res.status})`);
+    const image = new Uint8Array(await res.arrayBuffer());
+    const t0 = performance.now();
+    let sent = false;
+    for (const baud of [921600, 115200, 921600]) {        // as SparkFun's svl uploader: a few tries
+      say(`Starting the board's bootloader (SVL) at ${baud} baud...`);
+      try {
+        sent = await svlUpload(port, image, baud, say);
+      } catch (e) {
+        if (/open|lock|busy|access/i.test(e.message)) {
+          throw new Error(`can't open the port (${e.message}). Something else has it: another tab with this page, ` +
+                          "a serial monitor, the Arduino IDE or flick. Close that and Flash again");
+        }
+        throw e;
+      }
+      if (sent) break;
+    }
+    if (!sent) {
+      throw new Error("the board's bootloader (SVL) didn't answer. Check the port; boards without SVL need it " +
+                      "put back with SparkFun's Artemis Firmware Upload GUI");
+    }
+    const secs = ((performance.now() - t0) / 1000).toFixed(0);
+    say(`Done in ${secs} s. Connecting...`, "good");
+    await sleep(500);
+    const ok = await connectAfterFlash(port);
+    say(`Done in ${secs} s.` + (ok ? " Connected: its examples are below." : " Press Connect below to try the examples."), "good");
+  } catch (e) {
+    say(`Failed: ${e.message}`, "bad");
+  } finally {
+    state.busy = false;
+    for (const b of document.querySelectorAll(FLASH_BUTTONS)) b.disabled = false;
+    render();
+  }
 }
 
 async function flashTeensy(btn) {
@@ -1842,7 +2059,9 @@ async function init() {
   $("connect").onclick = connect;
   $("send-form").onsubmit = sendInput;
   $("clear").onclick = () => { $("console").textContent = ""; };
-  for (const b of document.querySelectorAll("button.flash")) b.onclick = () => (b.classList.contains("rp2") ? flashRp2(b) : flashBoard(b));
+  for (const b of document.querySelectorAll("button.flash")) {
+    b.onclick = () => (b.classList.contains("rp2") ? flashRp2(b) : b.classList.contains("svl") ? flashArtemis(b) : flashBoard(b));
+  }
   for (const b of document.querySelectorAll("button.teensy-flash")) b.onclick = () => flashTeensy(b);
   try {
     state.examples = (await (await fetch("examples/examples.json", FRESH)).json()).examples;

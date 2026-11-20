@@ -1457,13 +1457,16 @@ def fast_console(link):
     r = link.request_status(f"BAUD {UPLOAD_BAUD}", timeout=2)
     if not r or not r[0]:
         return 1, None          # a Baseline from before 0.3: one line at a time at its own rate
-    window = int(info_fields(r[1]).get("window", "1"))
-    if old != UPLOAD_BAUD:
+    fields = info_fields(r[1])
+    window = int(fields.get("window", "1"))
+    # The rate Baseline took: a chip whose UART can't reach UPLOAD_BAUD (Apollo3) picks a lower one.
+    rate = int(fields.get("baud", UPLOAD_BAUD))
+    if old != rate:
         ser.flush()
-        ser.baudrate = UPLOAD_BAUD
+        ser.baudrate = rate
         ser.reset_input_buffer()
         link.buf = b""
-    return max(1, window), (old if old != UPLOAD_BAUD else None)
+    return max(1, window), (old if old != rate else None)
 
 
 def console_back(link, rate):
@@ -1964,6 +1967,83 @@ def build_baseline_rp2(target, flash, port=None):
         # console) then reboots into the boot ROM, and the .uf2 is copied to its drive.
         run([find_arduino_cli(), "upload", "--fqbn", target["fqbn"], "--input-dir", str(build_path),
              "-p", find_port(port), str(sketch)])
+
+
+def build_baseline_apollo3(target, flash, port=None):
+    """Baseline for the Apollo3 (SparkFun Artemis): an Arduino sketch built with
+    SparkFun's Apollo3 core (Mbed OS) through arduino-cli. Staged from
+    chips/apollo3/baseline plus the generated API table, linked with Baseline's
+    own linker script (the core's SVL one with Baseline's flash and RAM limits).
+    The image is a .bin for 0x10000, flashed through the SparkFun Variable
+    Loader (SVL), which stays on the board."""
+    gen = ROOT / "baseline" / "src" / "gen"
+    wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
+    for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
+        wanted[Path(name)] = gen / name
+    wanted[Path("bl_ext.c")] = ROOT / "baseline" / "src" / "bl_ext.c"
+    wanted.update(extension_files(target, Path("src") / "ext"))
+    # INFO build= (the download page skips flashing a board that already runs
+    # this image): a hash of everything the build reads from Flick, as on RP2.
+    h = hashlib.sha256()
+    inputs = id_sorted(wanted.items()) + id_sorted(
+        (f.relative_to(d), f) for d in (SDK / "include", *target["sdk_dirs"]) for f in d.rglob("*") if f.is_file())
+    for rel, src in inputs:
+        h.update(rel.as_posix().encode() + b"\0" + id_bytes(src))
+    h.update(target["fqbn"].encode())
+    h.update(id_bytes(target["chip_dir"] / "chip.json"))
+    id_header = BUILD_ROOT / build_name(target) / "bl_build_id.h"
+    text = (f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
+            f'#define BL_CORE_VERSION "{target.get("core_version", "-")}"\n')
+    if not id_header.exists() or id_header.read_text() != text:
+        id_header.parent.mkdir(parents=True, exist_ok=True)
+        id_header.write_text(text)
+    wanted[Path("bl_build_id.h")] = id_header
+    sketch = sync_files(BUILD_ROOT / build_name(target) / "baseline", wanted)
+    build_path = baseline_build_path(build_name(target))
+    build_path.mkdir(parents=True, exist_ok=True)
+    # The linker script gets the chip's addresses (bl_target.h) from the preprocessor.
+    ld = build_path.parent / "apollo3_flick.ld"
+    run([find_gcc(target), "-E", "-P", "-x", "c", "-DBL_LINKER_SCRIPT",
+         *[a for d in (SDK / "include", *target["sdk_dirs"]) for a in ("-I", str(d))],
+         str(sketch / "apollo3_flick.ld.in"), "-o", str(ld)])
+    # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
+    # The staging folder too: arduino-cli does not copy .inc files into its build folder.
+    inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))
+    # A sketchbook of Baseline's own: the core's libraries plus the pinned
+    # versions chip.json names ("baseline_libraries"), never the user's.
+    user_dir = BUILD_ROOT / "apollo3-sketchbook"
+    (user_dir / "libraries").mkdir(parents=True, exist_ok=True)
+    os.environ["ARDUINO_DIRECTORIES_USER"] = str(user_dir)
+    for spec in target.get("baseline_libraries", []):
+        name, version = spec.split("@")
+        props = user_dir / "libraries" / name.replace(" ", "_") / "library.properties"
+        have = None
+        if props.exists():
+            for line in props.read_text(errors="replace").splitlines():
+                if line.startswith("version="):
+                    have = line.split("=", 1)[1].strip()
+        if have != version:
+            run([find_arduino_cli(), "lib", "install", "--no-deps", spec])
+    # FAKE_GAP / FAKE_ATT: ArduinoBLE leaves out its GAP and ATT objects;
+    # Baseline supplies them (bl_apollo3_ble.cpp).
+    defs = " ".join(target.get("baseline_defines", []))
+    cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"], "--build-path", str(build_path),
+           "--build-property", f"compiler.c.extra_flags=-MMD {defs} {inc}",
+           "--build-property", f"compiler.cxx.extra_flags=-MMD {defs} {inc}",     # this core's name for C++ flags
+           "--build-property", f"build.ldscript={ld}",
+           # newlib-nano's printf formats %f only with this (Baseline's printf is newlib's).
+           "--build-property", "compiler.ld.extra_flags=-u _printf_float",
+           "--warnings", "default", str(sketch)]
+    run(cmd)
+    out = DIST / build_name(target) / f"baseline-{build_name(target)}.bin"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(build_path / "baseline.ino.bin", out)
+    print(f"Baseline image: {out.relative_to(WORK)} ({out.stat().st_size} bytes, at 0x10000 behind SVL)")
+    if flash:
+        # SVL: the core's uploader resets the board (DTR), catches the bootloader
+        # and writes the image at 0x10000. The sketch slots and LittleFS stay.
+        run([find_arduino_cli(), "upload", "--fqbn", target["fqbn"] + ":svl_baud=921600",
+             "--input-dir", str(build_path), "-p", find_port(port), str(sketch)])
 
 
 def find_arduino_cli():
@@ -2487,8 +2567,8 @@ def unpack(url, dest, strip=None, sha256=None):
 
 def cmd_setup(args):
     """Download the compiler for the targets' chips (Espressif's Xtensa or RISC-V GCC for the
-    ESP32 family; arduino-pico's for the RP2040/RP2350; Teensyduino's compiler, core and
-    libraries for the Teensy 4.x). Without -t: for the plugged-in board, else for every
+    ESP32 family; arduino-pico's for the RP2040/RP2350; SparkFun's Apollo3 core's for the Artemis;
+    Teensyduino's compiler, core and libraries for the Teensy 4.x). Without -t: for the plugged-in board, else for every
     chip. Installs pyserial if missing."""
     try:
         import serial  # noqa: F401
@@ -2860,6 +2940,8 @@ def cmd_baseline(args):
         return build_baseline_teensy(target, args.action == "flash", getattr(args, "port", None))
     if target.get("builder") == "rp2":
         return build_baseline_rp2(target, args.action == "flash", args.port)
+    if target.get("builder") == "apollo3":
+        return build_baseline_apollo3(target, args.action == "flash", args.port)
     core = esp32_core_for(target)
     if target.get("builder") == "idf":
         proj, env, py, fargs = build_baseline_idf(target, core)

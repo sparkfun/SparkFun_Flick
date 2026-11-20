@@ -1,0 +1,8 @@
+{
+    "chip": "apollo3",
+    "description": "SparkFun RedBoard Artemis ATP: Artemis (Apollo3 Blue), 1 MB flash, CH340 USB serial",
+    "flash_size": "1MB",
+    "fqbn": "SparkFun:apollo3:sfe_artemis_atp",
+    "status": "bring-up",
+    "product_url": "https://www.sparkfun.com/sparkfun-redboard-artemis-atp.html"
+}

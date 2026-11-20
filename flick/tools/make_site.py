@@ -29,11 +29,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CHIP_FAMILY = {"esp32": "ESP32", "esp32s3": "ESP32-S3", "esp32c3": "ESP32-C3", "esp32c5": "ESP32-C5",
                "esp32c6": "ESP32-C6", "esp32p4": "ESP32-P4", "imxrt1062": "Teensy 4.x", "rp2350": "RP2350",
-               "rp2040": "RP2040"}
+               "rp2040": "RP2040", "apollo3": "Apollo3"}
 # Groups in the board menu, in this order (by chip family).
 GROUPS = [("esp32", "ESP32 (classic)"), ("esp32s3", "ESP32-S3"), ("esp32c3", "ESP32-C3"), ("esp32c5", "ESP32-C5"),
           ("esp32c6", "ESP32-C6"), ("esp32p4", "ESP32-P4"), ("rp2350", "RP2350"), ("rp2040", "RP2040"),
-          ("imxrt1062", "Teensy 4.x (PJRC)")]
+          ("imxrt1062", "Teensy 4.x (PJRC)"), ("apollo3", "Artemis (Apollo3)")]
 
 
 APP_OFFSET = 0x10000            # every ESP partition table puts Baseline here
@@ -62,7 +62,9 @@ def build_id(image):
         return m.group(1).decode() if m else None
     at = data.find(APP_DESC_MAGIC, APP_OFFSET, APP_OFFSET + 0x1000)
     if at < 0:
-        return None
+        # Artemis (Apollo3): a plain .bin with flick's "BLBUILD=<16 hex>" (bl_apollo3_loader.cpp).
+        m = re.search(rb"BLBUILD=([0-9a-f]{16})\0", data)
+        return m.group(1).decode() if m else None
     return data[at + 144:at + 152].hex()
 
 
@@ -99,7 +101,8 @@ def main():
     out, dist = Path(args.out), Path(args.dist)
     version = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / "baseline/src/bl_main.h").read_text()).group(1)
     # The Teensy and RP2 Baselines have their own copy of the version: the page names one for all.
-    for other in ("chips/imxrt1062/baseline/bl_teensy.h", "chips/rp2350/baseline/bl_rp2.h"):
+    for other in ("chips/imxrt1062/baseline/bl_teensy.h", "chips/rp2350/baseline/bl_rp2.h",
+                  "chips/apollo3/baseline/bl_apollo3.h"):
         v = re.search(r'BASELINE_VERSION\s+"([^"]+)"', (ROOT / other).read_text()).group(1)
         if v != version:
             sys.exit(f"make_site: BASELINE_VERSION is {v} in {other}, {version} in baseline/src/bl_main.h")
@@ -141,6 +144,9 @@ def main():
         fw = out / "firmware" / name
         fw.mkdir(parents=True)
         shutil.copy2(bin_, fw / bin_.name)
+        if t["chip"] == "apollo3":              # Artemis: SVL writes the .bin at 0x10000 (flashArtemis())
+            rows.append((board, name, t, flash_mb, bin_, bsu))
+            continue
         if bsu.exists():
             shutil.copy2(bsu, fw / bsu.name)
         # No full erase: the merged image already blanks NVS and otadata, and
@@ -208,7 +214,12 @@ def main():
                 notes.append("For modules with octal PSRAM (the R8 in N8R8 or N16R8). GPIO 33-37 belong to the PSRAM.")
             elif t["chip"] == "esp32s3":
                 notes.append("For modules with quad PSRAM (R2) or none. With octal PSRAM (R8), pick the octal entry.")
-        if image.suffix == ".hex":
+        if t["chip"] == "apollo3":
+            install = ('<p class="note-small">Flash uses the SparkFun Variable Loader (SVL) every Artemis board ships '
+                       'with: no button to press. Close any serial monitor on its port first.</p>'
+                       f'<button class="flash svl" data-target="{name}">Flash</button>'
+                       '<div class="flash-status"></div>')
+        elif image.suffix == ".hex":
             code_size = TEENSY_CODE_SIZE[flash_mb]
             install = (f'<button class="teensy-flash" data-target="{name}" data-code-size="{code_size}">Flash</button>'
                        '<div class="flash-status"></div>'
@@ -252,9 +263,11 @@ def main():
     # flashes the largest generic image that fits (pickGeneric()).
     generic = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb,
                 "octal": name.endswith("_octal")}
-               for board, name, t, flash_mb, image, _ in rows if t.get("generic") and image.suffix == ".bin"]
+               for board, name, t, flash_mb, image, _ in rows
+               if t.get("generic") and image.suffix == ".bin" and t["chip"] != "apollo3"]
     sparkfun = [{"target": name, "name": board, "chip": CHIP_FAMILY[t["chip"]], "flash_mb": flash_mb}
-                for board, name, t, flash_mb, image, _ in rows if not t.get("generic") and image.suffix == ".bin"]
+                for board, name, t, flash_mb, image, _ in rows
+                if not t.get("generic") and image.suffix == ".bin" and t["chip"] != "apollo3"]
     auto_text = ("Not sure which ESP module you've got? Auto-detect will check and load the correct Baseline for your "
                  "board. If you've got a SparkFun board, auto-detect will attempt to select the right one and display "
                  "the supported examples.")

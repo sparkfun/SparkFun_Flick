@@ -4,7 +4,8 @@
 # <target>/baseline-<target>.bin (flash at 0x0) and .bsu (OTA) for every ESP
 # target, <target>/baseline-<target>.hex (Teensy Loader) for every Teensy target,
 # <target>/baseline-<target>.uf2 (the boot ROM's drive) and .bsu (OTA) for every
-# RP2040/RP2350 target.
+# RP2040/RP2350 target, <target>/baseline-<target>.bin (written at 0x10000 through
+# SVL) for every Artemis (Apollo3) target.
 #
 # Builds are cached by the files they read (flick/tools/ci/baseline_keys.py):
 # one entry per target, and one holding every target. When nothing changed,
@@ -49,6 +50,7 @@ jobs:
       list: ${{ steps.keys.outputs.list }}
       teensy: ${{ steps.keys.outputs.teensy }}
       rp2: ${{ steps.keys.outputs.rp2 }}
+      apollo3: ${{ steps.keys.outputs.apollo3 }}
       keys: ${{ steps.keys.outputs.keys }}
       all: ${{ steps.keys.outputs.all }}
       all_hit: ${{ steps.all.outputs.cache-hit }}
@@ -60,6 +62,7 @@ jobs:
           echo "list=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["esp"]))')" >> "$GITHUB_OUTPUT"
           echo "teensy=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["teensy"]))')" >> "$GITHUB_OUTPUT"
           echo "rp2=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["rp2"]))')" >> "$GITHUB_OUTPUT"
+          echo "apollo3=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["apollo3"]))')" >> "$GITHUB_OUTPUT"
           echo "keys=$(python3 -c 'import json; print(json.dumps(json.load(open("keys.json"))["keys"]))')" >> "$GITHUB_OUTPUT"
           echo "all=$(python3 -c 'import json; print(json.load(open("keys.json"))["all"])')" >> "$GITHUB_OUTPUT"
       - name: Is every Baseline already built from these sources?
@@ -186,13 +189,54 @@ jobs:
             flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bsu
           if-no-files-found: error
 
+  # Artemis (Apollo3) targets: SparkFun's Apollo3 core through arduino-cli (flick baseline build).
+  build-apollo3:
+    needs: plan
+    if: needs.plan.outputs.all_hit != 'true' && needs.plan.outputs.apollo3 != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJson(needs.plan.outputs.apollo3) }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Reuse a Baseline built from the same sources
+        id: built
+        uses: actions/cache@v6
+        with:
+          path: flick/dist/${{ matrix.target }}
+          key: ${{ fromJson(needs.plan.outputs.keys)[matrix.target] }}
+      - name: Cache the Apollo3 core
+        if: steps.built.outputs.cache-hit != 'true'
+        uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: sparkfun-apollo3-2.2.1-${{ runner.os }}
+      - uses: arduino/setup-arduino-cli@v2
+        if: steps.built.outputs.cache-hit != 'true'
+      - name: SparkFun Apollo3 core 2.2.1 (chips/apollo3/chip.json core_version)
+        if: steps.built.outputs.cache-hit != 'true'
+        run: |
+          url=https://raw.githubusercontent.com/sparkfun/Arduino_Apollo3/main/package_sparkfun_apollo3_index.json
+          arduino-cli core update-index --additional-urls "$url"
+          arduino-cli core install SparkFun:apollo3@2.2.1 --additional-urls "$url"
+      - name: Build Baseline for ${{ matrix.target }}
+        if: steps.built.outputs.cache-hit != 'true'
+        run: python3 flick.py baseline build -t ${{ matrix.target }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: baseline-${{ matrix.target }}
+          path: flick/dist/${{ matrix.target }}/baseline-${{ matrix.target }}.bin
+          if-no-files-found: error
+
   bundle:
-    needs: [plan, build, build-teensy, build-rp2]
+    needs: [plan, build, build-teensy, build-rp2, build-apollo3]
     if: >-
       always() && needs.plan.result == 'success' &&
       (needs.build.result == 'success' || needs.build.result == 'skipped') &&
       (needs.build-teensy.result == 'success' || needs.build-teensy.result == 'skipped') &&
-      (needs.build-rp2.result == 'success' || needs.build-rp2.result == 'skipped')
+      (needs.build-rp2.result == 'success' || needs.build-rp2.result == 'skipped') &&
+      (needs.build-apollo3.result == 'success' || needs.build-apollo3.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Every Baseline, from the cache

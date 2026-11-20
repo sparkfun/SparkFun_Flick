@@ -96,7 +96,7 @@ How each builder takes the folder:
   one: all of its sources, the Arduino-ESP32 component and the ESP-IDF
   components that one uses (Bluetooth, WiFi, mbedTLS, ...). An extension that
   needs another component brings its own `CMakeLists.txt` with `REQUIRES`.
-- **Teensy and RP2 (arduino-cli):** the sources go into the Baseline sketch's
+- **Teensy, RP2 and Artemis (arduino-cli):** the sources go into the Baseline sketch's
   `src/ext/<name>/`.
 
 ## Example

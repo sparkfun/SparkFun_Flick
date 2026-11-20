@@ -86,7 +86,7 @@ jobs:
           key: sketch-toolchains-esp-14.2.0_20260121-${{ runner.os }}
       - run: pip install -r requirements.txt
       - run: python flick.py setup -t thing_plus_esp32 -t thing_plus_esp32c6
-        if: matrix.group.chip != 'imxrt1062' && matrix.group.chip != 'rp2040' && matrix.group.chip != 'rp2350'
+        if: matrix.group.chip != 'imxrt1062' && matrix.group.chip != 'rp2040' && matrix.group.chip != 'rp2350' && matrix.group.chip != 'apollo3'
       - name: Cache arduino-pico
         if: matrix.group.chip == 'rp2040' || matrix.group.chip == 'rp2350'
         uses: actions/cache@v6
@@ -115,6 +115,20 @@ jobs:
           url=https://www.pjrc.com/teensy/package_teensy_index.json
           arduino-cli core update-index --additional-urls "$url"
           arduino-cli core install teensy:avr@1.62.0 --additional-urls "$url"
+      - name: Cache the Apollo3 core
+        if: matrix.group.chip == 'apollo3'
+        uses: actions/cache@v6
+        with:
+          path: ~/.arduino15
+          key: sparkfun-apollo3-2.2.1-${{ runner.os }}
+      - uses: arduino/setup-arduino-cli@v2
+        if: matrix.group.chip == 'apollo3'
+      - name: SparkFun Apollo3 core 2.2.1 (its compiler builds the Artemis sketches)
+        if: matrix.group.chip == 'apollo3'
+        run: |
+          url=https://raw.githubusercontent.com/sparkfun/Arduino_Apollo3/main/package_sparkfun_apollo3_index.json
+          arduino-cli core update-index --additional-urls "$url"
+          arduino-cli core install SparkFun:apollo3@2.2.1 --additional-urls "$url"
       - name: Every example for the ${{ matrix.group.chip }} boards
         run: python flick/tools/ci/build_examples.py --out dist/part ${{ matrix.group.targets }}
       - uses: actions/upload-artifact@v7
