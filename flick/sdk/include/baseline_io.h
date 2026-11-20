@@ -194,7 +194,24 @@ public:
     int available() override { return started_ ? bl_uart_available(port_) : 0; }
     int read() override;
     size_t read(uint8_t *buf, size_t size) { return started_ ? (size_t)bl_uart_read(port_, buf, size) : 0; }
-    size_t readBytes(uint8_t *buf, size_t size) { return read(buf, size); }
+    /* As in Arduino-ESP32: waits up to the timeout (setTimeout) for the rest. */
+    size_t readBytes(uint8_t *buf, size_t size) override
+    {
+        size_t n = 0;
+        uint32_t start = millis();
+        while (n < size) {
+            size_t got = read(buf + n, size - n);
+            n += got;
+            if (n >= size || millis() - start >= getTimeout()) {
+                break;
+            }
+            if (!got) {
+                delay(1);
+            }
+        }
+        return n;
+    }
+    size_t readBytes(char *buf, size_t size) override { return readBytes((uint8_t *)buf, size); }
     int peek() { return started_ ? bl_uart_peek(port_) : -1; }
     void flush() { if (started_) bl_uart_flush(port_); }
     int availableForWrite() { return started_ ? bl_uart_available_for_write(port_) : 0; }

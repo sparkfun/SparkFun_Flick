@@ -71,7 +71,9 @@ typedef struct {
     uint32_t init_array_end;    /* 48 */
     uint32_t stack_size;        /* 52 sketch task stack, bytes */
     char     name[32];          /* 56 */
-    uint8_t  reserved0[8];      /* 88 */
+    uint32_t ram_end;           /* 88 end of the sketch's RAM use (.data, .bss, .noinit);
+                                   0: an older SDK, end unknown */
+    uint8_t  reserved0[4];      /* 92 */
     char     build_id[16];      /* 96 patched by flick */
     uint8_t  reserved1[112];    /* 112 */
     uint8_t  sha256[32];        /* 224 SHA-256 of the whole image with this field zeroed */

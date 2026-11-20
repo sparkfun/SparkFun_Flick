@@ -207,7 +207,7 @@ BLECharacteristic *BLEService::createCharacteristic(BLEUUID uuid, uint32_t prope
     if (h < 0 || h >= MAX_CHARS) {
         return nullptr;
     }
-    s_chars[h] = new BLECharacteristic(h, uuid);
+    s_chars[h] = new BLECharacteristic(h, uuid, properties);
     return s_chars[h];
 }
 

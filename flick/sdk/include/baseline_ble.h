@@ -26,6 +26,12 @@ typedef int esp_err_t;      /* also in baseline_system.h and baseline_espnow.h *
 #define ESP_FAIL (-1)              /* BLEDevice::setMTU() returns these, as in Arduino-ESP32 */
 #endif
 
+/* Longest attribute value (ESP-IDF's esp_gatt_defs.h; libraries size their buffers with it). */
+#define ESP_GATT_MAX_ATTR_LEN 517
+
+/* ESP-IDF's call to rename the device while BLE runs */
+static inline esp_err_t esp_ble_gap_set_device_name(const char *name) { return bl_ble_set_device_name(name) == 0 ? ESP_OK : ESP_FAIL; }
+
 #define BLE_ADDR_PUBLIC 0
 #define BLE_ADDR_RANDOM 1
 
@@ -146,7 +152,15 @@ public:
     static const uint32_t PROPERTY_WRITE_NR = BL_BLE_PROP_WRITE_NR;
     static const uint32_t PROPERTY_BROADCAST = BL_BLE_PROP_BROADCAST;
 
-    BLECharacteristic(int handle, BLEUUID uuid) : h_(handle), uuid_(uuid) {}
+    BLECharacteristic(int handle, BLEUUID uuid, uint32_t properties = 0) : h_(handle), uuid_(uuid), props_(properties) {}
+    /* Before the service starts, as in Arduino-ESP32 */
+    void setReadProperty(bool on) { setProp(PROPERTY_READ, on); }
+    void setWriteProperty(bool on) { setProp(PROPERTY_WRITE, on); }
+    void setNotifyProperty(bool on) { setProp(PROPERTY_NOTIFY, on); }
+    void setIndicateProperty(bool on) { setProp(PROPERTY_INDICATE, on); }
+    void setWriteNoResponseProperty(bool on) { setProp(PROPERTY_WRITE_NR, on); }
+    void setBroadcastProperty(bool on) { setProp(PROPERTY_BROADCAST, on); }
+    uint32_t getProperties() const { return props_; }
     void setValue(const uint8_t *data, size_t len) { bl_ble_char_set_value(h_, data, len); }
     void setValue(const String &value) { setValue((const uint8_t *)value.c_str(), value.length()); }
     void setValue(uint16_t v) { setValue((const uint8_t *)&v, sizeof(v)); }
@@ -170,8 +184,14 @@ public:
     BLECharacteristicCallbacks *cb_ = 0;    // SDK internal
 
 private:
+    void setProp(uint32_t bit, bool on)
+    {
+        props_ = on ? (props_ | bit) : (props_ & ~bit);
+        bl_ble_char_set_props(h_, props_);
+    }
     int h_;
     BLEUUID uuid_;
+    uint32_t props_;
     String data_;
 };
 
@@ -181,6 +201,8 @@ public:
     BLECharacteristic *createCharacteristic(const char *uuid, uint32_t properties) { return createCharacteristic(BLEUUID(uuid), properties); }
     BLECharacteristic *createCharacteristic(BLEUUID uuid, uint32_t properties);
     void start() { bl_ble_service_start(h_); }
+    /* Remove the service from the server; its characteristics go with it. */
+    void executeDelete() { bl_ble_service_delete(h_); }
     BLEUUID getUUID() const { return uuid_; }
 
 private:
@@ -226,6 +248,8 @@ public:
     BLEAdvertising *getAdvertising();
     void disconnect(uint16_t conn_id) { bl_ble_server_disconnect(conn_id); }
     uint16_t getConnId() { return conn_id_; }
+    /* The ATT MTU agreed with a connected central (23 until it asks for more). */
+    uint16_t getPeerMTU(uint16_t conn_id) { int m = bl_ble_peer_mtu(conn_id); return m > 0 ? (uint16_t)m : 23; }
 
     BLEServerCallbacks *cb_ = 0;    // SDK internal
     uint16_t conn_id_ = 0;

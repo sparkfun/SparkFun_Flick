@@ -512,3 +512,9 @@ abi_major = 1
 
 # ---- Baseline extensions (ABI 1.10; docs/EXTENSIONS.md) ----
 10 | void *      | ext_find          | const char *name                           | bl_ext_find          | What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it.
+
+# ---- BLE additions (ABI 1.10) ----
+10 | int         | ble_char_set_props | int ch, uint32_t properties               | bl_ble_char_set_props | Change a characteristic's BL_BLE_PROP_* properties (setNotifyProperty, ...), before its service starts.
+10 | int         | ble_service_delete | int svc                                   | bl_ble_service_delete | Remove a service from the server (BLEService::executeDelete); the handles of it and its characteristics end.
+10 | int         | ble_peer_mtu       | uint16_t conn_id                          | bl_ble_peer_mtu       | BLEServer::getPeerMTU: the ATT MTU agreed with a connected central (23 before any exchange), or BL_ERR_*.
+10 | int         | ble_set_device_name | const char *name                         | bl_ble_set_device_name | esp_ble_gap_set_device_name: rename the device while BLE runs (advertising and the GAP name).

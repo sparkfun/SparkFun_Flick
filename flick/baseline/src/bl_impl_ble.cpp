@@ -22,6 +22,9 @@
 #include <BLEScan.h>
 #include <BLEClient.h>
 #include <BLE2902.h>
+#if defined(CONFIG_BLUEDROID_ENABLED)
+#include "esp_gap_ble_api.h"
+#endif
 #include "freertos/stream_buffer.h"
 #include "freertos/queue.h"
 #include "gen/bl_impl.h"
@@ -49,6 +52,7 @@ static QueueHandle_t s_events;
 static std::atomic<int> s_connected;
 static BLEService *s_services[MAX_SERVICES];
 static BLECharacteristic *s_chars[MAX_CHARS];
+static int8_t s_char_svc[MAX_CHARS];        /* the service handle each characteristic is in */
 
 static void push_event(const bl_ble_event_t &ev)
 {
@@ -282,6 +286,22 @@ extern "C" int bl_impl_ble_set_mtu(uint16_t mtu)
     return BLEDevice::setMTU(mtu) == ESP_OK ? BL_OK : BL_ERR_FAIL;
 }
 
+/* esp_ble_gap_set_device_name (ABI 1.10) */
+extern "C" int bl_impl_ble_set_device_name(const char *name)
+{
+    if (!name) {
+        return BL_ERR_ARG;
+    }
+#if defined(CONFIG_BLUEDROID_ENABLED)
+    if (!ensure_init(name)) {
+        return BL_ERR_NO_MEM;
+    }
+    return esp_ble_gap_set_device_name(name) == ESP_OK ? BL_OK : BL_ERR_FAIL;
+#else
+    return BL_ERR_UNSUPPORTED;
+#endif
+}
+
 /* ---- GATT server ---- */
 
 extern "C" int bl_impl_ble_server_create(void)
@@ -299,6 +319,15 @@ extern "C" void bl_impl_ble_server_disconnect(uint16_t conn_id)
     if (s_server) {
         s_server->disconnect(conn_id);
     }
+}
+
+/* BLEServer::getPeerMTU (ABI 1.10) */
+extern "C" int bl_impl_ble_peer_mtu(uint16_t conn_id)
+{
+    if (!s_server) {
+        return BL_ERR_ARG;
+    }
+    return s_server->getPeerMTU(conn_id);
 }
 
 extern "C" int bl_impl_ble_service_create(const char *uuid, int num_handles)
@@ -380,6 +409,7 @@ extern "C" int bl_impl_ble_char_create(int svc, const char *uuid, uint32_t prope
 #endif
             c->setCallbacks(&s_char_cb);
             s_chars[h] = c;
+            s_char_svc[h] = (int8_t)svc;
             return h;
         }
     }
@@ -389,6 +419,39 @@ extern "C" int bl_impl_ble_char_create(int svc, const char *uuid, uint32_t prope
 static BLECharacteristic *char_of(int h)
 {
     return (h >= 0 && h < MAX_CHARS) ? s_chars[h] : NULL;
+}
+
+/* setNotifyProperty() and the others (ABI 1.10): the library's setters, before the service starts */
+extern "C" int bl_impl_ble_char_set_props(int ch, uint32_t properties)
+{
+    BLECharacteristic *c = char_of(ch);
+    if (!c) {
+        return BL_ERR_ARG;
+    }
+    c->setReadProperty(properties & BL_BLE_PROP_READ);
+    c->setWriteProperty(properties & BL_BLE_PROP_WRITE);
+    c->setNotifyProperty(properties & BL_BLE_PROP_NOTIFY);
+    c->setIndicateProperty(properties & BL_BLE_PROP_INDICATE);
+    c->setWriteNoResponseProperty(properties & BL_BLE_PROP_WRITE_NR);
+    c->setBroadcastProperty(properties & BL_BLE_PROP_BROADCAST);
+    return BL_OK;
+}
+
+/* BLEService::executeDelete() (ABI 1.10), through the server so it forgets the service too */
+extern "C" int bl_impl_ble_service_delete(int svc)
+{
+    if (svc < 0 || svc >= MAX_SERVICES || !s_services[svc] || !s_server) {
+        return BL_ERR_ARG;
+    }
+    BLEService *s = s_services[svc];
+    for (int h = 0; h < MAX_CHARS; h++) {
+        if (s_chars[h] && s_char_svc[h] == svc) {
+            s_chars[h] = NULL;
+        }
+    }
+    s_server->removeService(s);
+    s_services[svc] = NULL;
+    return BL_OK;
 }
 
 extern "C" int bl_impl_ble_char_set_value(int ch, const uint8_t *data, size_t len)

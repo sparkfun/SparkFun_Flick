@@ -363,6 +363,10 @@ int bl_impl_bt_spp_confirm(int accept);
 int bl_impl_bt_spp_disconnect(void);
 int bl_impl_bt_spp_unpair_all(void);
 void * bl_impl_ext_find(const char *name);
+int bl_impl_ble_char_set_props(int ch, uint32_t properties);
+int bl_impl_ble_service_delete(int svc);
+int bl_impl_ble_peer_mtu(uint16_t conn_id);
+int bl_impl_ble_set_device_name(const char *name);
 
 #ifdef __cplusplus
 }

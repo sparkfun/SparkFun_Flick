@@ -14,6 +14,7 @@
 #include "freertos/task.h"
 #include "mbedtls/sha256.h"
 #include "heap_memory_layout.h"
+#include "esp_heap_caps_init.h"
 #include "gen/bl_impl.h"
 #include "bl_console.h"
 #include "bl_port.h"
@@ -299,6 +300,30 @@ static void sketch_task(void *arg)
     }
 }
 
+/* The part of the sketch RAM window this sketch doesn't use goes to the heap,
+ * for Baseline and the sketch's malloc(): internal RAM that would otherwise sit
+ * empty (task stacks, WiFi and Bluetooth need it). Once per boot: another
+ * sketch only starts after a restart. */
+static void give_unused_ram(void)
+{
+    uint32_t top = BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE;
+    uint32_t end = s_hdr.ram_end;
+    if (end < s_hdr.bss_end || end < s_hdr.data_end || end > top) {
+        return;         /* 0: built with an older SDK, which doesn't say where its RAM ends */
+    }
+    end = (end + 15) & ~15u;
+    if (end >= top || top - end < 1024) {
+        return;
+    }
+    esp_err_t err = heap_caps_add_region(end, top);
+    if (err == ESP_OK) {
+        BLOG_I("sketch RAM: %u of %u bytes used; the other %u are in the heap",
+               (unsigned)(s_hdr.ram_end - BL_SKETCH_RAM_BASE), (unsigned)BL_SKETCH_RAM_SIZE, (unsigned)(top - end));
+    } else {
+        BLOG_W("sketch RAM: could not give the unused %u bytes to the heap (%d)", (unsigned)(top - end), err);
+    }
+}
+
 esp_err_t sketch_start(int slot)
 {
     const esp_partition_t *p = sketch_slot_partition(slot);
@@ -334,6 +359,7 @@ esp_err_t sketch_start(int slot)
 
     memcpy((void *)s_hdr.data_start, (const void *)s_hdr.data_load, s_hdr.data_end - s_hdr.data_start);
     memset((void *)s_hdr.bss_start, 0, s_hdr.bss_end - s_hdr.bss_start);
+    give_unused_ram();
 
     BLOG_I("starting sketch '%s' from slot %c (%u bytes, stack %u)",
            s_hdr.name, 'a' + slot, (unsigned)s_hdr.image_size, (unsigned)s_hdr.stack_size);

@@ -26,6 +26,7 @@ uint8_t bl_sdk_led_level;      /* digitalRead(LED_BUILTIN) on a WS2812-only boar
 /* Defined in sketch.ld */
 extern const uint8_t _sketch_data_load[], _sketch_data_start[], _sketch_data_end[];
 extern uint8_t _sketch_bss_start[], _sketch_bss_end[];
+extern uint8_t _sketch_noinit_end[];
 extern const uint8_t _sketch_init_array_start[], _sketch_init_array_end[];
 
 void teardown(void) __attribute__((weak));
@@ -48,6 +49,7 @@ const bl_sketch_header_t bl_sketch_header = {
     .init_array_start = (uint32_t)_sketch_init_array_start,
     .init_array_end = (uint32_t)_sketch_init_array_end,
     .stack_size = BL_SKETCH_STACK,
+    .ram_end = (uint32_t)_sketch_noinit_end,
     .name = BL_SKETCH_NAME,
 };
 

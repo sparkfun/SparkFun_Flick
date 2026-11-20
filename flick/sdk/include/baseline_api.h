@@ -386,6 +386,10 @@ typedef struct bl_api {
     int (*bt_spp_disconnect)(void);
     int (*bt_spp_unpair_all)(void);
     void * (*ext_find)(const char *name);
+    int (*ble_char_set_props)(int ch, uint32_t properties);
+    int (*ble_service_delete)(int svc);
+    int (*ble_peer_mtu)(uint16_t conn_id);
+    int (*ble_set_device_name)(const char *name);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -770,6 +774,10 @@ extern const bl_api_t *BL;
 #define BL_MINOR_bt_spp_disconnect 10
 #define BL_MINOR_bt_spp_unpair_all 10
 #define BL_MINOR_ext_find 10
+#define BL_MINOR_ble_char_set_props 10
+#define BL_MINOR_ble_service_delete 10
+#define BL_MINOR_ble_peer_mtu 10
+#define BL_MINOR_ble_set_device_name 10
 
 /* Milliseconds since boot. */
 static inline uint32_t millis(void) { return BL_CALL(millis)(); }
@@ -1949,6 +1957,22 @@ static inline int bl_bt_spp_unpair_all(void) { return BL_CALL(bt_spp_unpair_all)
 #endif
 /* What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it. */
 static inline void * bl_ext_find(const char *name) { return BL_CALL(ext_find)(name); }
+#if defined(BL_HAS_BLE)
+/* Change a characteristic's BL_BLE_PROP_* properties (setNotifyProperty, ...), before its service starts. */
+static inline int bl_ble_char_set_props(int ch, uint32_t properties) { return BL_CALL(ble_char_set_props)(ch, properties); }
+#endif
+#if defined(BL_HAS_BLE)
+/* Remove a service from the server (BLEService::executeDelete); the handles of it and its characteristics end. */
+static inline int bl_ble_service_delete(int svc) { return BL_CALL(ble_service_delete)(svc); }
+#endif
+#if defined(BL_HAS_BLE)
+/* BLEServer::getPeerMTU: the ATT MTU agreed with a connected central (23 before any exchange), or BL_ERR_*. */
+static inline int bl_ble_peer_mtu(uint16_t conn_id) { return BL_CALL(ble_peer_mtu)(conn_id); }
+#endif
+#if defined(BL_HAS_BLE)
+/* esp_ble_gap_set_device_name: rename the device while BLE runs (advertising and the GAP name). */
+static inline int bl_ble_set_device_name(const char *name) { return BL_CALL(ble_set_device_name)(name); }
+#endif
 #endif /* BASELINE_FIRMWARE */
 
 #endif /* BASELINE_API_H */

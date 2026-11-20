@@ -183,8 +183,9 @@ public:
     void setTimeout(unsigned long ms) { timeout_ = ms; }
     unsigned long getTimeout() const { return timeout_; }
     /* Read up to `length` bytes, waiting up to the timeout for each. */
-    size_t readBytes(char *buffer, size_t length);
-    size_t readBytes(uint8_t *buffer, size_t length) { return readBytes((char *)buffer, length); }
+    /* Virtual as in Arduino-ESP32: stream classes in libraries override them. */
+    virtual size_t readBytes(char *buffer, size_t length);
+    virtual size_t readBytes(uint8_t *buffer, size_t length) { return readBytes((char *)buffer, length); }
     bool find(const char *target);
     bool find(char target) { char t[2] = {target, 0}; return find(t); }
     bool findUntil(const char *target, const char *terminator);

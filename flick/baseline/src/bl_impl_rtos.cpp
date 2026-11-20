@@ -18,7 +18,9 @@
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
 #include "esp_task_wdt.h"
+#include "esp_heap_caps.h"
 #include "gen/bl_impl.h"
+#include "bl_console.h"
 #include "sketch_loader.h"
 
 /* Waits up to this long don't need the watchdog paused (it fires at 5 s). */
@@ -80,10 +82,15 @@ void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_byt
     s->arg = arg;
     BaseType_t on = core >= 0 && core < portNUM_PROCESSORS ? core : tskNO_AFFINITY;
     TaskHandle_t t = NULL;
-    if (xTaskCreatePinnedToCore(task_main, name ? name : "sketch_task",
-                                stack_bytes < BL_TASK_MIN_STACK ? BL_TASK_MIN_STACK : stack_bytes,
-                                s, capped(priority), &t, on) != pdPASS) {
+    uint32_t stack = stack_bytes < BL_TASK_MIN_STACK ? BL_TASK_MIN_STACK : stack_bytes;
+    BaseType_t r = xTaskCreatePinnedToCore(task_main, name ? name : "sketch_task", stack, s, capped(priority), &t, on);
+    if (r != pdPASS) {
         free(s);
+        /* Task stacks are in internal RAM: say how much there was */
+        BLOG_E("task '%s' (stack %lu, core %d, priority %d) not created: error %d; internal RAM %u free, %u largest block",
+               name ? name : "sketch_task", (unsigned long)stack, core, priority, (int)r,
+               (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         return NULL;
     }
     return t;

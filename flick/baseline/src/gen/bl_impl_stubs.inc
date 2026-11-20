@@ -78,6 +78,10 @@ extern "C" int bl_impl_ble_remote_write(int rc, const uint8_t *data, size_t len,
 extern "C" int bl_impl_ble_remote_subscribe(int rc, int mode) { return BL_ERR_UNSUPPORTED; }
 extern "C" uint32_t bl_impl_ble_remote_props(int rc) { return 0; }
 extern "C" int bl_impl_ble_event_take(bl_ble_event_t *ev) { return 0; }
+extern "C" int bl_impl_ble_char_set_props(int ch, uint32_t properties) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_ble_service_delete(int svc) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_ble_peer_mtu(uint16_t conn_id) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_ble_set_device_name(const char *name) { return BL_ERR_UNSUPPORTED; }
 #endif /* BL_STUB_BLE */
 
 #if defined(BL_STUB_ESPNOW) && BL_STUB_ESPNOW

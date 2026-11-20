@@ -359,3 +359,7 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_bt_spp_disconnect` | `int bt_spp_disconnect(void)` | 1.10 | Drop the connected device. 1 if one was dropped. |
 | `bl_bt_spp_unpair_all` | `int bt_spp_unpair_all(void)` | 1.10 | Forget every bonded device (deleteAllBondedDevices; after begin). |
 | `bl_ext_find` | `void * ext_find(const char *name)` | 1.10 | What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it. |
+| `bl_ble_char_set_props` | `int ble_char_set_props(int ch, uint32_t properties)` | 1.10 | Change a characteristic's BL_BLE_PROP_* properties (setNotifyProperty, ...), before its service starts. |
+| `bl_ble_service_delete` | `int ble_service_delete(int svc)` | 1.10 | Remove a service from the server (BLEService::executeDelete); the handles of it and its characteristics end. |
+| `bl_ble_peer_mtu` | `int ble_peer_mtu(uint16_t conn_id)` | 1.10 | BLEServer::getPeerMTU: the ATT MTU agreed with a connected central (23 before any exchange), or BL_ERR_*. |
+| `bl_ble_set_device_name` | `int ble_set_device_name(const char *name)` | 1.10 | esp_ble_gap_set_device_name: rename the device while BLE runs (advertising and the GAP name). |

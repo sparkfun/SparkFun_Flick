@@ -354,3 +354,7 @@ extern "C" __attribute__((weak)) int bl_impl_bt_spp_confirm(int accept) { return
 extern "C" __attribute__((weak)) int bl_impl_bt_spp_disconnect(void) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) int bl_impl_bt_spp_unpair_all(void) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) void * bl_impl_ext_find(const char *name) { return NULL; }
+extern "C" __attribute__((weak)) int bl_impl_ble_char_set_props(int ch, uint32_t properties) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_ble_service_delete(int svc) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_ble_peer_mtu(uint16_t conn_id) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_ble_set_device_name(const char *name) { return BL_ERR_UNSUPPORTED; }

@@ -358,4 +358,8 @@ const bl_api_t bl_api_table = {
     .bt_spp_disconnect = bl_impl_bt_spp_disconnect,
     .bt_spp_unpair_all = bl_impl_bt_spp_unpair_all,
     .ext_find = bl_impl_ext_find,
+    .ble_char_set_props = bl_impl_ble_char_set_props,
+    .ble_service_delete = bl_impl_ble_service_delete,
+    .ble_peer_mtu = bl_impl_ble_peer_mtu,
+    .ble_set_device_name = bl_impl_ble_set_device_name,
 };
