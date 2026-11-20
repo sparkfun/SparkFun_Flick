@@ -11,8 +11,8 @@
 #if !defined(BL_PLATFORM_ESP32) || !defined(BL_HAS_WIFI)
 #error "This test needs an ESP32 with WiFi."
 #endif
-#if !defined(WIFI_SSID)
-#error "Set the WiFi network first: python flick.py wifi \"network\" \"password\""
+#ifndef WIFI_SSID      // set them once with: python flick.py wifi "network" "password"
+#define WIFI_SSID "your-network"
 #endif
 #ifndef WIFI_PASSWORD
 #define WIFI_PASSWORD ""
