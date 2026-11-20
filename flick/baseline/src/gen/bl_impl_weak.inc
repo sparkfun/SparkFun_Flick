@@ -358,3 +358,4 @@ extern "C" __attribute__((weak)) int bl_impl_ble_char_set_props(int ch, uint32_t
 extern "C" __attribute__((weak)) int bl_impl_ble_service_delete(int svc) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) int bl_impl_ble_peer_mtu(uint16_t conn_id) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) int bl_impl_ble_set_device_name(const char *name) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void * bl_impl_task_create_caps(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core, uint32_t caps) { return NULL; }

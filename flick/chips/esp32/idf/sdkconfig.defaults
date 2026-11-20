@@ -20,20 +20,40 @@ CONFIG_HEAP_PLACE_FUNCTION_INTO_FLASH=y
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
 CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST=y
 
-# With SPIRAM_TRY_ALLOCATE_WIFI_LWIP, ESP-IDF requires static WiFi TX buffers,
-# 1.6 KB each in internal RAM while WiFi is on. 8 instead of 16 (~13 KB back):
-# frames beyond them wait in the 32 cache TX buffers, which are in PSRAM.
+# With SPIRAM_TRY_ALLOCATE_WIFI_LWIP, ESP-IDF requires static WiFi TX buffers
+# in the configuration, 1.6 KB each. Arduino's WiFi only uses them after a
+# sketch calls WiFi.useStaticBuffers(true); by default it starts WiFi with
+# dynamic TX buffers and 4 static RX buffers whatever this file says. 8 instead
+# of 16 for sketches that do ask.
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
 
-# Task stacks Arduino enlarges to 8 KB for callback-heavy sketches. Baseline's
-# Bluetooth and timer callbacks only queue events for the sketch task, so
-# smaller stacks do (IDF defaults: BTC 3 KB, BTU 4.25 KB, esp_timer 3.5 KB,
-# timer service 2 KB). With the TX buffers above this leaves room for Bluetooth
-# Classic, BLE and WiFi at once.
-CONFIG_BT_BTC_TASK_STACK_SIZE=6144
+# Task stacks Arduino enlarges for callback-heavy sketches. Baseline's
+# Bluetooth, network and timer callbacks only queue events for the sketch task,
+# so smaller stacks do. Each leaves at least 1.5 KB unused at its measured peak
+# (RTK Everywhere with SPP, BLE, WiFi and TLS): BTC 2.3 KB of 4.5, esp_timer
+# (Ticker callbacks) 1.7 of 4, timer service 0.5 of 2, event loop 1.7 of 4
+# (ESP-IDF adds 2 KB there), lwIP 1.5 of 3.5 (ESP-IDF adds 512 bytes to all but
+# the timer service).
+# With them, a sketch has room for Bluetooth Classic, BLE, WiFi and TLS at once.
+CONFIG_BT_BTC_TASK_STACK_SIZE=4096
 CONFIG_BT_BTU_TASK_STACK_SIZE=4352
-CONFIG_ESP_TIMER_TASK_STACK_SIZE=4096
-CONFIG_TIMER_TASK_STACK_SIZE=4096
+CONFIG_ESP_TIMER_TASK_STACK_SIZE=3584
+CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=2048
+CONFIG_ESP_SYSTEM_EVENT_TASK_STACK_SIZE=1536
+CONFIG_LWIP_TCPIP_TASK_STACK_SIZE=3072
+
+# Task stacks in PSRAM, for tasks that never write flash (Baseline puts mDNS's
+# there). ESP-IDF leaves this off on the classic ESP32 for the PSRAM cache bug
+# of revisions before 3, which CONFIG_ESP32_REV_MIN_3 above excludes; the other
+# chips have it on by default.
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+
+# Bluetooth controller: one BLE and one Bluetooth Classic connection, no SCO
+# (audio) links. Each connection slot costs internal RAM whether used or not;
+# these free 5.7 KB. A BLE server accepts one central at a time.
+CONFIG_BTDM_CTRL_BLE_MAX_CONN=1
+CONFIG_BTDM_CTRL_BR_EDR_MAX_ACL_CONN=1
+CONFIG_BTDM_CTRL_BR_EDR_MAX_SYNC_CONN=0
 
 # Bluetooth Classic: Baseline only uses SPP (BluetoothSerial). Leave out the
 # audio (A2DP, AVRCP) and hands-free (HFP) profiles Arduino's base enables.

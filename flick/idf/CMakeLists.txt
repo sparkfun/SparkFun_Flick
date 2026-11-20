@@ -16,4 +16,10 @@ include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 if(FLICK_DEFINES)
     idf_build_set_property(COMPILE_DEFINITIONS "${FLICK_DEFINES}" APPEND)
 endif()
+# Classic ESP32: Arduino's network event task peaks at ~1 KB of its 4 KB stack
+# (Baseline's handlers only queue events for the sketch); 3 KB leaves internal
+# RAM for Bluetooth and WiFi together (chips/esp32/idf/sdkconfig.defaults).
+if(IDF_TARGET STREQUAL "esp32")
+    idf_build_set_property(COMPILE_DEFINITIONS "ARDUINO_NETWORK_EVENT_TASK_STACK_SIZE=3072" APPEND)
+endif()
 project(baseline)

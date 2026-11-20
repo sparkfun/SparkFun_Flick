@@ -25,7 +25,7 @@
 
 #define BSK_LINE_MAX        1600
 #define DATA_MAX        1024    /* decoded bytes per DATA line */
-#define LOADER_STACK    6144
+#define LOADER_STACK    4608    /* an upload peaks at ~3.1 KB */
 #define LOADER_CORE     0
 #define SKETCH_RX_SIZE  1024    /* console bytes buffered for the sketch */
 

@@ -4,6 +4,7 @@
 //   - tasks on each core (or the only one) share a counter under a mutex
 //   - a recursive mutex, a counting semaphore, a queue between two tasks
 //   - vTaskDelay timing, task names, stack high-water marks, priorities
+//   - xTaskCreateWithCaps: a task stack in PSRAM, given back on return and delete
 //   - the sketch's own task waits 6 s on a semaphore (longer than the task
 //     watchdog's 5 s): no watchdog reset
 //   - Ticker callbacks run only on the sketch's own task while another task
@@ -14,6 +15,7 @@
 #error "This board has no FreeRTOS."
 #endif
 #include <Ticker.h>
+#include <esp_heap_caps.h>
 
 static int passed, failed;
 #define CHECK(name, cond) do { bool ok_ = (cond); Serial.printf("%s  %s\n", ok_ ? "PASS" : "FAIL", name); ok_ ? passed++ : failed++; } while (0)
@@ -74,6 +76,29 @@ static void delayer(void *arg)
     delayerDone = true;
     vTaskDelete(NULL);
 }
+
+// Tasks with their stack in PSRAM (xTaskCreateWithCaps).
+static SemaphoreHandle_t capsReady, capsGo;
+static volatile bool capsRan;
+static void capsWorker(void *arg)
+{
+    volatile char big[2048];        // something on the stack
+    for (int i = 0; i < (int)sizeof(big); i++) {
+        big[i] = (char)i;
+    }
+    capsRan = big[100] == 100;
+    xSemaphoreGive(capsReady);
+    xSemaphoreTake(capsGo, portMAX_DELAY);
+    // returning ends the task
+}
+static void capsIdle(void *arg)
+{
+    for (;;) {
+        vTaskDelay(100);
+    }
+}
+static long psramFree() { return (long)heap_caps_get_free_size(MALLOC_CAP_SPIRAM); }
+static long internalFree() { return (long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT); }
 
 static void survivor(void *arg)
 {
@@ -166,6 +191,35 @@ void setup()
     vTaskPrioritySet(NULL, 50);
     CHECK("priority capped at 10", uxTaskPriorityGet(NULL) == BL_TASK_MAX_PRIORITY);
     vTaskPrioritySet(NULL, 1);
+
+    // A 16 KB stack in PSRAM: the task runs, and its memory comes back both
+    // when it returns and when it is deleted. Without PSRAM it is in internal RAM.
+    const UBaseType_t PSRAM_CAPS = MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT;
+    long psram0 = psramFree(), internal0 = internalFree();
+    capsReady = xSemaphoreCreateBinary();
+    capsGo = xSemaphoreCreateBinary();
+    TaskHandle_t capsTask = NULL;
+    bool capsMade = xTaskCreateWithCaps(capsWorker, "capsWorker", 16384, NULL, 1, &capsTask, PSRAM_CAPS) == pdPASS;
+    bool capsOk = capsMade && xSemaphoreTake(capsReady, pdMS_TO_TICKS(2000)) && capsRan;
+    long psram1 = psramFree(), internal1 = internalFree();
+    CHECK("task with a PSRAM stack runs", capsOk);
+    Serial.printf("      PSRAM %ld bytes less, internal RAM %ld bytes less\n", psram0 - psram1, internal0 - internal1);
+    if (psram0 > 0) {
+        CHECK("its 16 KB stack is in PSRAM, not internal RAM", psram0 - psram1 >= 16384 && internal0 - internal1 < 4096);
+    }
+    xSemaphoreGive(capsGo);
+    delay(300);
+    CHECK("returning gives the PSRAM stack back", psramFree() >= psram0 - 1024);
+    TaskHandle_t idleTask = NULL;
+    bool idleMade = xTaskCreateWithCaps(capsIdle, "capsIdle", 16384, NULL, 1, &idleTask, PSRAM_CAPS) == pdPASS;
+    delay(50);
+    if (idleMade) {
+        vTaskDeleteWithCaps(idleTask);
+    }
+    delay(300);
+    CHECK("vTaskDeleteWithCaps gives it back", idleMade && psramFree() >= psram0 - 1024);
+    vSemaphoreDelete(capsReady);
+    vSemaphoreDelete(capsGo);
 
     // Callbacks stay on the sketch task while another task calls delay().
     ticker.attach_ms(10, onTick);

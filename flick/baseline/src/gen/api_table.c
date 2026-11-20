@@ -362,4 +362,5 @@ const bl_api_t bl_api_table = {
     .ble_service_delete = bl_impl_ble_service_delete,
     .ble_peer_mtu = bl_impl_ble_peer_mtu,
     .ble_set_device_name = bl_impl_ble_set_device_name,
+    .task_create_caps = bl_impl_task_create_caps,
 };

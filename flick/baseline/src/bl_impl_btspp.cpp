@@ -19,6 +19,7 @@
 
 #define RX_DEFAULT  512
 #define TX_CHUNK    330     /* BluetoothSerial's packet size */
+#define TX_TASK_STACK 2048  /* peaks at ~0.6 KB: one write() into BluetoothSerial's queue */
 
 static BluetoothSerial *s_bt;
 static bool s_started;
@@ -108,7 +109,7 @@ extern "C" int bl_impl_bt_spp_begin(const char *name)
     }
     if (s_tx_size && !s_tx) {
         s_tx = buffer_new(s_tx_size);
-        if (!s_tx || xTaskCreatePinnedToCore(tx_task, "bt_spp_tx", 3072, NULL, 5, &s_tx_task, tskNO_AFFINITY) != pdPASS) {
+        if (!s_tx || xTaskCreatePinnedToCore(tx_task, "bt_spp_tx", TX_TASK_STACK, NULL, 5, &s_tx_task, tskNO_AFFINITY) != pdPASS) {
             return BL_ERR_NO_MEM;
         }
     }

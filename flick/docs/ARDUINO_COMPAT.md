@@ -116,6 +116,7 @@ mutexes, binary and counting semaphores (`xSemaphoreCreateMutex`, `Take`,
 - A sketch's tasks run its code at the same time as `loop()`: guard shared data with a mutex.
 - Callbacks (Ticker, ESP-NOW, BLE, WiFi events) still arrive only on the sketch's own task; `delay()` in another task just waits.
 - One tick is 1 ms. Priorities are capped at 10 (Baseline's network, timer and IPC tasks run above), and stacks are at least 3072 bytes.
+- `xTaskCreateWithCaps` / `xTaskCreatePinnedToCoreWithCaps` with `MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT` put the stack in PSRAM (in internal RAM when there is none); `vTaskDeleteWithCaps` or `vTaskDelete` ends the task. Only its ~600-byte task record stays in internal RAM, which is what the classic ESP32 runs short of with Bluetooth Classic, BLE and WiFi together. Such a task must never write flash itself (LittleFS, Preferences, `Update`): ESP-IDF stops with an assert.
 - Sketch code never runs in an interrupt, so the `...FromISR` calls are the ordinary ones.
 - `vTaskDelete(NULL)` at the end of `setup()` ends `loop()` and keeps the sketch's other tasks running (`flick info` says `running: loop() ended by vTaskDelete`).
 - A crash in any of the sketch's tasks rolls the sketch back like a crash in `loop()`. A task that spins on core 0 without waiting trips the idle task's watchdog after 5 s (a crash too); on core 1 it only slows the sketch.

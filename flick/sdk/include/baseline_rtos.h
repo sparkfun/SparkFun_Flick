@@ -69,6 +69,24 @@ static inline BaseType_t xTaskCreate(TaskFunction_t fn, const char *name, uint32
 }
 
 static inline void vTaskDelete(TaskHandle_t task) { bl_task_delete(task); }
+
+/* ESP-IDF's versions that take the stack from other memory: caps
+ * MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT (esp_heap_caps.h) puts it in PSRAM, which
+ * leaves internal RAM for WiFi and Bluetooth. A task with a PSRAM stack must
+ * never write flash itself (LittleFS, Preferences, Update): ESP-IDF stops with
+ * an assert. Without such memory the stack is in internal RAM. In
+ * sdk/src/sketch_rtos.c. */
+BaseType_t xTaskCreatePinnedToCoreWithCaps(TaskFunction_t fn, const char *name, uint32_t stack_bytes, void *arg,
+                                           UBaseType_t priority, TaskHandle_t *created, BaseType_t core,
+                                           UBaseType_t caps);
+
+static inline BaseType_t xTaskCreateWithCaps(TaskFunction_t fn, const char *name, uint32_t stack_bytes, void *arg,
+                                             UBaseType_t priority, TaskHandle_t *created, UBaseType_t caps)
+{
+    return xTaskCreatePinnedToCoreWithCaps(fn, name, stack_bytes, arg, priority, created, tskNO_AFFINITY, caps);
+}
+
+static inline void vTaskDeleteWithCaps(TaskHandle_t task) { bl_task_delete(task); }
 static inline void vTaskDelay(TickType_t ticks) { delay(ticks); }
 static inline TickType_t xTaskGetTickCount(void) { return millis(); }
 static inline TickType_t xTaskGetTickCountFromISR(void) { return millis(); }

@@ -390,6 +390,7 @@ typedef struct bl_api {
     int (*ble_service_delete)(int svc);
     int (*ble_peer_mtu)(uint16_t conn_id);
     int (*ble_set_device_name)(const char *name);
+    void * (*task_create_caps)(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core, uint32_t caps);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -778,6 +779,7 @@ extern const bl_api_t *BL;
 #define BL_MINOR_ble_service_delete 10
 #define BL_MINOR_ble_peer_mtu 10
 #define BL_MINOR_ble_set_device_name 10
+#define BL_MINOR_task_create_caps 10
 
 /* Milliseconds since boot. */
 static inline uint32_t millis(void) { return BL_CALL(millis)(); }
@@ -1972,6 +1974,10 @@ static inline int bl_ble_peer_mtu(uint16_t conn_id) { return BL_CALL(ble_peer_mt
 #if defined(BL_HAS_BLE)
 /* esp_ble_gap_set_device_name: rename the device while BLE runs (advertising and the GAP name). */
 static inline int bl_ble_set_device_name(const char *name) { return BL_CALL(ble_set_device_name)(name); }
+#endif
+#if defined(BL_HAS_RTOS)
+/* task_create with the stack from a heap with all of caps (xTaskCreatePinnedToCoreWithCaps; MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT puts it in PSRAM), else in internal RAM. A task with a PSRAM stack must never write flash itself (LittleFS, Preferences, Update): ESP-IDF stops with an assert. Delete it as any task. */
+static inline void * bl_task_create_caps(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core, uint32_t caps) { return BL_CALL(task_create_caps)(fn, name, stack_bytes, arg, priority, core, caps); }
 #endif
 #endif /* BASELINE_FIRMWARE */
 

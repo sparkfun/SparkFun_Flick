@@ -59,7 +59,7 @@ static const char *s_status = "not loaded";
  * else is resumed at once, and the watchdog decides as before. */
 #define STOP_CHECK_MS       2500        /* the task watchdog fires at 5 s */
 #define STOP_POLL_MS        500
-#define STOP_TASK_STACK     3072
+#define STOP_TASK_STACK     2560        /* ~0.5 KB used, plus room for BLOG_I */
 
 static volatile int64_t s_fed_us;       /* last watchdog feed by the sketch */
 static volatile int s_wdt_paused;       /* Baseline calls in progress that paused it */

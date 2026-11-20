@@ -43,6 +43,68 @@ __attribute__((constructor)) static void tls_allocator_install(void)
 }
 #endif
 
+#ifdef CONFIG_MDNS_MEMORY_CUSTOM_IMPL
+/* mDNS's allocator (idf/sdkconfig.defaults). mDNS allocates a block for every
+ * packet, answer and service it handles. Its own choice is all internal RAM,
+ * which competes with WiFi and Bluetooth on the classic ESP32, or all PSRAM,
+ * which fails on boards without any. So: PSRAM first, then internal RAM, as for
+ * mbedTLS. The mDNS task uses these blocks, never an interrupt or code that
+ * runs with the cache off. Its 4 KB stack goes to PSRAM too where FreeRTOS
+ * allows that (CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM): the task never
+ * writes flash, the one thing a task with a PSRAM stack must not do.
+ * These replace mDNS's weak defaults; they are here, not in a file of their
+ * own, because the linker only takes objects something else references. */
+#define MDNS_PSRAM_FIRST    MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT
+
+extern "C" void *mdns_mem_malloc(size_t size)
+{
+    return heap_caps_malloc_prefer(size, 2, MDNS_PSRAM_FIRST);
+}
+
+extern "C" void *mdns_mem_calloc(size_t num, size_t size)
+{
+    return heap_caps_calloc_prefer(num, size, 2, MDNS_PSRAM_FIRST);
+}
+
+extern "C" void mdns_mem_free(void *ptr)
+{
+    heap_caps_free(ptr);
+}
+
+extern "C" char *mdns_mem_strndup(const char *s, size_t n)
+{
+    if (!s) {
+        return NULL;
+    }
+    size_t len = strnlen(s, n);
+    char *copy = (char *)mdns_mem_malloc(len + 1);
+    if (copy) {
+        memcpy(copy, s, len);
+        copy[len] = 0;
+    }
+    return copy;
+}
+
+extern "C" char *mdns_mem_strdup(const char *s)
+{
+    return s ? mdns_mem_strndup(s, strlen(s)) : NULL;
+}
+
+extern "C" void *mdns_mem_task_malloc(size_t size)
+{
+#if CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM
+    return heap_caps_malloc_prefer(size, 2, MDNS_PSRAM_FIRST);
+#else
+    return heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+#endif
+}
+
+extern "C" void mdns_mem_task_free(void *ptr)
+{
+    heap_caps_free(ptr);
+}
+#endif
+
 /* ---- heap ---- */
 
 void *bl_impl_idf_heap_malloc(size_t size, uint32_t caps)

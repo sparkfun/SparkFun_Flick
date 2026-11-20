@@ -99,7 +99,12 @@ static bool ensure_init(const char *name)
         return false;           // the BLE co-processor doesn't answer
     }
     if (!s_events) {
-        s_events = xQueueCreate(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t));
+        // 4 KB: in PSRAM when there is some (events are queued from the
+        // Bluetooth task, never from an interrupt), else in internal RAM
+        s_events = xQueueCreateWithCaps(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (!s_events) {
+            s_events = xQueueCreate(EVENT_QUEUE_LEN, sizeof(bl_ble_event_t));
+        }
     }
 #if CONFIG_BTDM_CTRL_MODE_BTDM
     // Classic ESP32: if Bluetooth Classic (SPP) has not started, give its

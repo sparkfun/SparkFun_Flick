@@ -15,8 +15,15 @@ static int log_vprintf(const char *fmt, va_list ap)
 
 /* The console drops received bytes once its queue is full (HWCDC default 256).
  * An upload DATA line is ~1 KB and arrives in one burst, so give it plenty of
- * room. */
+ * room. On the classic ESP32 the console is a UART, whose driver keeps this
+ * buffer in internal RAM, where every KB counts with Bluetooth and WiFi on:
+ * there it holds the loader's window of 4 lines (loader_proto.c BAUD_WINDOW)
+ * with a line to spare. */
+#if CONFIG_IDF_TARGET_ESP32
+#define CONSOLE_RX_BUFFER 5120
+#else
 #define CONSOLE_RX_BUFFER 8192
+#endif
 
 /* UART consoles (USB-serial chip boards) run at the chip's BL_PORT_CONSOLE_BAUD. */
 #ifndef BL_PORT_CONSOLE_BAUD

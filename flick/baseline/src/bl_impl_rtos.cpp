@@ -49,7 +49,43 @@ static UBaseType_t capped(int priority)
 struct TaskStart {
     bl_callback_t fn;
     void *arg;
+    bool caps;          /* made by xTaskCreatePinnedToCoreWithCaps */
 };
+
+/* Tasks made with a stack from other memory (task_create_caps). FreeRTOS
+ * frees their stack and TCB only in vTaskDeleteWithCaps, so a delete must know
+ * which tasks they are. Each one adds itself when it starts: a task deleted
+ * before it ever ran is deleted plainly and its memory is lost, nothing worse. */
+#define CAPS_TASKS_MAX  16
+static TaskHandle_t s_caps_tasks[CAPS_TASKS_MAX];
+static portMUX_TYPE s_caps_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void caps_task_add(TaskHandle_t t)
+{
+    portENTER_CRITICAL(&s_caps_lock);
+    for (int i = 0; i < CAPS_TASKS_MAX; i++) {
+        if (!s_caps_tasks[i]) {
+            s_caps_tasks[i] = t;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&s_caps_lock);
+}
+
+static bool caps_task_remove(TaskHandle_t t)
+{
+    bool found = false;
+    portENTER_CRITICAL(&s_caps_lock);
+    for (int i = 0; i < CAPS_TASKS_MAX; i++) {
+        if (s_caps_tasks[i] == t) {
+            s_caps_tasks[i] = NULL;
+            found = true;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&s_caps_lock);
+    return found;
+}
 
 /* A task the sketch put on the task watchdog leaves it before it is deleted,
  * or the watchdog would take the missing feeds for a hang. */
@@ -60,16 +96,30 @@ static void twdt_forget(TaskHandle_t t)
     }
 }
 
+static void delete_task(TaskHandle_t t)
+{
+    TaskHandle_t h = t ? t : xTaskGetCurrentTaskHandle();
+    twdt_forget(h);
+    if (caps_task_remove(h)) {
+        vTaskDeleteWithCaps(t);     /* NULL deletes the caller, as vTaskDelete */
+    } else {
+        vTaskDelete(t);
+    }
+}
+
 static void task_main(void *p)
 {
     TaskStart s = *(TaskStart *)p;
     free(p);
+    if (s.caps) {
+        caps_task_add(xTaskGetCurrentTaskHandle());
+    }
     s.fn(s.arg);
-    twdt_forget(NULL);
-    vTaskDelete(NULL);      /* a FreeRTOS task must not return */
+    delete_task(NULL);      /* a FreeRTOS task must not return */
 }
 
-void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core)
+static void *task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core,
+                         uint32_t caps)
 {
     if (!fn) {
         return NULL;
@@ -80,15 +130,27 @@ void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_byt
     }
     s->fn = fn;
     s->arg = arg;
+    s->caps = false;
     BaseType_t on = core >= 0 && core < portNUM_PROCESSORS ? core : tskNO_AFFINITY;
     TaskHandle_t t = NULL;
     uint32_t stack = stack_bytes < BL_TASK_MIN_STACK ? BL_TASK_MIN_STACK : stack_bytes;
-    BaseType_t r = xTaskCreatePinnedToCore(task_main, name ? name : "sketch_task", stack, s, capped(priority), &t, on);
+    const char *label = name ? name : "sketch_task";
+    BaseType_t r = pdFAIL;
+    if (caps) {
+        s->caps = true;
+        r = xTaskCreatePinnedToCoreWithCaps(task_main, label, stack, s, capped(priority), &t, on, caps);
+        if (r != pdPASS) {
+            s->caps = false;    /* none of that memory: internal RAM, as task_create */
+        }
+    }
+    if (r != pdPASS) {
+        r = xTaskCreatePinnedToCore(task_main, label, stack, s, capped(priority), &t, on);
+    }
     if (r != pdPASS) {
         free(s);
         /* Task stacks are in internal RAM: say how much there was */
         BLOG_E("task '%s' (stack %lu, core %d, priority %d) not created: error %d; internal RAM %u free, %u largest block",
-               name ? name : "sketch_task", (unsigned long)stack, core, priority, (int)r,
+               label, (unsigned long)stack, core, priority, (int)r,
                (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
         return NULL;
@@ -96,11 +158,21 @@ void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_byt
     return t;
 }
 
+void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core)
+{
+    return task_create(fn, name, stack_bytes, arg, priority, core, 0);
+}
+
+void *bl_impl_task_create_caps(bl_callback_t fn, const char *name, uint32_t stack_bytes, void *arg, int priority, int core,
+                               uint32_t caps)
+{
+    return task_create(fn, name, stack_bytes, arg, priority, core, caps);
+}
+
 void bl_impl_task_delete(void *task)
 {
     sketch_task_deleting(task);
-    twdt_forget((TaskHandle_t)task);
-    vTaskDelete((TaskHandle_t)task);
+    delete_task((TaskHandle_t)task);
 }
 
 void *bl_impl_task_current(void)
