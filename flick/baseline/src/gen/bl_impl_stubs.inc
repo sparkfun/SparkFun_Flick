@@ -27,6 +27,16 @@ extern "C" int bl_impl_wifi_config(uint32_t ip, uint32_t gateway, uint32_t subne
 extern "C" int bl_impl_wifi_set_hostname(const char *name) { return BL_ERR_UNSUPPORTED; }
 extern "C" int bl_impl_net_resolve(const char *host, uint32_t *ip) { return BL_ERR_UNSUPPORTED; }
 extern "C" int bl_impl_wifi_event_take(void) { return -1; }
+extern "C" int bl_impl_net_if_get(int iface, int what, void *out, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_net_if_set(int iface, int what, const void *value, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" const char * bl_impl_net_event_name(int event) { return NULL; }
+extern "C" int bl_impl_wifi_event_take_info(void *info, size_t size) { return -1; }
+extern "C" int bl_impl_wifi_sta_connect(const char *ssid, const char *password, int channel) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_wifi_ap_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_wifi_set_channel(int primary, int secondary) { return 0; }
+extern "C" int bl_impl_wifi_get_channel(int *secondary) { return 0; }
+extern "C" int bl_impl_wifi_set_long_range(int iface, int on) { return BL_ERR_UNSUPPORTED; }
+extern "C" int bl_impl_wifi_scan_ex(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel, const char *ssid, const uint8_t *bssid) { return BL_ERR_UNSUPPORTED; }
 #endif /* BL_STUB_WIFI */
 
 #if defined(BL_STUB_BLE) && BL_STUB_BLE
@@ -75,6 +85,7 @@ extern "C" int bl_impl_espnow_begin(void) { return BL_ERR_UNSUPPORTED; }
 extern "C" int bl_impl_espnow_send(const uint8_t *mac, const uint8_t *data, size_t len) { return BL_ERR_UNSUPPORTED; }
 extern "C" int bl_impl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size) { return 0; }
 extern "C" int bl_impl_espnow_send_status(uint8_t *mac) { return -1; }
+extern "C" int bl_impl_espnow_receive_info(bl_espnow_rx_t *info, uint8_t *data, size_t size) { return 0; }
 #endif /* BL_STUB_ESPNOW */
 
 #if defined(BL_STUB_TEENSY) && BL_STUB_TEENSY

@@ -54,6 +54,8 @@ static int teensy_format(uint32_t config)
     return f;
 }
 
+static int s_format[9];   /* each port's format, for a change of baud rate */
+
 extern "C" int bl_impl_uart_begin(int port, uint32_t baud, uint32_t config, int rx, int tx)
 {
     HardwareSerialIMXRT *u = uart(port);
@@ -75,6 +77,21 @@ extern "C" int bl_impl_uart_begin(int port, uint32_t baud, uint32_t config, int 
         s_rx_extra[port] = 0;
     }
     u->begin(baud, format);
+    s_format[port] = format;
+    return BL_OK;
+}
+
+/* updateBaudRate (ABI 1.10): begin() again with the same format and pins. */
+extern "C" int bl_impl_uart_set_baud(int port, uint32_t baud)
+{
+    HardwareSerialIMXRT *u = uart(port);
+    if (!u) {
+        return BL_ERR_UNSUPPORTED;
+    }
+    if (!baud) {
+        return BL_ERR_ARG;
+    }
+    u->begin(baud, s_format[port]);
     return BL_OK;
 }
 

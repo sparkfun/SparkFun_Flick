@@ -90,6 +90,14 @@ public:
     bool isLow() { return getStatus() & 0x10; }
     bool isChange() { return getStatus() & 0x20; }
 
+    /* Hibernate thresholds (HIBRT register): the gauge hibernates when the
+     * charge rate stays below HibThr (0.208 %/h steps) and wakes when the
+     * voltage moves more than ActThr (1.25 mV steps). 0xFF in both: never hibernate. */
+    uint8_t getHIBRTActThr() { return (uint8_t)(read16(REG_HIBRT) & 0xFF); }
+    uint8_t setHIBRTActThr(uint8_t threshold) { return write16(REG_HIBRT, (read16(REG_HIBRT) & 0xFF00) | threshold); }
+    uint8_t getHIBRTHibThr() { return (uint8_t)(read16(REG_HIBRT) >> 8); }
+    uint8_t setHIBRTHibThr(uint8_t threshold) { return write16(REG_HIBRT, (read16(REG_HIBRT) & 0x00FF) | (threshold << 8)); }
+
     uint8_t sleep()
     {
         if (is48()) {
@@ -101,7 +109,7 @@ public:
 
 private:
     enum {
-        REG_VCELL = 0x02, REG_SOC = 0x04, REG_MODE = 0x06, REG_VERSION = 0x08, REG_CONFIG = 0x0C,
+        REG_VCELL = 0x02, REG_SOC = 0x04, REG_MODE = 0x06, REG_VERSION = 0x08, REG_HIBRT = 0x0A, REG_CONFIG = 0x0C,
         REG_VALRT = 0x14, REG_CRATE = 0x16, REG_VRESET_ID = 0x18, REG_STATUS = 0x1A, REG_COMMAND = 0xFE,
     };
     bool is48() const { return device_ == MAX1704X_MAX17048 || device_ == MAX1704X_MAX17049; }

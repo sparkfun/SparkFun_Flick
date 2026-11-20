@@ -148,6 +148,89 @@ size_t strlcat(char *dst, const char *src, size_t size)
     return d == size ? size + strlen(src) : d + strlcpy(dst + d, src, size - d);
 }
 
+/* strtok with the position kept in *save, so two scans can interleave. */
+char *strtok_r(char *str, const char *delim, char **save)
+{
+    char *s = str ? str : *save;
+    if (!s) {
+        return NULL;
+    }
+    while (*s && strchr(delim, *s)) {
+        s++;
+    }
+    if (!*s) {
+        *save = s;
+        return NULL;
+    }
+    char *end = s;
+    while (*end && !strchr(delim, *end)) {
+        end++;
+    }
+    if (*end) {
+        *end++ = '\0';
+    }
+    *save = end;
+    return s;
+}
+
+/* strstr within the first len characters of haystack (BSD). */
+char *strnstr(const char *haystack, const char *needle, size_t len)
+{
+    size_t n = strlen(needle);
+    if (!n) {
+        return (char *)haystack;
+    }
+    for (size_t i = 0; i + n <= len && haystack[i]; i++) {
+        if (haystack[i] == *needle && strncmp(haystack + i, needle, n) == 0) {
+            return (char *)haystack + i;
+        }
+    }
+    return NULL;
+}
+
+/* Formatted input runs in Baseline's C library (ABI 1.10). Not on Teensy:
+ * newlib's scanf doesn't fit its Baseline's static RAM, so a sketch that
+ * calls sscanf fails to link there instead of failing when it runs. */
+#if defined(BL_PLATFORM_ESP32) || defined(BL_PLATFORM_RP2)
+int vsscanf(const char *str, const char *fmt, va_list ap)
+{
+    return bl_vsscanf(str, fmt, ap);
+}
+
+int sscanf(const char *str, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int n = bl_vsscanf(str, fmt, ap);
+    va_end(ap);
+    return n;
+}
+#endif
+
+static int ascii_lower(int c)
+{
+    return c >= 'A' && c <= 'Z' ? c + ('a' - 'A') : c;
+}
+
+/* strstr ignoring ASCII case (a GNU extension, declared with _GNU_SOURCE). */
+char *strcasestr(const char *haystack, const char *needle)
+{
+    if (!*needle) {
+        return (char *)haystack;
+    }
+    for (; *haystack; haystack++) {
+        const char *h = haystack, *n = needle;
+        while (*h && *n && ascii_lower((unsigned char)*h) == ascii_lower((unsigned char)*n)) {
+            h++;
+            n++;
+        }
+        if (!*n) {
+            return (char *)haystack;
+        }
+    }
+    return NULL;
+}
+
 /* ---- FILE output: stdout and stderr are the console ----
  * Library code sometimes writes diagnostics with fputs(s, stderr) or
  * fprintf(stderr, ...). Every stream goes to the console. */

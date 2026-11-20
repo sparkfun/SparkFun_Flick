@@ -29,9 +29,12 @@ typedef enum { WIFI_OFF = 0, WIFI_STA = 1, WIFI_AP = 2, WIFI_AP_STA = 3 } wifi_m
 #define WIFI_MODE_AP    WIFI_AP
 #define WIFI_MODE_APSTA WIFI_AP_STA
 
-typedef enum {
+typedef enum {      /* ESP-IDF 5.5's values */
     WIFI_AUTH_OPEN = 0, WIFI_AUTH_WEP, WIFI_AUTH_WPA_PSK, WIFI_AUTH_WPA2_PSK, WIFI_AUTH_WPA_WPA2_PSK,
-    WIFI_AUTH_WPA2_ENTERPRISE, WIFI_AUTH_WPA3_PSK, WIFI_AUTH_WPA2_WPA3_PSK,
+    WIFI_AUTH_ENTERPRISE, WIFI_AUTH_WPA2_ENTERPRISE = WIFI_AUTH_ENTERPRISE, WIFI_AUTH_WPA3_PSK, WIFI_AUTH_WPA2_WPA3_PSK,
+    WIFI_AUTH_WAPI_PSK, WIFI_AUTH_OWE, WIFI_AUTH_WPA3_ENT_192, WIFI_AUTH_WPA3_EXT_PSK, WIFI_AUTH_WPA3_EXT_PSK_MIXED_MODE,
+    WIFI_AUTH_DPP, WIFI_AUTH_WPA3_ENTERPRISE, WIFI_AUTH_WPA2_WPA3_ENTERPRISE, WIFI_AUTH_WPA_ENTERPRISE,
+    WIFI_AUTH_MAX
 } wifi_auth_mode_t;
 
 #define WIFI_SCAN_RUNNING (-1)
@@ -54,15 +57,147 @@ typedef enum {
     ARDUINO_EVENT_MAX = 207,
 } arduino_event_id_t;
 typedef arduino_event_id_t WiFiEvent_t;
-typedef arduino_event_id_t arduino_event_t;
-typedef struct { int unused; } WiFiEventInfo_t;      // event details are not passed through
+
+/* Event details (arduino_event_info_t), in ESP-IDF's layouts. Filled in for
+ * the events below; the others arrive with zeros. */
+typedef struct { uint32_t addr; } esp_ip4_addr_t;
+typedef struct { esp_ip4_addr_t ip, netmask, gw; } esp_netif_ip_info_t;
+typedef struct {
+    uint8_t ssid[32]; uint8_t ssid_len; uint8_t bssid[6]; uint8_t channel; wifi_auth_mode_t authmode; uint16_t aid;
+} wifi_event_sta_connected_t;
+typedef struct {
+    uint8_t ssid[32]; uint8_t ssid_len; uint8_t bssid[6]; uint8_t reason; int8_t rssi;
+} wifi_event_sta_disconnected_t;
+typedef struct { uint32_t status; uint8_t number; uint8_t scan_id; } wifi_event_sta_scan_done_t;
+typedef struct { wifi_auth_mode_t old_mode, new_mode; } wifi_event_sta_authmode_change_t;
+typedef struct { uint8_t mac[6]; uint8_t aid; bool is_mesh_child; } wifi_event_ap_staconnected_t;
+typedef struct { uint8_t mac[6]; uint8_t aid; bool is_mesh_child; uint16_t reason; } wifi_event_ap_stadisconnected_t;
+typedef struct { void *esp_netif; esp_netif_ip_info_t ip_info; bool ip_changed; } ip_event_got_ip_t;
+typedef struct { void *esp_netif; esp_ip4_addr_t ip; uint8_t mac[6]; } ip_event_ap_staipassigned_t;
+typedef union {
+    ip_event_ap_staipassigned_t wifi_ap_staipassigned;
+    ip_event_got_ip_t got_ip;
+    ip_event_got_ip_t lost_ip;
+    wifi_event_sta_scan_done_t wifi_scan_done;
+    wifi_event_sta_authmode_change_t wifi_sta_authmode_change;
+    wifi_event_sta_connected_t wifi_sta_connected;
+    wifi_event_sta_disconnected_t wifi_sta_disconnected;
+    wifi_event_ap_staconnected_t wifi_ap_staconnected;
+    wifi_event_ap_stadisconnected_t wifi_ap_stadisconnected;
+    uint8_t raw[48];        /* as much as Baseline passes */
+} arduino_event_info_t;
+static_assert(sizeof(wifi_event_sta_connected_t) == 48 && sizeof(wifi_event_sta_disconnected_t) == 41,
+              "event details must have ESP-IDF's layout");
+typedef arduino_event_info_t WiFiEventInfo_t;
+typedef struct {
+    arduino_event_id_t event_id;
+    arduino_event_info_t event_info;
+} arduino_event_t;
+
 typedef void (*WiFiEventCb)(arduino_event_id_t event);
-typedef void (*WiFiEventSysCb)(arduino_event_id_t event, WiFiEventInfo_t info);
+/* Arduino-ESP32 takes a std::function here; a function or a capture-less lambda works. */
+typedef void (*WiFiEventFuncCb)(arduino_event_id_t event, arduino_event_info_t info);
+typedef void (*WiFiEventSysCb)(arduino_event_t *event);
+typedef WiFiEventCb NetworkEventCb;
+typedef WiFiEventFuncCb NetworkEventFuncCb;
+typedef WiFiEventSysCb NetworkEventSysCb;
 typedef int wifi_event_id_t;
+typedef wifi_event_id_t network_event_handle_t;
 
 /* Register a callback for one event, or every event (ARDUINO_EVENT_MAX). Returns an id. */
-wifi_event_id_t bl_wifi_on_event(WiFiEventCb cb, WiFiEventSysCb cb2, arduino_event_id_t event);
+wifi_event_id_t bl_wifi_on_event(WiFiEventCb cb, WiFiEventFuncCb cbf, WiFiEventSysCb cbs, arduino_event_id_t event);
 void bl_wifi_remove_event(wifi_event_id_t id);
+
+#ifndef BL_WIFI_INTERFACE_T
+#define BL_WIFI_INTERFACE_T
+typedef enum { WIFI_IF_STA = 0, WIFI_IF_AP = 1 } wifi_interface_t;
+#endif
+
+/* ---- Network interfaces: Arduino-ESP32 3.x's NetworkInterface ----
+ * WiFi.STA (station) and WiFi.AP (access point). IPv4 only for now. */
+class NetworkInterface : public Printable {
+public:
+    explicit NetworkInterface(int iface) : if_(iface) {}
+    size_t printTo(Print &out) const override;
+    bool started() const { return flag(BL_NETIF_Q_STARTED); }
+    bool connected() const { return flag(BL_NETIF_Q_CONNECTED); }
+    bool hasIP() const { return flag(BL_NETIF_Q_HAS_IP); }
+    bool linkUp() const { return flag(BL_NETIF_Q_LINK_UP); }
+    bool isDefault() const { return flag(BL_NETIF_Q_IS_DEFAULT); }
+    bool setDefault() { return bl_net_if_set(if_, BL_NETIF_S_DEFAULT, 0, 0) == BL_OK; }
+    IPAddress localIP() const { return ip(BL_NETIF_Q_LOCAL_IP); }
+    IPAddress subnetMask() const { return ip(BL_NETIF_Q_SUBNET); }
+    IPAddress gatewayIP() const { return ip(BL_NETIF_Q_GATEWAY); }
+    IPAddress dnsIP(uint8_t n = 0) const { return n < 3 ? ip(BL_NETIF_Q_DNS0 + n) : IPAddress(); }
+    IPAddress broadcastIP() const { return ip(BL_NETIF_Q_BROADCAST); }
+    uint8_t *macAddress(uint8_t *mac) const { return bl_net_if_get(if_, BL_NETIF_Q_MAC, mac, 6) == 6 ? mac : 0; }
+    String macAddress() const;
+    const char *getHostname() const { return text(BL_NETIF_Q_HOSTNAME); }
+    bool setHostname(const char *name) { return bl_net_if_set(if_, BL_NETIF_S_HOSTNAME, name, 0) == BL_OK; }
+    const char *desc() const { return text(BL_NETIF_Q_DESC); }
+    bool operator==(const NetworkInterface &o) const { return if_ == o.if_; }
+    bool operator!=(const NetworkInterface &o) const { return if_ != o.if_; }
+
+protected:
+    bool flag(int what) const { return bl_net_if_get(if_, what, 0, 0) == 1; }
+    IPAddress ip(int what) const
+    {
+        uint32_t v = 0;
+        bl_net_if_get(if_, what, &v, sizeof(v));
+        return IPAddress(v);
+    }
+    const char *text(int what) const
+    {
+        if (bl_net_if_get(if_, what, text_, sizeof(text_)) < 0) {
+            text_[0] = '\0';
+        }
+        return text_;
+    }
+    int if_;
+    mutable char text_[64] = {};
+};
+
+class STAClass : public NetworkInterface {
+public:
+    STAClass() : NetworkInterface(BL_NETIF_STA) {}
+    bool begin(bool tryConnect = false) { return bl_wifi_set_mode(bl_wifi_get_mode() | BL_WIFI_MODE_STA) == BL_OK; }
+    bool end() { return bl_wifi_set_mode(bl_wifi_get_mode() & ~BL_WIFI_MODE_STA) == BL_OK; }
+    bool connect(const char *ssid, const char *passphrase = 0, int32_t channel = 0)
+    {
+        return bl_wifi_sta_connect(ssid, passphrase, channel) == 1;
+    }
+    bool disconnect(bool eraseap = false, unsigned long timeout = 0)
+    {
+        bl_wifi_disconnect();
+        return true;
+    }
+    bool config(IPAddress local, IPAddress gateway, IPAddress subnet, IPAddress dns1 = IPAddress())
+    {
+        return bl_wifi_config(local, gateway, subnet, dns1) == BL_OK;
+    }
+    wl_status_t status() { return bl_net_if_get(if_, BL_NETIF_Q_STATUS, 0, 0); }
+    String SSID() const;
+    int8_t RSSI() const { return (int8_t)bl_net_if_get(if_, BL_NETIF_Q_RSSI, 0, 0); }
+};
+
+class APClass : public NetworkInterface {
+public:
+    APClass() : NetworkInterface(BL_NETIF_AP) {}
+    bool begin() { return bl_wifi_set_mode(bl_wifi_get_mode() | BL_WIFI_MODE_AP) == BL_OK; }
+    bool end() { return bl_wifi_set_mode(bl_wifi_get_mode() & ~BL_WIFI_MODE_AP) == BL_OK; }
+    bool create(const char *ssid, const char *passphrase = 0, int channel = 1, int ssid_hidden = 0, int max_connection = 4)
+    {
+        return bl_wifi_softap(ssid, passphrase && *passphrase ? passphrase : 0, channel, ssid_hidden, max_connection) == BL_OK;
+    }
+    bool clear() { return bl_wifi_softap_stop() == BL_OK; }
+    bool config(IPAddress local_ip, IPAddress gateway, IPAddress subnet, IPAddress dhcp_lease_start = IPAddress(),
+                IPAddress dns = IPAddress())
+    {
+        return bl_wifi_ap_config(local_ip, gateway, subnet, dhcp_lease_start, dns) == BL_OK;
+    }
+    uint8_t stationCount() { return (uint8_t)bl_net_if_get(if_, BL_NETIF_Q_STATIONS, 0, 0); }
+    String SSID() const;
+};
 
 class WiFiClass {
 public:
@@ -75,9 +210,10 @@ public:
     wl_status_t begin(const String &ssid, const String &password) { return begin(ssid.c_str(), password.c_str()); }
     wl_status_t status() { return bl_wifi_status(); }
     bool isConnected() { return bl_wifi_status() == WL_CONNECTED; }
-    /* WiFi.onEvent(cb[, event]): cb(event) or cb(event, info), on the sketch task. */
-    wifi_event_id_t onEvent(WiFiEventCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(cb, nullptr, event); }
-    wifi_event_id_t onEvent(WiFiEventSysCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, cb, event); }
+    /* WiFi.onEvent(cb[, event]): cb(event), cb(event, info) or cb(arduino_event_t *), on the sketch task. */
+    wifi_event_id_t onEvent(WiFiEventCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(cb, nullptr, nullptr, event); }
+    wifi_event_id_t onEvent(WiFiEventFuncCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, cb, nullptr, event); }
+    wifi_event_id_t onEvent(WiFiEventSysCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, nullptr, cb, event); }
     void removeEvent(wifi_event_id_t id) { bl_wifi_remove_event(id); }
     bool disconnect(bool wifioff = false, bool eraseap = false)
     {
@@ -138,9 +274,13 @@ public:
     uint8_t softAPgetStationNum() { return (uint8_t)bl_wifi_softap_stations(); }
 
     /* scan (blocking; the async form returns the same result) */
-    int16_t scanNetworks(bool async = false, bool show_hidden = false)
+    int16_t scanNetworks(bool async = false, bool show_hidden = false, bool passive = false,
+                         uint32_t max_ms_per_chan = 300, uint8_t channel = 0, const char *ssid = 0,
+                         const uint8_t *bssid = 0)
     {
-        int n = bl_wifi_scan();
+        bool plain = !show_hidden && !passive && max_ms_per_chan == 300 && !channel && !ssid && !bssid;
+        int n = plain ? bl_wifi_scan()      /* every board */
+                      : bl_wifi_scan_ex(show_hidden, passive, max_ms_per_chan, channel, ssid, bssid);
         scanCount_ = n > 0 ? n : 0;
         return n >= 0 ? (int16_t)n : WIFI_SCAN_FAILED;
     }
@@ -152,6 +292,28 @@ public:
     wifi_auth_mode_t encryptionType(uint8_t i) { bl_wifi_ap_t ap; return scanResult(i, ap) ? (wifi_auth_mode_t)ap.auth : WIFI_AUTH_OPEN; }
     String BSSIDstr(uint8_t i);
 
+    /* ESP32 long range mode (WIFI_PROTOCOL_LR, 802.11b/g/n kept): on the
+     * station and access point that are running, or on one interface. */
+    bool setLongRange(bool on)
+    {
+        int mode = bl_wifi_get_mode();
+        bool ok = mode != BL_WIFI_MODE_OFF;
+        if (mode & BL_WIFI_MODE_STA) {
+            ok &= bl_wifi_set_long_range(BL_NETIF_STA, on) == BL_OK;
+        }
+        if (mode & BL_WIFI_MODE_AP) {
+            ok &= bl_wifi_set_long_range(BL_NETIF_AP, on) == BL_OK;
+        }
+        return ok;
+    }
+    bool setLongRange(bool on, wifi_interface_t ifx)
+    {
+        return bl_wifi_set_long_range(ifx == WIFI_IF_AP ? BL_NETIF_AP : BL_NETIF_STA, on) == BL_OK;
+    }
+
+    STAClass STA;
+    APClass AP;
+
 private:
     bool scanResult(uint8_t i, bl_wifi_ap_t &ap) { return bl_wifi_scan_result(i, &ap) == BL_OK; }
     int scanCount_ = 0;
@@ -159,46 +321,114 @@ private:
 
 extern WiFiClass WiFi;
 
+/* Network: Arduino-ESP32 3.x's network manager (events, the default interface). */
+class NetworkManager {
+public:
+    wifi_event_id_t onEvent(WiFiEventCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(cb, nullptr, nullptr, event); }
+    wifi_event_id_t onEvent(WiFiEventFuncCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, cb, nullptr, event); }
+    wifi_event_id_t onEvent(WiFiEventSysCb cb, arduino_event_id_t event = ARDUINO_EVENT_MAX) { return bl_wifi_on_event(nullptr, nullptr, cb, event); }
+    void removeEvent(wifi_event_id_t id) { bl_wifi_remove_event(id); }
+    static const char *eventName(arduino_event_id_t id)
+    {
+        const char *n = bl_net_event_name(id);
+        return n ? n : "UNKNOWN";
+    }
+    int hostByName(const char *host, IPAddress &result) { return WiFi.hostByName(host, result); }
+    bool setDefaultInterface(NetworkInterface &ifc) { return ifc.setDefault(); }
+    NetworkInterface *getDefaultInterface();
+};
+
+extern NetworkManager Network;
+
+#if defined(BL_PLATFORM_ESP32)
+/* esp_wifi_set_channel / esp_wifi_get_channel (ESP-IDF names: the ESP32 family). */
+typedef enum { WIFI_SECOND_CHAN_NONE = 0, WIFI_SECOND_CHAN_ABOVE, WIFI_SECOND_CHAN_BELOW } wifi_second_chan_t;
+static inline int esp_wifi_set_channel(uint8_t primary, wifi_second_chan_t second)
+{
+    return bl_wifi_set_channel(primary, (int)second) == BL_OK ? 0 : -1;     /* ESP_OK / ESP_FAIL */
+}
+static inline int esp_wifi_get_channel(uint8_t *primary, wifi_second_chan_t *second)
+{
+    int sec = 0;
+    int p = bl_wifi_get_channel(&sec);
+    if (p < 0) {
+        return -1;
+    }
+    if (primary) {
+        *primary = (uint8_t)p;
+    }
+    if (second) {
+        *second = (wifi_second_chan_t)sec;
+    }
+    return 0;
+}
+#endif
+
 #endif /* BL_HAS_WIFI */
 
 /* Sockets and the HTTP client: any network (WiFi, or Ethernet on a Teensy 4.1).
  * The class names are Arduino-ESP32's; Ethernet.h adds EthernetClient etc. */
+/* Arduino's abstract network client: libraries such as ArduinoMqttClient take
+ * a Client& and work with any connection type. */
+class Client : public Stream {
+public:
+    virtual int connect(IPAddress ip, uint16_t port) = 0;
+    virtual int connect(const char *host, uint16_t port) = 0;
+    virtual size_t write(uint8_t c) = 0;
+    virtual size_t write(const uint8_t *buf, size_t size) = 0;
+    virtual int available() = 0;
+    virtual int read() = 0;
+    virtual int read(uint8_t *buf, size_t size) = 0;
+    virtual int peek() = 0;
+    virtual void flush() = 0;
+    virtual void stop() = 0;
+    virtual uint8_t connected() = 0;
+    virtual operator bool() = 0;
+};
+
 #if defined(BL_HAS_NET)
 /* ---------------- TCP client ---------------- */
 
 /* Copies share one connection (reference counted), as in Arduino-ESP32. */
-class WiFiClient : public Stream {
+class WiFiClient : public Client {
 public:
     WiFiClient() {}
     explicit WiFiClient(int handle) : h_(handle) {}     // takes ownership of a handle
-    WiFiClient(const WiFiClient &o) : Stream(o), h_(o.h_) { retain(); }
+    WiFiClient(const WiFiClient &o) : Client(o), h_(o.h_), connectTimeout_(o.connectTimeout_) { retain(); }
     WiFiClient &operator=(const WiFiClient &o)
     {
         if (this != &o) {
             release();
             h_ = o.h_;
+            connectTimeout_ = o.connectTimeout_;
             retain();
         }
         return *this;
     }
     virtual ~WiFiClient() { release(); }
 
-    int connect(const char *host, uint16_t port, int32_t timeout_ms = 0);
-    int connect(IPAddress ip, uint16_t port, int32_t timeout_ms = 0) { return connect(ip.toString().c_str(), port, timeout_ms); }
-    using Print::write;
+    int connect(const char *host, uint16_t port, int32_t timeout_ms);
+    int connect(IPAddress ip, uint16_t port, int32_t timeout_ms) { return connect(ip.toString().c_str(), port, timeout_ms); }
+    int connect(const char *host, uint16_t port) override { return connect(host, port, connectTimeout_); }
+    int connect(IPAddress ip, uint16_t port) override { return connect(ip, port, connectTimeout_); }
+    void setConnectionTimeout(uint32_t ms) { connectTimeout_ = (int32_t)ms; }
+    size_t write(uint8_t c) override { return write(&c, 1); }
     size_t write(const uint8_t *buf, size_t size) override { return h_ >= 0 ? (size_t)bl_tcp_client_write(h_, buf, size) : 0; }
+    using Print::write;
     int available() override { return h_ >= 0 ? bl_tcp_client_available(h_) : 0; }
     int read() override;
-    int read(uint8_t *buf, size_t size) { return h_ >= 0 ? bl_tcp_client_read(h_, buf, size) : -1; }
-    int peek() { return h_ >= 0 ? bl_tcp_client_peek(h_) : -1; }
-    void flush() {}
-    void stop() { if (h_ >= 0) bl_tcp_client_stop(h_); }
-    uint8_t connected() { return h_ >= 0 && bl_tcp_client_connected(h_); }
-    operator bool() { return connected(); }
+    int read(uint8_t *buf, size_t size) override { return h_ >= 0 ? bl_tcp_client_read(h_, buf, size) : -1; }
+    int peek() override { return h_ >= 0 ? bl_tcp_client_peek(h_) : -1; }
+    void flush() override {}
+    void stop() override { if (h_ >= 0) bl_tcp_client_stop(h_); }
+    uint8_t connected() override { return h_ >= 0 && bl_tcp_client_connected(h_); }
+    operator bool() override { return connected(); }
     bool operator==(const WiFiClient &o) const { return h_ == o.h_; }
     bool operator!=(const WiFiClient &o) const { return h_ != o.h_; }
     IPAddress remoteIP();
     uint16_t remotePort();
+    IPAddress localIP();
+    uint16_t localPort();
 
 protected:
     friend class PubSubClient;  // reads isSecure() to choose MQTT over TLS
@@ -213,6 +443,7 @@ protected:
         }
     }
     int h_ = -1;
+    int32_t connectTimeout_ = 0;    // 0: Baseline's default
 };
 typedef WiFiClient NetworkClient;
 
@@ -224,15 +455,42 @@ public:
     void setInsecure() { insecure_ = true; ca_ = 0; }
     void setCACert(const char *rootCA) { ca_ = rootCA; insecure_ = false; }  // must stay valid
     void setCACertBundle(const uint8_t *, size_t = 0) { ca_ = 0; insecure_ = false; }
+    /* Client certificate and key (PEM), for servers that ask for one. They must stay valid. */
+    void setCertificate(const char *client_cert) { cert_ = client_cert; }
+    void setPrivateKey(const char *private_key) { key_ = private_key; }
+    void setHandshakeTimeout(unsigned long seconds) { handshake_ = seconds; }
+    /* The last TLS error: its code (0 none), and its text in buf. */
+    int lastError(char *buf, const size_t size)
+    {
+        if (h_ < 0) {
+            if (buf && size) {
+                buf[0] = '\0';
+            }
+            return 0;
+        }
+        return bl_tcp_client_last_error(h_, buf, size);
+    }
 
 protected:
     bool isSecure() const override { return true; }
-    void configure() override { bl_tcp_client_tls_config(h_, insecure_, ca_); }
+    void configure() override
+    {
+        bl_tcp_client_tls_config(h_, insecure_, ca_);
+        if (cert_ || key_) {
+            bl_tcp_client_tls_identity(h_, cert_, key_);
+        }
+        if (handshake_) {
+            bl_tcp_client_tls_timeout(h_, (uint32_t)handshake_);
+        }
+    }
 
 private:
     friend class PubSubClient;  // passes ca_ to Baseline's MQTT client
     bool insecure_ = false;
     const char *ca_ = 0;
+    const char *cert_ = 0;
+    const char *key_ = 0;
+    unsigned long handshake_ = 0;
 };
 typedef WiFiClientSecure NetworkClientSecure;
 
@@ -340,16 +598,29 @@ typedef WiFiUDP NetworkUDP;
 
 /* ---------------- HTTPClient ---------------- */
 
-#define HTTP_CODE_OK                    200
-#define HTTP_CODE_CREATED               201
-#define HTTP_CODE_NO_CONTENT            204
-#define HTTP_CODE_MOVED_PERMANENTLY     301
-#define HTTP_CODE_FOUND                 302
-#define HTTP_CODE_BAD_REQUEST           400
-#define HTTP_CODE_UNAUTHORIZED          401
-#define HTTP_CODE_FORBIDDEN             403
-#define HTTP_CODE_NOT_FOUND             404
-#define HTTP_CODE_INTERNAL_SERVER_ERROR 500
+/* HTTP status codes (Arduino-ESP32's HTTPClient names). */
+typedef enum {
+    HTTP_CODE_CONTINUE = 100, HTTP_CODE_SWITCHING_PROTOCOLS = 101, HTTP_CODE_PROCESSING = 102,
+    HTTP_CODE_OK = 200, HTTP_CODE_CREATED = 201, HTTP_CODE_ACCEPTED = 202, HTTP_CODE_NON_AUTHORITATIVE_INFORMATION = 203,
+    HTTP_CODE_NO_CONTENT = 204, HTTP_CODE_RESET_CONTENT = 205, HTTP_CODE_PARTIAL_CONTENT = 206,
+    HTTP_CODE_MULTI_STATUS = 207, HTTP_CODE_ALREADY_REPORTED = 208, HTTP_CODE_IM_USED = 226,
+    HTTP_CODE_MULTIPLE_CHOICES = 300, HTTP_CODE_MOVED_PERMANENTLY = 301, HTTP_CODE_FOUND = 302,
+    HTTP_CODE_SEE_OTHER = 303, HTTP_CODE_NOT_MODIFIED = 304, HTTP_CODE_USE_PROXY = 305,
+    HTTP_CODE_TEMPORARY_REDIRECT = 307, HTTP_CODE_PERMANENT_REDIRECT = 308,
+    HTTP_CODE_BAD_REQUEST = 400, HTTP_CODE_UNAUTHORIZED = 401, HTTP_CODE_PAYMENT_REQUIRED = 402,
+    HTTP_CODE_FORBIDDEN = 403, HTTP_CODE_NOT_FOUND = 404, HTTP_CODE_METHOD_NOT_ALLOWED = 405,
+    HTTP_CODE_NOT_ACCEPTABLE = 406, HTTP_CODE_PROXY_AUTHENTICATION_REQUIRED = 407, HTTP_CODE_REQUEST_TIMEOUT = 408,
+    HTTP_CODE_CONFLICT = 409, HTTP_CODE_GONE = 410, HTTP_CODE_LENGTH_REQUIRED = 411,
+    HTTP_CODE_PRECONDITION_FAILED = 412, HTTP_CODE_PAYLOAD_TOO_LARGE = 413, HTTP_CODE_URI_TOO_LONG = 414,
+    HTTP_CODE_UNSUPPORTED_MEDIA_TYPE = 415, HTTP_CODE_RANGE_NOT_SATISFIABLE = 416, HTTP_CODE_EXPECTATION_FAILED = 417,
+    HTTP_CODE_MISDIRECTED_REQUEST = 421, HTTP_CODE_UNPROCESSABLE_ENTITY = 422, HTTP_CODE_LOCKED = 423,
+    HTTP_CODE_FAILED_DEPENDENCY = 424, HTTP_CODE_UPGRADE_REQUIRED = 426, HTTP_CODE_PRECONDITION_REQUIRED = 428,
+    HTTP_CODE_TOO_MANY_REQUESTS = 429, HTTP_CODE_REQUEST_HEADER_FIELDS_TOO_LARGE = 431,
+    HTTP_CODE_INTERNAL_SERVER_ERROR = 500, HTTP_CODE_NOT_IMPLEMENTED = 501, HTTP_CODE_BAD_GATEWAY = 502,
+    HTTP_CODE_SERVICE_UNAVAILABLE = 503, HTTP_CODE_GATEWAY_TIMEOUT = 504, HTTP_CODE_HTTP_VERSION_NOT_SUPPORTED = 505,
+    HTTP_CODE_VARIANT_ALSO_NEGOTIATES = 506, HTTP_CODE_INSUFFICIENT_STORAGE = 507, HTTP_CODE_LOOP_DETECTED = 508,
+    HTTP_CODE_NOT_EXTENDED = 510, HTTP_CODE_NETWORK_AUTHENTICATION_REQUIRED = 511
+} t_http_codes;
 
 #define HTTPC_ERROR_CONNECTION_REFUSED  (-1)
 #define HTTPC_ERROR_NOT_CONNECTED       (-4)

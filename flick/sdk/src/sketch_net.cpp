@@ -4,6 +4,52 @@
 #if defined(BL_HAS_WIFI)     /* WiFi, mDNS, OTA: WiFi boards */
 
 WiFiClass WiFi;
+NetworkManager Network;
+
+String NetworkInterface::macAddress() const
+{
+    uint8_t mac[6];
+    if (!macAddress(mac)) {
+        return String();
+    }
+    char text[18];
+    snprintf(text, sizeof(text), "%02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    return String(text);
+}
+
+size_t NetworkInterface::printTo(Print &out) const
+{
+    size_t n = out.printf("%s: <%s%s%s%s>", desc(), started() ? "UP" : "DOWN", linkUp() ? ",LINK" : "",
+                          hasIP() ? ",HAS_IP" : "", isDefault() ? ",DEFAULT" : "");
+    uint8_t mac[6];
+    if (macAddress(mac)) {
+        n += out.printf(" ether %02X:%02X:%02X:%02X:%02X:%02X", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+    }
+    if (hasIP()) {
+        n += out.printf(" inet %s mask %s gw %s", localIP().toString().c_str(), subnetMask().toString().c_str(),
+                        gatewayIP().toString().c_str());
+    }
+    return n;
+}
+
+String STAClass::SSID() const
+{
+    return String(text(BL_NETIF_Q_SSID));
+}
+
+String APClass::SSID() const
+{
+    return String(text(BL_NETIF_Q_SSID));
+}
+
+NetworkInterface *NetworkManager::getDefaultInterface()
+{
+    switch (bl_net_if_get(-1, BL_NETIF_Q_DEFAULT, 0, 0)) {
+    case BL_NETIF_STA: return &WiFi.STA;
+    case BL_NETIF_AP:  return &WiFi.AP;
+    default:           return 0;
+    }
+}
 MDNSResponder MDNS;
 ArduinoOTAClass ArduinoOTA;
 
@@ -67,6 +113,24 @@ int WiFiClient::connect(const char *host, uint16_t port, int32_t timeout_ms)
         configure();
     }
     return bl_tcp_client_connect(h_, host, port, timeout_ms);
+}
+
+IPAddress WiFiClient::localIP()
+{
+    uint32_t ip = 0;
+    if (h_ >= 0) {
+        bl_tcp_client_local(h_, &ip, 0);
+    }
+    return IPAddress(ip);
+}
+
+uint16_t WiFiClient::localPort()
+{
+    uint16_t port = 0;
+    if (h_ >= 0) {
+        bl_tcp_client_local(h_, 0, &port);
+    }
+    return port;
 }
 
 int WiFiClient::read()

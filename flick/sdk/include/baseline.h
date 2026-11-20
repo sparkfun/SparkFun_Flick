@@ -23,6 +23,11 @@
 #include <string.h>
 #include <math.h>       /* NAN, sqrt, pow, ... (libm is linked) */
 #include <ctype.h>      /* sdk/include/compat/ctype.h: isdigit, toupper, ... */
+#include <inttypes.h>   /* PRIu32, PRIx64, ... */
+#ifdef __cplusplus
+#include <algorithm>    /* std::min, std::find_if, ... (Arduino-ESP32's Arduino.h has them too) */
+#include <vector>
+#endif
 #undef putchar      /* newlib macros that need its stdio internals */
 #undef getchar
 #include "baseline_pgmspace.h"   /* PROGMEM, pgm_read_byte, ... (no-ops on ESP32) */
@@ -150,6 +155,9 @@ static inline bool psramFound(void) { return bl_system_info(BL_INFO_PSRAM_SIZE) 
 
 /* FreeRTOS names (xTaskCreate, xSemaphoreTake, ...) where the board has them */
 #include "baseline_rtos.h"
+
+/* ESP-IDF names (heap_caps_*, esp_read_mac, esp_partition_*, ...) on the ESP32 family */
+#include "baseline_idf.h"
 
 /* C++ sketches (.ino/.cpp): Serial, String, WiFi, HTTPClient, Wire, ESP, esp_now, ... */
 #include "baseline_arduino.h"

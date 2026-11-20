@@ -33,6 +33,7 @@ static bool uart_pin_ok(int port, int pin, int role)     /* role 0: TX, 1: RX */
 }
 
 static size_t s_rx_size[3];
+static uint16_t s_config[3];  /* each port's format, for a change of baud rate */
 
 /* The SDK's SERIAL_* values are Arduino-ESP32's (parity in bits 0-1, data bits
  * in 2-3, stop bits in 4-5); arduino-pico takes ArduinoCore-API's. */
@@ -68,6 +69,23 @@ extern "C" int bl_impl_uart_begin(int port, uint32_t baud, uint32_t config, int 
         u->setFIFOSize(s_rx_size[port]);
     }
     u->begin(baud, (uint16_t)pico_format(config));
+    s_config[port] = (uint16_t)pico_format(config);
+    return BL_OK;
+}
+
+/* updateBaudRate (ABI 1.10): arduino-pico has no baud change, so restart the
+ * port with the same format (its pins stay set); unread bytes are lost. */
+extern "C" int bl_impl_uart_set_baud(int port, uint32_t baud)
+{
+    SerialUART *u = uart(port);
+    if (!u) {
+        return BL_ERR_UNSUPPORTED;
+    }
+    if (!baud || !s_config[port]) {
+        return BL_ERR_ARG;
+    }
+    u->end();
+    u->begin(baud, s_config[port]);
     return BL_OK;
 }
 

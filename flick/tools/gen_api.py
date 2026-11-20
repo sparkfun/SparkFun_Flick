@@ -163,6 +163,7 @@ WRAPPER_PREFIX_REQUIRES = [
     (("usbh_",), "BL_HAS_USB_HOST"),
     (("isr_", "dma_channel_"), "BL_TARGET_SKETCH_ISR"),
     (("task_", "sem_", "queue_"), "BL_HAS_RTOS"),
+    (("idf_", "update_"), "BL_PLATFORM_ESP32"),
 ]
 # Arduino-ESP32 names (not bl_*) that would mislead elsewhere.
 WRAPPER_NAME_REQUIRES = {
@@ -279,7 +280,7 @@ def gen_table_c(entries):
 # includes gen/bl_impl_stubs.inc instead of its real code. A group is every
 # entry whose field starts with one of its prefixes, plus the named fields.
 STUB_GROUPS = {
-    "WIFI": (("wifi_",), ("http_request", "http_get", "net_resolve")),
+    "WIFI": (("wifi_",), ("http_request", "http_get", "net_resolve", "net_if_get", "net_if_set", "net_event_name")),
     "BLE": (("ble_",), ()),
     "ESPNOW": (("espnow_",), ()),
     # Teensy-only entries: sketch interrupt handlers, DMA channels, the Audio library (ABI 1.8), USB host (1.9).
@@ -289,9 +290,9 @@ STUB_GROUPS = {
 # ends); actions report BL_ERR_UNSUPPORTED.
 STUB_RETURNS = [
     (r"^wifi_status$", "BL_WIFI_NO_SHIELD"),
-    (r"(_read|_peek|^wifi_event_take|^espnow_send_status)$", "-1"),
+    (r"(_read|_peek|^wifi_event_take|^wifi_event_take_info|^espnow_send_status)$", "-1"),
     (r"(available|connected|_count|running|^ble_event_take|^ble_serial_write|rssi|channel|stations|get_mode|ssid|get_value|"
-     r"^espnow_receive)$", "0"),
+     r"^espnow_receive|^espnow_receive_info)$", "0"),
 ]
 
 

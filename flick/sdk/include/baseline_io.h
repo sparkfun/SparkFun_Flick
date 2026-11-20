@@ -55,6 +55,29 @@ static inline void interrupts() {}
 #define SPI_MODE2 2
 #define SPI_MODE3 3
 
+/* Arduino-ESP32's clock register values for the AVR-style dividers of 16 MHz. */
+#define SPI_CLOCK_DIV2    0x00101001    /* 8 MHz */
+#define SPI_CLOCK_DIV4    0x00241001    /* 4 MHz */
+#define SPI_CLOCK_DIV8    0x004c1001    /* 2 MHz */
+#define SPI_CLOCK_DIV16   0x009c1001    /* 1 MHz */
+#define SPI_CLOCK_DIV32   0x013c1001    /* 500 kHz */
+#define SPI_CLOCK_DIV64   0x027c1001    /* 250 kHz */
+#define SPI_CLOCK_DIV128  0x04fc1001    /* 125 kHz */
+
+/* The board's default SPI pins, by their Arduino names. */
+#if defined(BL_BOARD_SS) && !defined(SS)
+static const uint8_t SS = BL_BOARD_SS;
+#endif
+#if defined(BL_BOARD_SCK) && !defined(SCK)
+static const uint8_t SCK = BL_BOARD_SCK;
+#endif
+#if defined(BL_BOARD_MISO) && !defined(MISO)
+static const uint8_t MISO = BL_BOARD_MISO;
+#endif
+#if defined(BL_BOARD_MOSI) && !defined(MOSI)
+static const uint8_t MOSI = BL_BOARD_MOSI;
+#endif
+
 class SPISettings {
 public:
     constexpr SPISettings(uint32_t clock = 1000000, uint8_t bitOrder = MSBFIRST, uint8_t dataMode = SPI_MODE0)
@@ -81,6 +104,12 @@ public:
     void setFrequency(uint32_t freq) { settings_.clock_ = freq; apply(); }
     void setBitOrder(uint8_t order) { settings_.bitOrder_ = order; apply(); }
     void setDataMode(uint8_t mode) { settings_.dataMode_ = mode; apply(); }
+    /* An ESP32 SPI clock register value (SPI_CLOCK_DIVn, or one from spiFrequencyToClockDiv). */
+    void setClockDivider(uint32_t div)
+    {
+        uint32_t pre = (div >> 18) & 0x1FFF, n = (div >> 12) & 0x3F;
+        setFrequency(div & 0x80000000u ? 80000000u : 80000000u / ((pre + 1) * (n + 1)));
+    }
 
     uint8_t transfer(uint8_t data) { bl_spi_transfer(&data, 1); return data; }
     uint16_t transfer16(uint16_t data);
@@ -148,8 +177,20 @@ public:
         bl_uart_end(port_);
         started_ = false;
     }
+    /* A new baud rate for a started port, keeping its pins (ABI 1.10). */
+    void updateBaudRate(unsigned long baud)
+    {
+        if (started_) {
+            bl_uart_set_baud(port_, (uint32_t)baud);
+        }
+    }
     using Print::write;
     size_t write(const uint8_t *buf, size_t size) override { return started_ ? (size_t)bl_uart_write(port_, buf, size) : 0; }
+    /* As Arduino-ESP32: integers are written as one byte (write(0) is otherwise ambiguous). */
+    size_t write(unsigned long n) { return write((uint8_t)n); }
+    size_t write(long n) { return write((uint8_t)n); }
+    size_t write(unsigned int n) { return write((uint8_t)n); }
+    size_t write(int n) { return write((uint8_t)n); }
     int available() override { return started_ ? bl_uart_available(port_) : 0; }
     int read() override;
     size_t read(uint8_t *buf, size_t size) { return started_ ? (size_t)bl_uart_read(port_, buf, size) : 0; }
@@ -160,6 +201,10 @@ public:
     /* Call before begin(), as in Arduino-ESP32. Returns the size set, or 0. */
     size_t setRxBufferSize(size_t size) { return bl_uart_set_rx_buffer(port_, size) == BL_OK ? size : 0; }
     size_t setTxBufferSize(size_t size) { return size; }    // accepted; Baseline's TX buffer is fixed
+#if defined(BL_PLATFORM_ESP32)
+    /* Received bytes the hardware FIFO holds before they move to the receive buffer (1-127; ABI 1.10). */
+    bool setRxFIFOFull(uint8_t fifoBytes) { return bl_uart_set_rx_fifo_full(port_, fifoBytes) == BL_OK; }
+#endif
     operator bool() const { return started_; }
 
 private:

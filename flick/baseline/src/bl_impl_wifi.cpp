@@ -15,6 +15,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_mac.h"
+#include "esp_wifi.h"
 #include "gen/bl_impl.h"
 #include "bl_str.h"
 #include "sketch_loader.h"
@@ -353,6 +354,18 @@ extern "C" int bl_impl_wifi_scan(void)
     return n >= 0 ? n : BL_ERR_FAIL;
 }
 
+extern "C" int bl_impl_wifi_scan_ex(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel,
+                                    const char *ssid, const uint8_t *bssid)
+{
+    if (!bl_hosted_ready()) {
+        return BL_ERR_FAIL;     // the WiFi co-processor doesn't answer
+    }
+    WdtPause wdt;
+    int n = WiFi.scanNetworks(false, show_hidden != 0, passive != 0, max_ms_per_chan ? max_ms_per_chan : 300,
+                              (uint8_t)channel, ssid, bssid);
+    return n >= 0 ? n : BL_ERR_FAIL;
+}
+
 extern "C" int bl_impl_wifi_scan_result(int index, bl_wifi_ap_t *ap)
 {
     if (!ap || index < 0 || index >= WiFi.scanComplete()) {
@@ -408,29 +421,234 @@ extern "C" int bl_impl_net_resolve(const char *host, uint32_t *ip)
     return BL_OK;
 }
 
-/* ---- WiFi/network events for WiFi.onEvent (ABI 1.6) ----
- * Arduino's Network event task calls on_event(); the sketch takes the event
- * numbers from the queue on its own task (the SDK's pump). Registered on the
- * first call, which the SDK makes as soon as the sketch registers a callback. */
+/* ---- WiFi/network events for WiFi.onEvent (ABI 1.6; details 1.10) ----
+ * Arduino's Network event task calls on_event(); the sketch takes the events
+ * from the queue on its own task (the SDK's pump). Registered on the first
+ * call, which the SDK makes as soon as the sketch registers a callback. Each
+ * event carries the first bytes of its arduino_event_info_t: every member of
+ * that union starts at offset 0, and the ones sketches read (connected,
+ * disconnected, got IP, station joined/left, scan done) fit. */
+#define EVENT_INFO_BYTES 48
+static_assert(sizeof(wifi_event_sta_connected_t) <= EVENT_INFO_BYTES &&
+              sizeof(wifi_event_sta_disconnected_t) <= EVENT_INFO_BYTES &&
+              sizeof(ip_event_got_ip_t) <= EVENT_INFO_BYTES &&
+              sizeof(wifi_event_ap_stadisconnected_t) <= EVENT_INFO_BYTES,
+              "event details must fit EVENT_INFO_BYTES");
+
+struct net_event {
+    int id;
+    uint8_t info[EVENT_INFO_BYTES];
+};
 static QueueHandle_t s_events;
 
-static void on_event(arduino_event_id_t event)
+static void on_event(arduino_event_t *event)
 {
-    int e = (int)event;
+    net_event e;
+    e.id = (int)event->event_id;
+    memcpy(e.info, &event->event_info,
+           sizeof(event->event_info) < EVENT_INFO_BYTES ? sizeof(event->event_info) : EVENT_INFO_BYTES);
     xQueueSend(s_events, &e, 0);    // full queue: the event is dropped
 }
 
-extern "C" int bl_impl_wifi_event_take(void)
+static int event_take(void *info, size_t size)
 {
     if (!s_events) {
-        s_events = xQueueCreate(16, sizeof(int));
+        s_events = xQueueCreate(16, sizeof(net_event));
         if (!s_events) {
             return -1;
         }
         Network.onEvent(on_event);
     }
-    int e;
-    return xQueueReceive(s_events, &e, 0) == pdTRUE ? e : -1;
+    net_event e;
+    if (xQueueReceive(s_events, &e, 0) != pdTRUE) {
+        return -1;
+    }
+    if (info && size) {
+        memcpy(info, e.info, size < EVENT_INFO_BYTES ? size : EVENT_INFO_BYTES);
+    }
+    return e.id;
+}
+
+extern "C" int bl_impl_wifi_event_take(void)
+{
+    return event_take(NULL, 0);
+}
+
+extern "C" int bl_impl_wifi_event_take_info(void *info, size_t size)
+{
+    return event_take(info, size);
+}
+
+extern "C" const char *bl_impl_net_event_name(int event)
+{
+    return NetworkEvents::eventName((arduino_event_id_t)event);
+}
+
+/* ---- Network interfaces (ABI 1.10): Arduino-ESP32's NetworkInterface objects ----
+ * WiFi.STA and WiFi.AP. ETH and PPP report BL_ERR_UNSUPPORTED until Baseline
+ * drives them. */
+static NetworkInterface *netif_of(int iface)
+{
+    switch (iface) {
+    case BL_NETIF_STA: return &WiFi.STA;
+    case BL_NETIF_AP:  return &WiFi.AP;
+    default:           return NULL;
+    }
+}
+
+static int netif_id(NetworkInterface *n)
+{
+    if (n == &WiFi.STA) {
+        return BL_NETIF_STA;
+    }
+    if (n == &WiFi.AP) {
+        return BL_NETIF_AP;
+    }
+    return -1;
+}
+
+static int put_ip(void *out, size_t size, IPAddress ip)
+{
+    if (!out || size < sizeof(uint32_t)) {
+        return BL_ERR_ARG;
+    }
+    uint32_t v = (uint32_t)ip;
+    memcpy(out, &v, sizeof(v));
+    return sizeof(v);
+}
+
+static int put_text(void *out, size_t size, const char *text)
+{
+    if (!out || !size) {
+        return BL_ERR_ARG;
+    }
+    bl_copy_str((char *)out, size, String(text ? text : ""));
+    return (int)strlen((char *)out);
+}
+
+extern "C" int bl_impl_net_if_get(int iface, int what, void *out, size_t size)
+{
+    if (what == BL_NETIF_Q_DEFAULT) {
+        return netif_id(Network.getDefaultInterface());
+    }
+    NetworkInterface *n = netif_of(iface);
+    if (!n) {
+        return BL_ERR_UNSUPPORTED;
+    }
+    switch (what) {
+    case BL_NETIF_Q_STARTED:    return n->started();
+    case BL_NETIF_Q_CONNECTED:  return n->connected();
+    case BL_NETIF_Q_HAS_IP:     return n->hasIP();
+    case BL_NETIF_Q_LINK_UP:    return n->linkUp();
+    case BL_NETIF_Q_IS_DEFAULT: return n->isDefault();
+    case BL_NETIF_Q_LOCAL_IP:   return put_ip(out, size, n->localIP());
+    case BL_NETIF_Q_SUBNET:     return put_ip(out, size, n->subnetMask());
+    case BL_NETIF_Q_GATEWAY:    return put_ip(out, size, n->gatewayIP());
+    case BL_NETIF_Q_BROADCAST:  return put_ip(out, size, n->broadcastIP());
+    case BL_NETIF_Q_DNS0:
+    case BL_NETIF_Q_DNS0 + 1:
+    case BL_NETIF_Q_DNS0 + 2:   return put_ip(out, size, n->dnsIP(what - BL_NETIF_Q_DNS0));
+    case BL_NETIF_Q_MAC:
+        if (!out || size < 6) {
+            return BL_ERR_ARG;
+        }
+        return n->macAddress((uint8_t *)out) ? 6 : BL_ERR_STATE;
+    case BL_NETIF_Q_HOSTNAME:   return put_text(out, size, n->getHostname());
+    case BL_NETIF_Q_DESC:       return put_text(out, size, n->desc());
+    case BL_NETIF_Q_SSID:       return put_text(out, size, iface == BL_NETIF_STA ? WiFi.STA.SSID().c_str()
+                                                                                  : WiFi.AP.SSID().c_str());
+    case BL_NETIF_Q_RSSI:       return iface == BL_NETIF_STA ? WiFi.STA.RSSI() : BL_ERR_ARG;
+    case BL_NETIF_Q_STATUS:     return iface == BL_NETIF_STA ? (int)WiFi.STA.status() : BL_ERR_ARG;
+    case BL_NETIF_Q_STATIONS:   return iface == BL_NETIF_AP ? WiFi.AP.stationCount() : BL_ERR_ARG;
+    default:                    return BL_ERR_ARG;
+    }
+}
+
+extern "C" int bl_impl_net_if_set(int iface, int what, const void *value, size_t size)
+{
+    NetworkInterface *n = netif_of(iface);
+    if (!n) {
+        return BL_ERR_UNSUPPORTED;
+    }
+    switch (what) {
+    case BL_NETIF_S_HOSTNAME:
+        return value && n->setHostname((const char *)value) ? BL_OK : BL_ERR_FAIL;
+    case BL_NETIF_S_DEFAULT:
+        return n->setDefault() ? BL_OK : BL_ERR_FAIL;
+    default:
+        return BL_ERR_ARG;
+    }
+}
+
+extern "C" int bl_impl_wifi_sta_connect(const char *ssid, const char *password, int channel)
+{
+    if (!bl_hosted_ready()) {
+        return 0;               // the WiFi co-processor doesn't answer
+    }
+    if (!ssid || !*ssid) {
+        return 0;
+    }
+    return WiFi.STA.connect(ssid, password, channel) ? 1 : 0;
+}
+
+extern "C" int bl_impl_wifi_ap_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns)
+{
+    return WiFi.AP.config(IPAddress(ip), IPAddress(gateway), IPAddress(subnet), IPAddress(dhcp_start), IPAddress(dns))
+               ? BL_OK : BL_ERR_FAIL;
+}
+
+/* ---- Channel and long range mode (ABI 1.10) ---- */
+
+extern "C" int bl_impl_wifi_set_channel(int primary, int secondary)
+{
+    if (secondary < WIFI_SECOND_CHAN_NONE || secondary > WIFI_SECOND_CHAN_BELOW) {
+        return BL_ERR_ARG;
+    }
+    return esp_wifi_set_channel((uint8_t)primary, (wifi_second_chan_t)secondary) == ESP_OK ? BL_OK : BL_ERR_FAIL;
+}
+
+extern "C" int bl_impl_wifi_get_channel(int *secondary)
+{
+    uint8_t primary = 0;
+    wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+    if (esp_wifi_get_channel(&primary, &second) != ESP_OK) {
+        return BL_ERR_STATE;
+    }
+    if (secondary) {
+        *secondary = (int)second;
+    }
+    return primary;
+}
+
+extern "C" int bl_impl_wifi_set_long_range(int iface, int on)
+{
+    wifi_interface_t ifx;
+    if (iface == BL_NETIF_STA) {
+        ifx = WIFI_IF_STA;
+    } else if (iface == BL_NETIF_AP) {
+        ifx = WIFI_IF_AP;
+    } else {
+        return BL_ERR_ARG;
+    }
+    uint8_t protocols = 0;
+    if (esp_wifi_get_protocol(ifx, &protocols) != ESP_OK) {
+        return BL_ERR_STATE;    // WiFi isn't started in a mode with this interface
+    }
+    uint8_t want = protocols | WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N;
+    want = on ? (want | WIFI_PROTOCOL_LR) : (want & ~WIFI_PROTOCOL_LR);
+    if (want == protocols) {
+        return BL_OK;
+    }
+    // ESP-IDF drops the station's connection when its protocols change, and
+    // Arduino doesn't reconnect after a disconnect it asked for: reconnect here.
+    bool reconnect = ifx == WIFI_IF_STA && WiFi.STA.connected();
+    if (esp_wifi_set_protocol(ifx, want) != ESP_OK) {
+        return BL_ERR_FAIL;
+    }
+    if (reconnect) {
+        esp_wifi_connect();
+    }
+    return BL_OK;
 }
 
 #endif /* BL_RADIO_WIFI */

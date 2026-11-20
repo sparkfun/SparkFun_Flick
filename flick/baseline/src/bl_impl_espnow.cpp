@@ -20,6 +20,9 @@
 
 struct espnow_packet {
     uint8_t mac[6];
+    uint8_t dest[6];
+    int8_t rssi;
+    uint8_t channel;
     uint8_t len;
     uint8_t data[ESP_NOW_MAX_DATA_LEN];
 };
@@ -49,6 +52,9 @@ static void on_receive(const esp_now_recv_info_t *info, const uint8_t *data, int
 {
     espnow_packet p;
     memcpy(p.mac, info->src_addr, 6);
+    memcpy(p.dest, info->des_addr, 6);
+    p.rssi = info->rx_ctrl ? (int8_t)info->rx_ctrl->rssi : 0;
+    p.channel = info->rx_ctrl ? (uint8_t)info->rx_ctrl->channel : 0;
     p.len = len > ESP_NOW_MAX_DATA_LEN ? ESP_NOW_MAX_DATA_LEN : len;
     memcpy(p.data, data, p.len);
     xQueueSend(s_queue, &p, 0);     // drop when the sketch falls behind
@@ -120,6 +126,24 @@ extern "C" int bl_impl_espnow_receive(uint8_t *mac, uint8_t *data, size_t size)
     }
     if (mac) {
         memcpy(mac, p.mac, 6);
+    }
+    size_t n = p.len < size ? p.len : size;
+    memcpy(data, p.data, n);
+    return (int)n;
+}
+
+extern "C" int bl_impl_espnow_receive_info(bl_espnow_rx_t *info, uint8_t *data, size_t size)
+{
+    espnow_packet p;
+    if (!s_queue || !data || xQueueReceive(s_queue, &p, 0) != pdTRUE) {
+        return 0;
+    }
+    if (info) {
+        memset(info, 0, sizeof(*info));
+        memcpy(info->src, p.mac, 6);
+        memcpy(info->dest, p.dest, 6);
+        info->rssi = p.rssi;
+        info->channel = p.channel;
     }
     size_t n = p.len < size ? p.len : size;
     memcpy(data, p.data, n);

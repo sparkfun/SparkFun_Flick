@@ -164,6 +164,71 @@ extern "C" int bl_impl_tcp_client_remote(int h, uint32_t *ip, uint16_t *port)
     return BL_OK;
 }
 
+/* ---- What NetworkClient / NetworkClientSecure add (ABI 1.10) ---- */
+
+extern "C" int bl_impl_tcp_client_local(int h, uint32_t *ip, uint16_t *port)
+{
+    NetworkClient *c = client_of(h);
+    if (!c) {
+        return BL_ERR_ARG;
+    }
+    if (ip) {
+        *ip = (uint32_t)c->localIP();
+    }
+    if (port) {
+        *port = c->localPort();
+    }
+    return BL_OK;
+}
+
+static NetworkClientSecure *secure_of(int h)
+{
+    NetworkClient *c = client_of(h);
+    return (c && s_clients[h].secure) ? static_cast<NetworkClientSecure *>(c) : NULL;
+}
+
+extern "C" int bl_impl_tcp_client_tls_identity(int h, const char *cert_pem, const char *key_pem)
+{
+    NetworkClientSecure *s = secure_of(h);
+    if (!s) {
+        return BL_ERR_ARG;
+    }
+    if (cert_pem) {
+        s->setCertificate(cert_pem);
+    }
+    if (key_pem) {
+        s->setPrivateKey(key_pem);
+    }
+    return BL_OK;
+}
+
+extern "C" int bl_impl_tcp_client_tls_timeout(int h, uint32_t seconds)
+{
+    NetworkClientSecure *s = secure_of(h);
+    if (!s) {
+        return BL_ERR_ARG;
+    }
+    s->setHandshakeTimeout(seconds);
+    return BL_OK;
+}
+
+extern "C" int bl_impl_tcp_client_last_error(int h, char *buf, size_t size)
+{
+    NetworkClientSecure *s = secure_of(h);
+    if (!s) {
+        if (buf && size) {
+            buf[0] = '\0';
+        }
+        return 0;
+    }
+    char text[100] = "";
+    int err = s->lastError(text, sizeof(text));
+    if (buf && size) {
+        bl_copy_str(buf, size, String(text));
+    }
+    return err;
+}
+
 /* ---- TCP servers ---- */
 
 static NetworkServer *s_servers[MAX_SERVERS];

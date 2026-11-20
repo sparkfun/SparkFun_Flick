@@ -26,7 +26,8 @@ namespace {
 const int MAX_HANDLERS = 8;
 struct Handler {
     WiFiEventCb cb;
-    WiFiEventSysCb cb2;
+    WiFiEventFuncCb cbf;
+    WiFiEventSysCb cbs;
     arduino_event_id_t event;
 };
 Handler s_handlers[MAX_HANDLERS];
@@ -34,27 +35,30 @@ bool s_pump_added;
 
 void wifi_event_pump()
 {
-    for (int e; (e = bl_wifi_event_take()) >= 0;) {
+    arduino_event_t ev;
+    for (int e; (e = bl_wifi_event_take_info(&ev.event_info, sizeof(ev.event_info))) >= 0;) {
+        ev.event_id = (arduino_event_id_t)e;
         for (Handler &h : s_handlers) {
-            if (h.event != ARDUINO_EVENT_MAX && h.event != (arduino_event_id_t)e) {
+            if (h.event != ARDUINO_EVENT_MAX && h.event != ev.event_id) {
                 continue;
             }
             if (h.cb) {
-                h.cb((arduino_event_id_t)e);
-            } else if (h.cb2) {
-                WiFiEventInfo_t info = {};
-                h.cb2((arduino_event_id_t)e, info);
+                h.cb(ev.event_id);
+            } else if (h.cbf) {
+                h.cbf(ev.event_id, ev.event_info);
+            } else if (h.cbs) {
+                h.cbs(&ev);
             }
         }
     }
 }
 }  // namespace
 
-wifi_event_id_t bl_wifi_on_event(WiFiEventCb cb, WiFiEventSysCb cb2, arduino_event_id_t event)
+wifi_event_id_t bl_wifi_on_event(WiFiEventCb cb, WiFiEventFuncCb cbf, WiFiEventSysCb cbs, arduino_event_id_t event)
 {
     for (int i = 0; i < MAX_HANDLERS; i++) {
-        if (!s_handlers[i].cb && !s_handlers[i].cb2) {
-            s_handlers[i] = {cb, cb2, event};
+        if (!s_handlers[i].cb && !s_handlers[i].cbf && !s_handlers[i].cbs) {
+            s_handlers[i] = {cb, cbf, cbs, event};
             if (!s_pump_added) {
                 s_pump_added = true;
                 bl_wifi_event_take();       // makes Baseline start queueing events now

@@ -58,6 +58,17 @@ SECTIONS
         _sketch_bss_end = ABSOLUTE(.);
     }
 
+    /* RTC_NOINIT_ATTR variables: after .bss, so the loader neither copies nor
+     * zeroes them, and they keep their value across a restart. */
+    .noinit (NOLOAD) :
+    {
+        . = ALIGN(4);
+        _sketch_noinit_start = ABSOLUTE(.);
+        *(.noinit .noinit.*)
+        . = ALIGN(4);
+        _sketch_noinit_end = ABSOLUTE(.);
+    }
+
     _sketch_image_size = _sketch_data_load + SIZEOF(.data) - BL_SKETCH_DBUS_BASE;
 
     /* The ABI minor of each table entry the linked code calls (BL_CALL in
@@ -71,4 +82,4 @@ SECTIONS
 
 ASSERT(SIZEOF(.sketch_header) == BL_SKETCH_HEADER_SIZE, "sketch header must be exactly BL_SKETCH_HEADER_SIZE bytes")
 ASSERT(_sketch_image_size <= BL_SKETCH_MAX_SIZE, "sketch image is larger than the sketch window")
-ASSERT(_sketch_bss_end <= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE, "sketch .data+.bss exceed this target's sketch RAM window; use malloc() for big buffers")
+ASSERT(_sketch_noinit_end <= BL_SKETCH_RAM_BASE + BL_SKETCH_RAM_SIZE, "sketch .data+.bss exceed this target's sketch RAM window; use malloc() for big buffers")

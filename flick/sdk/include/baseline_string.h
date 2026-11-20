@@ -83,6 +83,24 @@ public:
     float toFloat() const { return (float)atof(c_str()); }
     double toDouble() const { return atof(c_str()); }
 
+    /* Copy up to bufsize - 1 characters from index on, then a NUL. */
+    void getBytes(unsigned char *buf, unsigned int bufsize, unsigned int index = 0) const
+    {
+        if (!buf || !bufsize) {
+            return;
+        }
+        size_t n = index < len_ ? len_ - index : 0;
+        if (n > bufsize - 1) {
+            n = bufsize - 1;
+        }
+        memcpy(buf, c_str() + (index < len_ ? index : len_), n);
+        buf[n] = '\0';
+    }
+    void toCharArray(char *buf, unsigned int bufsize, unsigned int index = 0) const
+    {
+        getBytes((unsigned char *)buf, bufsize, index);
+    }
+
 private:
     char *buf_ = 0;
     size_t len_ = 0;

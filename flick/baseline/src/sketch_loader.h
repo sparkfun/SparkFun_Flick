@@ -26,6 +26,7 @@ bool        sketch_wdt_pause(void);             /* returns whether it paused */
 void        sketch_wdt_resume(bool paused);
 /* Feed the task watchdog for the sketch task (delay(), after each loop()). */
 void        sketch_wdt_feed(void);
+void        sketch_wdt_enable(bool on);         /* enableLoopWDT / disableLoopWDT */
 /* Before vTaskDelete of task (NULL: the caller): if it is the sketch's own
  * task, takes it off the watchdog. */
 void        sketch_task_deleting(void *task);

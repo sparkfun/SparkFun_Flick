@@ -109,6 +109,11 @@ extern "C" int bl_impl_vsnprintf(char *buf, size_t size, const char *fmt, va_lis
     return vsnprintf(buf, size, fmt, ap);
 }
 
+extern "C" int bl_impl_vsscanf(const char *str, const char *fmt, va_list ap)
+{
+    return vsscanf(str, fmt, ap);
+}
+
 extern "C" int bl_impl_snprintf(char *buf, size_t size, const char *fmt, ...)
 {
     va_list ap;

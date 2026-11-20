@@ -98,3 +98,26 @@ extern "C" int bl_impl_uart_available_for_write(int port)
     HardwareSerial *u = uart_of(port);
     return u ? u->availableForWrite() : 0;
 }
+
+/* setRxFIFOFull: how many received bytes the hardware FIFO holds before the
+ * driver moves them to the receive buffer (ABI 1.10). */
+extern "C" int bl_impl_uart_set_rx_fifo_full(int port, uint8_t bytes)
+{
+    HardwareSerial *u = uart_of(port);
+    if (!u || bytes == 0 || bytes > 127) {
+        return BL_ERR_ARG;
+    }
+    return u->setRxFIFOFull(bytes) ? BL_OK : BL_ERR_FAIL;
+}
+
+/* updateBaudRate: a new baud rate for a started port, keeping its pins and
+ * buffers (ABI 1.10). */
+extern "C" int bl_impl_uart_set_baud(int port, uint32_t baud)
+{
+    HardwareSerial *u = uart_of(port);
+    if (!u || baud == 0) {
+        return BL_ERR_ARG;
+    }
+    u->updateBaudRate(baud);
+    return BL_OK;
+}

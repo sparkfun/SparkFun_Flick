@@ -5,12 +5,15 @@
 #include <stddef.h>
 #include "baseline.h"
 
-void *operator new(size_t n) { return bl_malloc(n); }
-void *operator new[](size_t n) { return bl_malloc(n); }
-void operator delete(void *p) noexcept { bl_free(p); }
-void operator delete[](void *p) noexcept { bl_free(p); }
-void operator delete(void *p, size_t) noexcept { bl_free(p); }
-void operator delete[](void *p, size_t) noexcept { bl_free(p); }
+/* Weak, so a sketch can replace them (standard C++ allows it; RTK Everywhere
+ * does, to track its heap). As in libstdc++, the array and sized forms call
+ * the plain ones, so replacing operator new and operator delete is enough. */
+__attribute__((weak)) void *operator new(size_t n) { return bl_malloc(n); }
+__attribute__((weak)) void *operator new[](size_t n) { return operator new(n); }
+__attribute__((weak)) void operator delete(void *p) noexcept { bl_free(p); }
+__attribute__((weak)) void operator delete[](void *p) noexcept { operator delete(p); }
+__attribute__((weak)) void operator delete(void *p, size_t) noexcept { operator delete(p); }
+__attribute__((weak)) void operator delete[](void *p, size_t) noexcept { operator delete[](p); }
 
 extern "C" {
 

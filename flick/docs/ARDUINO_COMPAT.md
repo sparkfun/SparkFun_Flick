@@ -34,17 +34,18 @@ and all lead to Baseline.
 | USB device (S3) | `USB.begin`, `USBHIDKeyboard` (`press/release/releaseAll/write/print`, `KEY_*`), `USBHIDMouse` (`move/click/press/release/isPressed`, `MOUSE_*`), `USBHIDGamepad` (`leftStick/rightStick/triggers/hat/pressButton/send`, `BUTTON_*`, `HAT_*`), `USBHIDConsumerControl` (`press/release`, `CONSUMER_CONTROL_*`), `USBMIDI` (`noteOn/noteOff/controlChange/programChange/pitchBend/channelPressure/readPacket/writePacket`) |
 | Battery | `SFE_MAX1704X` (SparkFun MAX1704x library): `begin/isConnected/getVoltage/getSOC/getChangeRate/quickStart/setThreshold/getAlert/clearAlert/sleep/wake/...` |
 | Serial | `Serial.begin/print/println/printf/write/read/available/readString/readStringUntil/setTimeout`, `readBytes`, `find`, `findUntil`, `parseInt`, `parseFloat`, `availableForWrite` |
-| Hardware UARTs | `Serial1` (default pins RX 44 / TX 43) and `Serial2` (pass pins): `begin(baud, SERIAL_8N1, rx, tx)/end/print/write/read/available/peek/flush`, `SERIAL_5N1..SERIAL_8O2`; `setRxBufferSize` (before `begin`), `availableForWrite` |
+| Hardware UARTs | `Serial1` (default pins RX 44 / TX 43) and `Serial2` (pass pins): `begin(baud, SERIAL_8N1, rx, tx)/end/print/write/read/available/peek/flush`, `SERIAL_5N1..SERIAL_8O2`; `setRxBufferSize` (before `begin`), `availableForWrite`, `updateBaudRate` (on the RP2040/RP2350 it restarts the port, dropping unread bytes) |
 | Text | `String` (concat, `+`, compare, `indexOf`, `substring`, `replace`, `trim`, `toInt`, `toFloat`, ...), `printf`, `snprintf`, `sprintf`, `atoi`, `atof`, `strtol`, `strtod`, `F()` |
 | Math | `map`, `constrain`, `min`, `max`, `random`, `randomSeed`, `esp_random`, `<math.h>` (`sqrt`, `pow`, `log`, `sin`, ... ; libm is linked), `PI`, `radians`, `degrees`, `sq`, `lowByte`, `highByte`, `bitRead/bitSet/bitClear/bitWrite`, `bit`, `makeWord` |
 | SPI | `SPI.begin/end/beginTransaction/endTransaction/transfer/transfer16/transfer32/transferBytes/writeBytes/setFrequency/setDataMode/setBitOrder`, `SPISettings`, `MSBFIRST`, `SPI_MODE0..3` |
 | I2C | `Wire.begin/end/setClock/getClock/beginTransmission/write/endTransmission/requestFrom` (all the Arduino overloads)`/available/read/peek`, `I2C_BUFFER_LENGTH`; `Wire1` on chips with a second I2C controller (classic ESP32, S3; the low-power I2C on the C6/C5): pass its pins to `begin` |
-| WiFi station | `WiFi.begin/status/isConnected/disconnect/config/setHostname/localIP/gatewayIP/subnetMask/dnsIP/macAddress/SSID/RSSI/channel/hostByName`, `WL_*`, `IPAddress`; `WiFi.onEvent(cb[, event])` / `removeEvent` (`ARDUINO_EVENT_*`, callbacks on the sketch task); `WiFiMulti` (`addAP`, `run`) |
-| WiFi AP and scan | `WiFi.mode(WIFI_STA/WIFI_AP/WIFI_AP_STA/WIFI_OFF)`, `WiFi.softAP/softAPIP/softAPdisconnect/softAPgetStationNum`, `WiFi.scanNetworks/SSID(i)/RSSI(i)/channel(i)/encryptionType(i)/BSSIDstr(i)/scanDelete`, `WIFI_AUTH_*` |
-| TCP | `WiFiClient` (`connect/print/write/available/read/peek/connected/stop/remoteIP`), `WiFiServer` (`begin/accept/available/hasClient`), `NetworkClient/NetworkServer` |
-| TLS | `WiFiClientSecure` / `NetworkClientSecure`: `setInsecure`, `setCACert`, or by default Baseline's built-in CA bundle |
+| WiFi station | `WiFi.begin/status/isConnected/disconnect/config/setHostname/localIP/gatewayIP/subnetMask/dnsIP/macAddress/SSID/RSSI/channel/hostByName`, `WL_*`, `IPAddress`; `WiFi.onEvent(cb[, event])` / `removeEvent` (`ARDUINO_EVENT_*`; `cb(event)`, `cb(event, info)` or `cb(arduino_event_t *)`, on the sketch task; `info` holds the details of connected, disconnected, got IP, station joined/left and scan done); `WiFi.setLongRange(on[, WIFI_IF_STA/AP])` (ESP32 long range mode); `WiFiMulti` (`addAP`, `run`) |
+| Network interfaces | `WiFi.STA` and `WiFi.AP` as Arduino-ESP32 3.x's `NetworkInterface`: `started/connected/hasIP/linkUp/isDefault/setDefault/localIP/subnetMask/gatewayIP/dnsIP(n)/broadcastIP/macAddress/getHostname/setHostname/desc`, printable; `WiFi.STA.begin/end/connect(ssid, pass, channel)/disconnect/config/status/SSID/RSSI`, `WiFi.AP.begin/end/create/clear/config/stationCount/SSID`; `Network.onEvent/removeEvent/eventName/hostByName/setDefaultInterface/getDefaultInterface`. IPv4 only (`IPAddress::type()` is `IPv4`); no `ETH` or `PPP` interface yet |
+| WiFi AP and scan | `WiFi.mode(WIFI_STA/WIFI_AP/WIFI_AP_STA/WIFI_OFF)`, `WiFi.softAP/softAPIP/softAPdisconnect/softAPgetStationNum`, `WiFi.scanNetworks` (all of Arduino-ESP32's arguments: hidden, passive, time per channel, one channel, SSID or BSSID)`/SSID(i)/RSSI(i)/channel(i)/encryptionType(i)/BSSIDstr(i)/scanDelete`, `WIFI_AUTH_*` |
+| TCP | `Client` (the abstract class libraries take), `WiFiClient` (`connect/print/write/available/read/peek/connected/stop/remoteIP/remotePort/localIP/localPort/setConnectionTimeout`), `WiFiServer` (`begin/accept/available/hasClient`), `NetworkClient/NetworkServer` |
+| TLS | `WiFiClientSecure` / `NetworkClientSecure`: `setInsecure`, `setCACert`, or by default Baseline's built-in CA bundle; client certificates (`setCertificate`, `setPrivateKey`), `setHandshakeTimeout`, `lastError` |
 | UDP | `WiFiUDP` / `NetworkUDP`: `begin/beginPacket/write/endPacket/parsePacket/available/read/remoteIP/remotePort` |
-| HTTP client | `HTTPClient`: `begin`, `addHeader`, `setAuthorization`, `GET/POST/PUT/PATCH/sendRequest`, `getString`, `getSize`, `errorToString`, `HTTP_CODE_*` |
+| HTTP client | `HTTPClient`: `begin`, `addHeader`, `setAuthorization`, `GET/POST/PUT/PATCH/sendRequest`, `getString`, `getSize`, `errorToString`, `HTTP_CODE_*` (`t_http_codes`). No streams yet (`getStream`, `getStreamPtr`, `writeToStream`) |
 | Web server | `WebServer`: `on`, `onNotFound`, `begin`, `handleClient`, `send`, `send_P`, `sendHeader`, `arg`, `hasArg`, `args`, `argName`, `uri`, `method`, `header`, `collectHeaders`, `client().remoteIP()`, `HTTP_GET/POST/...` |
 | Preferences | `begin/end/clear/remove/isKey/getType/freeEntries`, `put/get` for `Char/UChar/Short/UShort/Int/UInt/Long/ULong/Long64/ULong64/Float/Double/Bool/String/Bytes`, `getBytesLength` |
 | microSD | `SD.begin()` (the board's slot) or `SD.begin(csPin)` (SPI), `SD_MMC.begin(mount, mode1bit)`, `end/cardType/cardSize/totalBytes/usedBytes`, `CARD_*`; files as below |
@@ -53,10 +54,10 @@ and all lead to Baseline.
 | mDNS | `MDNS.begin/end/addService/addServiceTxt/queryHost/queryService/hostname(i)/address(i)/port(i)` |
 | MQTT | `PubSubClient`: `setServer/setCallback/setClient/setKeepAlive/setSocketTimeout/setBufferSize`, `connect` (all forms, with will and credentials), `publish/publish_P/beginPublish/endPublish`, `subscribe/unsubscribe`, `loop/connected/state/disconnect`, `MQTT_*` states; TLS with `WiFiClientSecure` |
 | WiFi upload | `ArduinoOTA.setHostname/setPassword/setPort/begin/handle/end`; then `flick upload <sketch> --host NAME` |
-| ESP-NOW | `esp_now_init`, `esp_now_register_recv_cb`, `esp_now_register_send_cb` (both the IDF 5 and the older callback forms), `esp_now_add_peer`, `esp_now_del_peer`, `esp_now_is_peer_exist`, `esp_now_send` |
+| ESP-NOW | `esp_now_init`, `esp_now_register_recv_cb`, `esp_now_register_send_cb` (both the IDF 5 and the older callback forms), `esp_now_add_peer`, `esp_now_del_peer`, `esp_now_is_peer_exist`, `esp_now_fetch_peer`, `esp_now_get_peer_num`, `esp_now_send`; the receive info has the destination address and `rx_ctrl->rssi` / `rx_ctrl->channel`; `esp_wifi_set_channel`, `esp_wifi_get_channel` |
 | BLE | `BLEDevice`, `BLEServer`, `BLEService`, `BLECharacteristic` (read/write/notify/indicate, `setValue/getValue/getData`), `BLEDescriptor`, `BLE2902`, `BLE2901`, `BLEAdvertising`, `BLEAdvertisementData`, `BLEScan` (blocking and background), `BLEAdvertisedDevice`, `BLEScanResults`, `BLEClient`, `BLERemoteService`, `BLERemoteCharacteristic` (read/write/`registerForNotify`), `BLEUUID`, `BLEAddress`, and all the callback classes |
 | BLE serial | `BLESerial`: a ready-made BLE serial port (Nordic UART) |
-| Bluetooth Classic | `BluetoothSerial` (SPP): `begin(name)/end/hasClient/connected(timeout)/setPin/print/write/read/available/peek/flush`. Classic ESP32 only; on other chips `begin()` returns false |
+| Bluetooth Classic | `BluetoothSerial` (SPP): `begin(name)/end/hasClient/connected(timeout)/setPin/print/write/read/available/peek/flush/disconnect`, `enableSSP()`/`enableSSP(input, output)`/`confirmReply`, `deleteAllBondedDevices`; `setRxBufferSize(bytes)` (default 512) and `setTxBufferSize(bytes)` (default none) before the first `begin()`, in PSRAM when there is some. Classic ESP32 only; on other chips `begin()` returns false |
 | System | `ESP.getFreeHeap/getHeapSize/getMinFreeHeap/getMaxAllocHeap/getPsramSize/getFreePsram/getFlashChipSize/getCpuFreqMHz/getChipModel/getChipCores/getEfuseMac/restart`, `getCpuFrequencyMhz`, `esp_restart`, `temperatureRead` (NaN without a sensor), `esp_reset_reason` (`ESP_RST_*`) |
 | PSRAM | `psramFound`, `ps_malloc`, `ps_calloc`, `ps_realloc` (free with `free`). Plain `malloc`/`new` over 4 KB also go to PSRAM when the board has it. Boards without PSRAM report 0 and `ps_*` return NULL. |
 | Logging | `log_e/w/i/d/v`, `ESP_LOGE/W/I/D/V` |
@@ -119,6 +120,24 @@ mutexes, binary and counting semaphores (`xSemaphoreCreateMutex`, `Take`,
 - `vTaskDelete(NULL)` at the end of `setup()` ends `loop()` and keeps the sketch's other tasks running (`flick info` says `running: loop() ended by vTaskDelete`).
 - A crash in any of the sketch's tasks rolls the sketch back like a crash in `loop()`. A task that spins on core 0 without waiting trips the idle task's watchdog after 5 s (a crash too); on core 1 it only slows the sketch.
 - Not there: software timers (`xTimerCreate`), event groups, task notifications, stream and message buffers, `portENTER_CRITICAL`, `vTaskSuspendAll`, task snapshots. Use `Ticker` for timers.
+
+## ESP-IDF calls (ESP32 family)
+
+These work with their ESP-IDF names, without an include (`<esp_mac.h>`,
+`<esp_heap_caps.h>`, `<esp_partition.h>`, `<esp_task_wdt.h>`, `<esp_err.h>`,
+`<esp_attr.h>` and `<esp_ota_ops.h>` may be included too). Found missing by
+compiling SparkFun RTK Everywhere; `flick/tools/tests/idf_test` checks them.
+
+- `heap_caps_malloc`/`calloc`/`realloc`/`free`, `heap_caps_get_free_size`, `get_largest_free_block`, `get_minimum_free_size`, `get_total_size`, `heap_caps_check_integrity(_all)`, `heap_caps_malloc_extmem_enable` (for the whole board), `MALLOC_CAP_*`, `psramInit()`.
+- `esp_read_mac` (`ESP_MAC_WIFI_STA`, `ESP_MAC_BT`, ...), `esp_err_to_name`, `ESP_ERR_*`, `ESP_ERROR_CHECK`.
+- `esp_partition_find`/`find_first`/`get`/`next`/`iterator_release`: the partition table only (no read, write or erase). LittleFS is the `userfs` partition, not `spiffs`.
+- `esp_task_wdt_add`/`delete`/`status`/`reset` for the sketch's own tasks. The sketch task itself is Baseline's: add and delete leave it as it is, reset feeds it.
+- **`disableLoopWDT()` / `enableLoopWDT()` / `feedLoopWDT()`.** Flick watches `loop()` from the start (so a new sketch that hangs rolls back), while Arduino-ESP32 doesn't by default. A sketch whose `loop()` can block for over 5 s (a library busy-waiting for a module to restart, for example) calls `disableLoopWDT()` in `setup()`. `while (1);` is still detected.
+- `RTC_NOINIT_ATTR` (and `NOINIT_ATTR`): kept across a restart or crash, not a power cycle or deep sleep, in the sketch's RAM. Check a magic value before trusting it.
+- `Serial1/2.setRxFIFOFull()`.
+- `<Update.h>` (`Update.begin/write/writeStream/end/abort`, `errorString`): a sketch image (`.flick`) goes to the free sketch slot; an ESP-IDF app image (a Baseline or other Arduino firmware) to the free Baseline slot, on 8 and 16 MB boards only. It starts at the next restart. No `U_SPIFFS`, `setMD5` or `rollBack`.
+- `<mbedtls/x509_crt.h>`, `<pk.h>`, `<ctr_drbg.h>`, `<entropy.h>`, `<ssl.h>`: only checking that a certificate (`mbedtls_x509_crt_parse`) or a private key (`mbedtls_pk_parse_key`, no password) parses, with Baseline's mbedTLS. The parsed fields can't be read; TLS itself is `WiFiClientSecure`/`HTTPClient`.
+- `<base64.h>` (`base64::encode`), `sscanf`/`vsscanf` (also on RP2; not Teensy), `strtok_r`, `strcasestr`, `strnstr`.
 
 ## What each board has
 
@@ -252,7 +271,8 @@ sketches use the same classic Arduino names as on the ESP32.
 
 ## Not supported yet
 
-- SPIFFS, Arduino's `Update` / `HTTPUpdate` classes (use `BaselineUpdate`, docs/OTA.md), USB mass storage, camera
+- SPIFFS, Arduino's `HTTPUpdate` class (use `BaselineUpdate`, docs/OTA.md), `HTTPClient` streams, USB mass storage, camera
+- IPv6, and the `ETH` / `PPP` network interfaces of Arduino-ESP32 3.x
 - `rtc_gpio_*` pin isolation for deep sleep, ULP
 - Arduino libraries from the Library Manager. A library can be added to Baseline and exposed through the API.
 

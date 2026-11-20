@@ -5,8 +5,9 @@
  * Handles are FreeRTOS's own. A sketch's tasks run its code from the sketch
  * window like the sketch task does: never in an interrupt, and stalled with
  * every other task while flash is written. They are not on the task watchdog
- * (FreeRTOS tasks aren't, in Arduino-ESP32 either); a task that spins on core
- * 0 still trips the idle task's watchdog and counts as a crash.
+ * (FreeRTOS tasks aren't, in Arduino-ESP32 either) unless the sketch adds them
+ * with esp_task_wdt_add (bl_impl_idf.cpp); a task that spins on core 0 still
+ * trips the idle task's watchdog and counts as a crash.
  *
  * Long waits on the sketch's own task (a mutex, a queue) take it off the
  * watchdog for their length, as other blocking Baseline calls do.
@@ -16,6 +17,7 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "freertos/queue.h"
+#include "esp_task_wdt.h"
 #include "gen/bl_impl.h"
 #include "sketch_loader.h"
 
@@ -47,11 +49,21 @@ struct TaskStart {
     void *arg;
 };
 
+/* A task the sketch put on the task watchdog leaves it before it is deleted,
+ * or the watchdog would take the missing feeds for a hang. */
+static void twdt_forget(TaskHandle_t t)
+{
+    if (esp_task_wdt_status(t) == ESP_OK) {
+        esp_task_wdt_delete(t);
+    }
+}
+
 static void task_main(void *p)
 {
     TaskStart s = *(TaskStart *)p;
     free(p);
     s.fn(s.arg);
+    twdt_forget(NULL);
     vTaskDelete(NULL);      /* a FreeRTOS task must not return */
 }
 
@@ -80,6 +92,7 @@ void *bl_impl_task_create(bl_callback_t fn, const char *name, uint32_t stack_byt
 void bl_impl_task_delete(void *task)
 {
     sketch_task_deleting(task);
+    twdt_forget((TaskHandle_t)task);
     vTaskDelete((TaskHandle_t)task);
 }
 

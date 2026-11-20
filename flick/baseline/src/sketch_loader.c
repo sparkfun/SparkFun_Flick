@@ -62,12 +62,45 @@ static const char *s_status = "not loaded";
 
 static volatile int64_t s_fed_us;       /* last watchdog feed by the sketch */
 static volatile int s_wdt_paused;       /* Baseline calls in progress that paused it */
+static volatile bool s_wdt_off;         /* the sketch called disableLoopWDT() */
 static char s_stop_status[48];
+
+/* Off the task watchdog, if it is on it (ESP-IDF logs "task not found" otherwise). */
+static void wdt_remove(TaskHandle_t task)
+{
+    if (esp_task_wdt_status(task) == ESP_OK) {
+        esp_task_wdt_delete(task);
+    }
+}
 
 void sketch_wdt_feed(void)
 {
     s_fed_us = esp_timer_get_time();
-    esp_task_wdt_reset();
+    if (esp_task_wdt_status(NULL) == ESP_OK) {
+        esp_task_wdt_reset();
+    }
+}
+
+/* disableLoopWDT() / enableLoopWDT(): Arduino-ESP32 doesn't watch loop() by
+ * default; Flick does, so a new sketch that hangs rolls back. A sketch whose
+ * loop() legitimately blocks for seconds turns it off. Any task may call it. */
+void sketch_wdt_enable(bool on)
+{
+    TaskHandle_t task = s_task;
+    if (!task || on == !s_wdt_off) {
+        return;
+    }
+    s_wdt_off = !on;
+    if (on) {
+        if (!s_wdt_paused) {
+            esp_task_wdt_add(task);
+        }
+        s_fed_us = esp_timer_get_time();
+        BLOG_I("sketch: loop() watchdog on");
+    } else {
+        wdt_remove(task);
+        BLOG_I("sketch: loop() watchdog off (disableLoopWDT)");
+    }
 }
 
 /* The PC a suspended task stopped at: the TCB starts with pxTopOfStack, which
@@ -119,7 +152,7 @@ static void stop_watch_task(void *arg)
         vTaskDelay(2);              /* the other core switches it out (dual-core chips) */
         uint32_t pc = saved_pc(task);
         if (s_fed_us == fed && jumps_to_itself(pc)) {
-            esp_task_wdt_delete(task);
+            wdt_remove(task);
             snprintf(s_stop_status, sizeof(s_stop_status), "stopped: while(1) at 0x%08lx", (unsigned long)pc);
             s_status = s_stop_status;
             BLOG_I("sketch stopped: while(1) at 0x%08lx (uploads still work)", (unsigned long)pc);
@@ -329,15 +362,16 @@ bool sketch_wdt_pause(void)
         return false;
     }
     s_wdt_paused++;
-    esp_task_wdt_delete(NULL);
+    wdt_remove(NULL);
     return true;
 }
 
 void sketch_wdt_resume(bool paused)
 {
     if (paused) {
-        esp_task_wdt_add(NULL);
-        s_wdt_paused--;
+        if (--s_wdt_paused == 0 && !s_wdt_off) {
+            esp_task_wdt_add(NULL);
+        }
         sketch_wdt_feed();
     }
 }
@@ -349,7 +383,7 @@ void sketch_task_deleting(void *task)
 {
     TaskHandle_t t = task ? (TaskHandle_t)task : xTaskGetCurrentTaskHandle();
     if (s_task && t == s_task) {
-        esp_task_wdt_delete(t);
+        wdt_remove(t);
         s_status = "running: loop() ended by vTaskDelete";
     }
 }

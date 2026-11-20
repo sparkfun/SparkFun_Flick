@@ -32,7 +32,10 @@ typedef int esp_err_t;
 #define ESP_NOW_KEY_LEN             16
 #define ESP_NOW_MAX_DATA_LEN        250
 
+#ifndef BL_WIFI_INTERFACE_T
+#define BL_WIFI_INTERFACE_T
 typedef enum { WIFI_IF_STA = 0, WIFI_IF_AP = 1 } wifi_interface_t;
+#endif
 typedef enum { ESP_NOW_SEND_SUCCESS = 0, ESP_NOW_SEND_FAIL } esp_now_send_status_t;
 
 typedef struct esp_now_peer_info {
@@ -44,11 +47,23 @@ typedef struct esp_now_peer_info {
     void *priv;
 } esp_now_peer_info_t;
 
+/* What a received packet's rx_ctrl tells: ESP-IDF's field names (its
+ * bitfield layout differs; the other fields are not passed through). */
+typedef struct {
+    signed rssi;            /* dBm */
+    unsigned channel;
+} wifi_pkt_rx_ctrl_t;
+
 typedef struct esp_now_recv_info {
     uint8_t *src_addr;
-    uint8_t *des_addr;
-    void *rx_ctrl;          /* not provided (NULL) */
+    uint8_t *des_addr;      /* our MAC, or FF:FF:FF:FF:FF:FF for a broadcast */
+    wifi_pkt_rx_ctrl_t *rx_ctrl;
 } esp_now_recv_info_t;
+
+typedef struct {
+    int total_num;
+    int encrypt_num;
+} esp_now_peer_num_t;
 
 typedef struct {
     uint8_t *des_addr;
@@ -79,6 +94,8 @@ esp_err_t esp_now_unregister_send_cb(void);
 esp_err_t esp_now_add_peer(const esp_now_peer_info_t *peer);
 esp_err_t esp_now_del_peer(const uint8_t *peer_addr);
 bool esp_now_is_peer_exist(const uint8_t *peer_addr);
+esp_err_t esp_now_fetch_peer(bool from_head, esp_now_peer_info_t *peer);
+esp_err_t esp_now_get_peer_num(esp_now_peer_num_t *num);
 esp_err_t esp_now_send(const uint8_t *peer_addr, const uint8_t *data, size_t len);
 
 #endif /* __cplusplus */

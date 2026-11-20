@@ -320,3 +320,41 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_queue_count` | `int queue_count(void *queue, int spaces)` | 1.10 | Items waiting (spaces 0) or free places (spaces 1). |
 | `bl_queue_reset` | `int queue_reset(void *queue)` | 1.10 | Empty it. Returns 1. |
 | `bl_queue_delete` | `void queue_delete(void *queue)` | 1.10 | Delete it. |
+| `heap_caps_malloc` | `void * idf_heap_malloc(size_t size, uint32_t caps)` | 1.10 | heap_caps_malloc: from a heap with all of caps (MALLOC_CAP_*, ESP-IDF values). Free with free(). |
+| `heap_caps_calloc` | `void * idf_heap_calloc(size_t n, size_t size, uint32_t caps)` | 1.10 | heap_caps_calloc. |
+| `heap_caps_realloc` | `void * idf_heap_realloc(void *ptr, size_t size, uint32_t caps)` | 1.10 | heap_caps_realloc. |
+| `bl_idf_heap_info` | `size_t idf_heap_info(uint32_t caps, int what)` | 1.10 | Size of the heaps with all of caps: what = BL_HEAP_FREE, BL_HEAP_LARGEST (largest free block), BL_HEAP_MIN_FREE or BL_HEAP_TOTAL. |
+| `bl_idf_heap_check` | `int idf_heap_check(uint32_t caps, int print)` | 1.10 | heap_caps_check_integrity (caps MALLOC_CAP_INVALID: every heap). print 1 prints what is wrong. 1 intact, 0 corrupt. |
+| `heap_caps_malloc_extmem_enable` | `void idf_heap_extmem(size_t limit)` | 1.10 | malloc() of limit bytes or more goes to PSRAM first (Baseline starts with 4096). For the whole board, Baseline too. |
+| `esp_read_mac` | `int idf_read_mac(uint8_t *mac, int type)` | 1.10 | esp_read_mac: the 6-byte MAC address of type (ESP_MAC_WIFI_STA, ESP_MAC_WIFI_SOFTAP, ESP_MAC_BT, ESP_MAC_ETH, ...). Returns an esp_err_t. |
+| `esp_err_to_name` | `const char * idf_err_name(int err)` | 1.10 | esp_err_to_name: an esp_err_t's name ("ESP_ERR_NO_MEM"). |
+| `bl_idf_partition` | `int idf_partition(int index, bl_partition_t *out)` | 1.10 | The index-th entry of the flash partition table (backs esp_partition_find). 0, or BL_ERR_ARG past the last one. |
+| `bl_idf_task_wdt` | `int idf_task_wdt(int op, void *task)` | 1.10 | The ESP-IDF task watchdog: op = BL_TWDT_ADD, BL_TWDT_DELETE, BL_TWDT_STATUS or BL_TWDT_RESET; task NULL = the calling task. Returns an esp_err_t. |
+| `bl_idf_tls_check` | `int idf_tls_check(int what, const uint8_t *data, size_t len)` | 1.10 | Parse with Baseline's mbedTLS: what = BL_TLS_CERT (mbedtls_x509_crt_parse) or BL_TLS_KEY (mbedtls_pk_parse_key). 0, or the negative mbedTLS error. |
+| `bl_uart_set_rx_fifo_full` | `int uart_set_rx_fifo_full(int port, uint8_t bytes)` | 1.10 | Serial1/2 setRxFIFOFull: move received bytes out of the hardware FIFO every bytes bytes (1-127). Returns 0 or BL_ERR_*. |
+| `bl_update_begin` | `int update_begin(uint32_t size)` | 1.10 | Start an update of size bytes (0 = not known). Returns 0 or BL_ERR_*. |
+| `bl_update_write` | `int update_write(const uint8_t *data, size_t len)` | 1.10 | The next bytes of the image. Returns len, or BL_ERR_* (the update is then abandoned). |
+| `bl_update_end` | `int update_end(int commit)` | 1.10 | commit 1: check the image and start it at the next restart. commit 0: abandon it. Returns 0 or BL_ERR_*. |
+| `bl_update_error` | `int update_error(char *buf, size_t size)` | 1.10 | Why the last update call failed, as text. Returns its length (0: no error). |
+| `bl_vsscanf` | `int vsscanf(const char *str, const char *fmt, va_list ap)` | 1.10 | vsscanf with Baseline's C library (%d %u %x %f %s %c %[...] %n ...). Returns the number of fields assigned, or EOF. ESP32 and RP2 Baselines; BL_ERR_UNSUPPORTED on Teensy (no room for scanf). |
+| `bl_net_if_get` | `int net_if_get(int iface, int what, void *out, size_t size)` | 1.10 | Read one property of an interface: flags return 0/1; IPv4 addresses are written to out as a uint32_t (first octet in the low byte); MAC as 6 bytes; text NUL-terminated. Returns the value, the length written, or BL_ERR_*. iface -1 with BL_NETIF_Q_DEFAULT returns the default interface's BL_NETIF_*. |
+| `bl_net_if_set` | `int net_if_set(int iface, int what, const void *value, size_t size)` | 1.10 | Change one property: BL_NETIF_S_HOSTNAME (text), BL_NETIF_S_DEFAULT (make it the default route). 0 or BL_ERR_*. |
+| `bl_net_event_name` | `const char * net_event_name(int event)` | 1.10 | Network.eventName(): the name of an ARDUINO_EVENT_* (text in Baseline's flash). |
+| `bl_wifi_event_take_info` | `int wifi_event_take_info(void *info, size_t size)` | 1.10 | Like wifi_event_take, and copies up to size bytes of the event's arduino_event_info_t (ESP-IDF layout) into info. |
+| `bl_wifi_sta_connect` | `int wifi_sta_connect(const char *ssid, const char *password, int channel)` | 1.10 | WiFi.STA.connect(): start connecting (channel 0 = any). Returns 1 if started. |
+| `bl_wifi_ap_config` | `int wifi_ap_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns)` | 1.10 | WiFi.AP.config(): the access point's addresses (dhcp_start/dns 0 = default). 0 or BL_ERR_*. |
+| `bl_wifi_set_channel` | `int wifi_set_channel(int primary, int secondary)` | 1.10 | esp_wifi_set_channel (secondary: 0 none, 1 above, 2 below). 0 or BL_ERR_*. |
+| `bl_wifi_get_channel` | `int wifi_get_channel(int *secondary)` | 1.10 | esp_wifi_get_channel: returns the primary channel, writes the secondary. |
+| `bl_wifi_set_long_range` | `int wifi_set_long_range(int iface, int on)` | 1.10 | WiFi.setLongRange(): add (on) or remove the ESP32 long range protocol (WIFI_PROTOCOL_LR) on BL_NETIF_STA or BL_NETIF_AP, keeping 802.11b/g/n. 0 or BL_ERR_*. |
+| `bl_wifi_scan_ex` | `int wifi_scan_ex(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel, const char *ssid, const uint8_t *bssid)` | 1.10 | scanNetworks() with Arduino-ESP32's options: hidden networks, passive scan, time per channel (0 = default), one channel (0 = all), one SSID or BSSID (NULL = any). Blocks; returns the count or BL_ERR_*. |
+| `bl_espnow_receive_info` | `int espnow_receive_info(bl_espnow_rx_t *info, uint8_t *data, size_t size)` | 1.10 | Like espnow_receive, with the destination MAC, RSSI and channel of the packet. Returns length or 0. |
+| `bl_tcp_client_local` | `int tcp_client_local(int h, uint32_t *ip, uint16_t *port)` | 1.10 | Our end of the connection (localIP/localPort). |
+| `bl_tcp_client_tls_identity` | `int tcp_client_tls_identity(int h, const char *cert_pem, const char *key_pem)` | 1.10 | TLS client certificate and private key (setCertificate/setPrivateKey). Must stay valid. 0 or BL_ERR_*. |
+| `bl_tcp_client_tls_timeout` | `int tcp_client_tls_timeout(int h, uint32_t seconds)` | 1.10 | TLS handshake timeout (setHandshakeTimeout). |
+| `bl_tcp_client_last_error` | `int tcp_client_last_error(int h, char *buf, size_t size)` | 1.10 | The last TLS error: its code (0 none), and its text in buf. |
+| `bl_uart_set_baud` | `int uart_set_baud(int port, uint32_t baud)` | 1.10 | Serial1/2 updateBaudRate: change the baud rate of a started port. 0 or BL_ERR_*. |
+| `bl_bt_spp_config` | `int bt_spp_config(size_t rx_size, size_t tx_size)` | 1.10 | Buffer sizes in bytes: receive (0 = 512) and send (0 = none: write() waits on the Bluetooth stack's own 32-packet queue, as in Arduino-ESP32). In PSRAM when there is some. Call before bt_spp_begin. 0 or BL_ERR_*. |
+| `bl_bt_spp_ssp` | `int bt_spp_ssp(int enable, int input, int output)` | 1.10 | Secure Simple Pairing (enableSSP): input/output capabilities. Call before bt_spp_begin. |
+| `bl_bt_spp_confirm` | `int bt_spp_confirm(int accept)` | 1.10 | Answer a pairing confirmation request (confirmReply). |
+| `bl_bt_spp_disconnect` | `int bt_spp_disconnect(void)` | 1.10 | Drop the connected device. 1 if one was dropped. |
+| `bl_bt_spp_unpair_all` | `int bt_spp_unpair_all(void)` | 1.10 | Forget every bonded device (deleteAllBondedDevices; after begin). |

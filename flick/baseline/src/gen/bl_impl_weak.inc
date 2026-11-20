@@ -315,3 +315,41 @@ extern "C" __attribute__((weak)) int bl_impl_queue_receive(void *queue, void *it
 extern "C" __attribute__((weak)) int bl_impl_queue_count(void *queue, int spaces) { return 0; }
 extern "C" __attribute__((weak)) int bl_impl_queue_reset(void *queue) { return BL_ERR_UNSUPPORTED; }
 extern "C" __attribute__((weak)) void bl_impl_queue_delete(void *queue) {}
+extern "C" __attribute__((weak)) void * bl_impl_idf_heap_malloc(size_t size, uint32_t caps) { return NULL; }
+extern "C" __attribute__((weak)) void * bl_impl_idf_heap_calloc(size_t n, size_t size, uint32_t caps) { return NULL; }
+extern "C" __attribute__((weak)) void * bl_impl_idf_heap_realloc(void *ptr, size_t size, uint32_t caps) { return NULL; }
+extern "C" __attribute__((weak)) size_t bl_impl_idf_heap_info(uint32_t caps, int what) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_idf_heap_check(uint32_t caps, int print) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) void bl_impl_idf_heap_extmem(size_t limit) {}
+extern "C" __attribute__((weak)) int bl_impl_idf_read_mac(uint8_t *mac, int type) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) const char * bl_impl_idf_err_name(int err) { return NULL; }
+extern "C" __attribute__((weak)) int bl_impl_idf_partition(int index, bl_partition_t *out) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_idf_task_wdt(int op, void *task) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_idf_tls_check(int what, const uint8_t *data, size_t len) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_uart_set_rx_fifo_full(int port, uint8_t bytes) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_update_begin(uint32_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_update_write(const uint8_t *data, size_t len) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_update_end(int commit) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_update_error(char *buf, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_vsscanf(const char *str, const char *fmt, va_list ap) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_net_if_get(int iface, int what, void *out, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_net_if_set(int iface, int what, const void *value, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) const char * bl_impl_net_event_name(int event) { return NULL; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_event_take_info(void *info, size_t size) { return -1; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_sta_connect(const char *ssid, const char *password, int channel) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_ap_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_set_channel(int primary, int secondary) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_get_channel(int *secondary) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_set_long_range(int iface, int on) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_wifi_scan_ex(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel, const char *ssid, const uint8_t *bssid) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_espnow_receive_info(bl_espnow_rx_t *info, uint8_t *data, size_t size) { return 0; }
+extern "C" __attribute__((weak)) int bl_impl_tcp_client_local(int h, uint32_t *ip, uint16_t *port) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_tcp_client_tls_identity(int h, const char *cert_pem, const char *key_pem) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_tcp_client_tls_timeout(int h, uint32_t seconds) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_tcp_client_last_error(int h, char *buf, size_t size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_uart_set_baud(int port, uint32_t baud) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_bt_spp_config(size_t rx_size, size_t tx_size) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_bt_spp_ssp(int enable, int input, int output) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_bt_spp_confirm(int accept) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_bt_spp_disconnect(void) { return BL_ERR_UNSUPPORTED; }
+extern "C" __attribute__((weak)) int bl_impl_bt_spp_unpair_all(void) { return BL_ERR_UNSUPPORTED; }

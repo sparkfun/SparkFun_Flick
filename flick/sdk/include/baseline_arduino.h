@@ -204,6 +204,9 @@ protected:
 class SerialClass : public Stream {
 public:
     void begin(unsigned long baud = 115200) {}  // USB CDC: baud does not matter
+    /* Arduino-ESP32's UART form: Baseline owns the console's settings. */
+    void begin(unsigned long baud, uint32_t config, int8_t rxPin = -1, int8_t txPin = -1, bool invert = false,
+               unsigned long timeout_ms = 20000UL, uint8_t rxfifo_full_thrhd = 120) {}
     void end() {}
     void flush() {}
     operator bool() const { return true; }
@@ -238,8 +241,25 @@ class BluetoothSerial : public Stream {
 public:
     bool begin(const String &localName = String(), bool isMaster = false, bool disableBLE = false)
     {
+        if ((rxSize_ || txSize_) && bl_bt_spp_config(rxSize_, txSize_) != BL_OK) {
+            return false;
+        }
         return bl_bt_spp_begin(localName.length() ? localName.c_str() : "ESP32") == BL_OK;
     }
+    /* Buffer sizes in bytes, before the first begin() (ABI 1.10). Receive:
+     * 512 by default. Send: none by default, so write() waits on the
+     * Bluetooth stack's queue; with one, write() returns at once with what
+     * fit. In PSRAM when there is some. */
+    void setRxBufferSize(size_t size) { rxSize_ = size; }
+    void setTxBufferSize(size_t size) { txSize_ = size; }
+    /* Secure Simple Pairing, before begin(): with neither input nor output
+     * capability the pairing is accepted without a PIN. */
+    void enableSSP() { bl_bt_spp_ssp(1, 0, 0); }
+    void enableSSP(bool inputCapability, bool outputCapability) { bl_bt_spp_ssp(1, inputCapability, outputCapability); }
+    void disableSSP() { bl_bt_spp_ssp(0, 0, 0); }
+    void confirmReply(bool confirm) { bl_bt_spp_confirm(confirm); }
+    bool disconnect() { return bl_bt_spp_disconnect() == 1; }
+    void deleteAllBondedDevices() { bl_bt_spp_unpair_all(); }
     void end() { bl_bt_spp_end(); }
     bool hasClient() { return bl_bt_spp_connected() == 1; }
     /* Wait up to timeout ms for a device to connect (0 = just check). */
@@ -268,16 +288,25 @@ public:
     int peek() { return bl_bt_spp_peek(); }
     void flush() { bl_bt_spp_flush(); }
     operator bool() { return hasClient(); }
+
+private:
+    size_t rxSize_ = 0;
+    size_t txSize_ = 0;
 };
 
 #endif /* BL_HAS_BT_CLASSIC */
 /* ---- IPAddress ---- */
+enum IPType { IPv4, IPv6 };
+
+/* IPv4 addresses (IPv6 is not supported yet). */
 class IPAddress : public Printable {
 public:
     IPAddress() {}
+    IPType type() const { return IPv4; }
     IPAddress(uint32_t v) : bytes_{(uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24)} {}
     operator uint32_t() const { return bytes_[0] | (bytes_[1] << 8) | (bytes_[2] << 16) | ((uint32_t)bytes_[3] << 24); }
     IPAddress(uint8_t a, uint8_t b, uint8_t c, uint8_t d) : bytes_{a, b, c, d} {}
+    IPAddress(const char *text) { fromString(text); }       // as Arduino-ESP32; 0.0.0.0 if it doesn't parse
     bool fromString(const char *text);
     bool fromString(const String &text) { return fromString(text.c_str()); }
     String toString() const;

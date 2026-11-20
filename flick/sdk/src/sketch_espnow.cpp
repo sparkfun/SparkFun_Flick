@@ -31,13 +31,14 @@ static void espnow_pump()
     static uint8_t self[6];
     if (s_recv || s_recv_legacy) {
         int len;
-        while ((len = bl_espnow_receive(mac, data, sizeof(data))) > 0) {
+        bl_espnow_rx_t rx;
+        while ((len = bl_espnow_receive_info(&rx, data, sizeof(data))) > 0) {
             if (s_recv) {
-                bl_wifi_mac(self);
-                esp_now_recv_info_t info = { mac, self, 0 };
+                wifi_pkt_rx_ctrl_t ctrl = { rx.rssi, rx.channel };
+                esp_now_recv_info_t info = { rx.src, rx.dest, &ctrl };
                 s_recv(&info, data, len);
             } else {
-                s_recv_legacy(mac, data, len);
+                s_recv_legacy(rx.src, data, len);
             }
         }
     }
@@ -153,6 +154,41 @@ esp_err_t esp_now_del_peer(const uint8_t *peer_addr)
 bool esp_now_is_peer_exist(const uint8_t *peer_addr)
 {
     return peer_addr && find_peer(peer_addr) >= 0;
+}
+
+/* The peers added with esp_now_add_peer(), one per call (from_head starts over). */
+esp_err_t esp_now_fetch_peer(bool from_head, esp_now_peer_info_t *peer)
+{
+    static int next;
+    if (!s_init) {
+        return ESP_ERR_ESPNOW_NOT_INIT;
+    }
+    if (!peer) {
+        return ESP_ERR_ESPNOW_ARG;
+    }
+    if (from_head) {
+        next = 0;
+    }
+    if (next >= s_peer_count) {
+        return ESP_ERR_ESPNOW_NOT_FOUND;
+    }
+    memset(peer, 0, sizeof(*peer));
+    memcpy(peer->peer_addr, s_peers[next++], 6);
+    peer->ifidx = WIFI_IF_STA;
+    return ESP_OK;
+}
+
+esp_err_t esp_now_get_peer_num(esp_now_peer_num_t *num)
+{
+    if (!s_init) {
+        return ESP_ERR_ESPNOW_NOT_INIT;
+    }
+    if (!num) {
+        return ESP_ERR_ESPNOW_ARG;
+    }
+    num->total_num = s_peer_count;
+    num->encrypt_num = 0;      // encrypted peers are refused
+    return ESP_OK;
 }
 
 esp_err_t esp_now_send(const uint8_t *peer_addr, const uint8_t *data, size_t len)

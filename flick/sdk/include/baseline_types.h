@@ -79,6 +79,71 @@ typedef void (*bl_callback_t)(void *arg);
 #define BL_QUEUE_FRONT          1
 #define BL_QUEUE_OVERWRITE      2
 
+/* ---- ESP-IDF calls (ABI 1.10: idf_*, the ESP32 family) ---- */
+/* idf_heap_info(): what to report for the heaps that have all the caps (MALLOC_CAP_*) */
+#define BL_HEAP_FREE            0   /* heap_caps_get_free_size */
+#define BL_HEAP_LARGEST         1   /* heap_caps_get_largest_free_block */
+#define BL_HEAP_MIN_FREE        2   /* heap_caps_get_minimum_free_size */
+#define BL_HEAP_TOTAL           3   /* heap_caps_get_total_size */
+/* idf_task_wdt(): ESP-IDF task watchdog */
+#define BL_TWDT_ADD             0   /* esp_task_wdt_add */
+#define BL_TWDT_DELETE          1   /* esp_task_wdt_delete */
+#define BL_TWDT_STATUS          2   /* esp_task_wdt_status */
+#define BL_TWDT_RESET           3   /* esp_task_wdt_reset */
+#define BL_TWDT_LOOP_OFF        4   /* disableLoopWDT: the sketch task off the watchdog (task ignored) */
+#define BL_TWDT_LOOP_ON         5   /* enableLoopWDT: back on it */
+/* idf_tls_check(): what the bytes are */
+#define BL_TLS_CERT             0   /* X.509 certificate(s), PEM (NUL included in len) or DER */
+#define BL_TLS_KEY              1   /* private key, PEM (NUL included in len) or DER */
+/* idf_partition(): one entry of the flash partition table */
+typedef struct {
+    uint8_t type;           /* esp_partition_type_t: 0 app, 1 data */
+    uint8_t subtype;
+    uint8_t encrypted;
+    uint8_t reserved;
+    uint32_t address;       /* offset in flash */
+    uint32_t size;
+    char label[17];
+} bl_partition_t;
+
+/* net_if_get()/net_if_set() (ABI 1.10): the interface, as Arduino-ESP32's
+ * NetworkInterface objects (WiFi.STA, WiFi.AP, ETH, PPP) */
+#define BL_NETIF_STA            0
+#define BL_NETIF_AP             1
+#define BL_NETIF_ETH            2
+#define BL_NETIF_PPP            3
+/* what to read */
+#define BL_NETIF_Q_STARTED      0   /* flags: return 0 or 1 */
+#define BL_NETIF_Q_CONNECTED    1
+#define BL_NETIF_Q_HAS_IP       2
+#define BL_NETIF_Q_LINK_UP      3
+#define BL_NETIF_Q_IS_DEFAULT   4
+#define BL_NETIF_Q_LOCAL_IP     5   /* IPv4: out = uint32_t */
+#define BL_NETIF_Q_SUBNET       6
+#define BL_NETIF_Q_GATEWAY      7
+#define BL_NETIF_Q_BROADCAST    8
+#define BL_NETIF_Q_DNS0         9   /* DNS server n: BL_NETIF_Q_DNS0 + n (0-2) */
+#define BL_NETIF_Q_MAC          12  /* out = 6 bytes */
+#define BL_NETIF_Q_HOSTNAME     13  /* out = text */
+#define BL_NETIF_Q_DESC         14  /* out = text: the interface's name ("sta", "ap", ...) */
+#define BL_NETIF_Q_SSID         15  /* STA: the access point we are on; AP: our SSID (text) */
+#define BL_NETIF_Q_RSSI         16  /* STA: returns dBm */
+#define BL_NETIF_Q_STATUS       17  /* STA: returns BL_WIFI_* */
+#define BL_NETIF_Q_STATIONS     18  /* AP: returns the stations connected */
+#define BL_NETIF_Q_DEFAULT      19  /* iface -1: returns the default interface's BL_NETIF_*, or -1 */
+/* what to change */
+#define BL_NETIF_S_HOSTNAME     0   /* value = text */
+#define BL_NETIF_S_DEFAULT      1   /* make this the default interface */
+
+/* espnow_receive_info() (ABI 1.10): where a received packet came from */
+typedef struct {
+    uint8_t src[6];
+    uint8_t dest[6];        /* our MAC, or FF:FF:FF:FF:FF:FF for a broadcast */
+    int8_t rssi;            /* dBm */
+    uint8_t channel;
+    uint8_t reserved[2];
+} bl_espnow_rx_t;
+
 /* An argument or result of bl_audio_create()/bl_audio_call() (ABI 1.8):
  * which member is used is fixed by the method (baseline_audio.h). */
 typedef union {

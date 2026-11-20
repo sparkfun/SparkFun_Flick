@@ -386,8 +386,9 @@ def cmd_new(args):
 ARDUINO_BENCH = ROOT / "benchmarks" / "arduino"
 
 # Seen by sketches and libraries, like an Arduino-ESP32 build. Libraries test
-# these to pick their ESP32 code paths.
-PLATFORM_DEFINES = ["-DARDUINO=10812", "-DARDUINO_ARCH_ESP32", "-DESP32"]
+# these to pick their ESP32 code paths. ESP-IDF builds everything with
+# _GNU_SOURCE, so the C library declares strcasestr, memmem, ... there too.
+PLATFORM_DEFINES = ["-DARDUINO=10812", "-DARDUINO_ARCH_ESP32", "-DESP32", "-D_GNU_SOURCE"]
 
 # ---------------------------------------------------------------- .ino prototypes
 # Like the Arduino IDE, declare the functions a .ino defines, so they can be
@@ -540,7 +541,10 @@ def ino_with_prototypes(src, text=None, where=None):
     for m in FUNC_DEF_RE.finditer(short):
         sig, name, args = m.group(1), m.group(2), m.group(3)
         head = sig[: sig.rfind(name)].strip()
-        if name in PROTO_KEYWORDS or not head or re.search(r"\b(class|struct|enum|union|namespace|template|operator)\b|\[", sig):
+        # An elaborated type in a parameter ("struct Settings *s") is fine; in front of
+        # the name these words mean a type or something that can't be declared again.
+        if (name in PROTO_KEYWORDS or not head or re.search(r"\b(class|struct|enum|union|namespace|template|operator)\b", head)
+                or re.search(r"\b(class|namespace|template|operator)\b|\[", sig)):
             continue
         if first is None:
             first = pos[m.start(1)]     # prototypes go before the first function, even setup()
@@ -638,29 +642,87 @@ def index_libraries(roots):
     return idx
 
 
-def resolve_libraries(proj, sources, include_dirs, extra_roots=()):
-    """The libraries the sketch needs, in discovery order."""
+def lang_flags(src):
+    """Compiler flags for a source file's language, as the sketch build uses them."""
+    if src.suffix == ".ino":
+        # Like Arduino: C++, with the core header included automatically.
+        return ["-x", "c++", *CXXFLAGS, "-include", "baseline.h"]
+    return CXXFLAGS if src.suffix == ".cpp" else CFLAGS
+
+
+def include_deps(gcc, args, files, cwd):
+    """(headers found, headers missing) when the preprocessor reads `files`.
+    -MG lists a missing header as written instead of stopping at it, and only
+    the #includes the #if/#ifdef lines leave in are followed."""
+    r = subprocess.run([gcc, *args, "-M", "-MG", *map(str, files)], cwd=cwd,
+                       capture_output=True, text=True, errors="replace")
+    text = r.stdout.replace("\\\r\n", " ").replace("\\\n", " ")
+    found, missing = set(), set()
+    for tok in re.split(r"(?<!\\)\s+", text):
+        tok = tok.replace("\\ ", " ")
+        if not tok or tok.endswith(":"):
+            continue
+        p = Path(tok)
+        if p.is_absolute() and p.exists():
+            found.add(str(p.resolve()))
+        else:
+            missing.add(tok.replace("\\", "/"))
+    return found, missing
+
+
+def resolve_libraries(proj, gcc, units, base_dirs, flags_for, after=(), extra_roots=(), cache=None):
+    """The libraries the sketch needs, in discovery order. Like the Arduino builder,
+    the preprocessor reads the sketch (`units`: (file, extra flags)) and then each
+    library's sources: a header it can't find selects the library that provides it,
+    whose include folder is added before reading again. #includes left out by
+    #if/#ifdef select nothing. `cache` (a JSON file) skips all of this when no file
+    that was read has changed."""
     roots = library_roots(proj, extra_roots)
     if not roots:
         return []
-    idx = None
-    libs, known = [], list(include_dirs)
-    queue, seen = list(sources), set()
+    key = json.dumps([str(gcc), [str(u) for u, _ in units], [str(d) for d in base_dirs], list(after),
+                      [str(r) for r in roots], flags_for(Path("x.cpp")), flags_for(Path("x.c"))])
+    if cache and cache.exists():
+        try:
+            c = json.loads(cache.read_text())
+            if (c["key"] == key and all(os.path.getmtime(f) == t for f, t in c["deps"].items())
+                    and not (c["unresolved"] and set(c["unresolved"]) & set(index_libraries(roots)))):
+                return [Path(p) for p in c["libs"]]
+        except (OSError, ValueError, KeyError):
+            pass
+    idx = index_libraries(roots)
+    libs, deps, unresolved = [], set(), set()
+
+    def lib_groups(lib):
+        files = [f for f in lib_files(lib) if f.suffix in (".c", ".cpp")]
+        return [([f for f in files if f.suffix == s], []) for s in (".cpp", ".c")
+                if any(f.suffix == s for f in files)]
+
+    queue = [([u], extra) for u, extra in units]
     while queue:
-        f = queue.pop()
-        if f in seen:
-            continue
-        seen.add(f)
-        for name in INCLUDE_RE.findall(f.read_text(errors="ignore")):
-            if (f.parent / name).exists() or any((d / name).exists() for d in known):
-                continue
-            if idx is None:
-                idx = index_libraries(roots)
+        files, extra = queue.pop(0)
+        inc = [a for d in base_dirs + [d for lib in libs for d in lib_src_dirs(lib)] for a in ("-I", str(d))]
+        found, missing = include_deps(gcc, [*flags_for(files[0]), *inc, *after, *extra], files, cache.parent if cache else None)
+        deps |= found
+        new = []
+        for name in missing:
             lib = idx.get(name)
-            if lib and lib not in libs:
+            if lib is None:
+                unresolved.add(name)
+            elif lib not in libs:
                 libs.append(lib)
-                known += lib_src_dirs(lib)
-                queue += lib_files(lib)
+                new.append(lib)
+        if new:
+            queue.append((files, extra))            # read again: the new headers may pull in more
+            for lib in new:
+                queue += lib_groups(lib)
+    if cache:
+        # Generated files in the build folder change every build: their .ino sources are listed instead.
+        deps = {f for f in deps if cache.parent.resolve() not in Path(f).parents}
+        deps |= {str(p.resolve()) for p in proj.iterdir() if p.suffix in (".ino", ".c", ".cpp", ".h")}
+        cache.write_text(json.dumps({"key": key, "libs": [str(l) for l in libs],
+                                     "deps": {f: os.path.getmtime(f) for f in sorted(deps)},
+                                     "unresolved": sorted(unresolved)}))
     return libs
 
 
@@ -752,25 +814,42 @@ def build(proj, target_name=None):
     # Teensy: Teensyduino's bundled libraries too (FlexCAN_T4, Encoder, ...), after
     # the user's; headers the SDK provides (Wire.h, SD.h, Audio.h, ...) never come from them.
     extra = [teensy_core_dir(gcc).parents[1] / "libraries"] if target.get("builder") == "teensy" else []
-    libs = resolve_libraries(proj, user, base_dirs, extra)
+    # Teensy: last on the path, after the SDK's own headers: Teensy's register definitions (imxrt.h).
+    after = ["-idirafter", str(teensy_core_dir(gcc))] if target.get("builder") == "teensy" else []
+    defs = [f'-DBL_SKETCH_NAME="{cfg["label"]}"',f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
+    flags_for = lambda src: [*lang_flags(src), *target["cflags"], *target.get("defines", PLATFORM_DEFINES)]
+
+    # The sketch's translation units: (file to compile, its object, extra flags).
+    units = []
+    if len(inos) > 1:
+        # Several .ino files are one translation unit, as in the Arduino IDE:
+        # they share globals, types and functions without headers.
+        main = proj / (proj.name + ".ino")
+        text, where = merge_inos(inos, main if main in inos else inos[0])
+        gen = out / (proj.name + ".ino.merged.cpp")
+        gen.write_text(ino_with_prototypes(main, text, where) or text)
+        units.append((gen, out / (proj.name + ".ino.o"), ["-include", "baseline.h", *defs]))
+    for src in ([] if len(inos) > 1 else inos) + user[len(inos):] + [SDK / "src" / "sketch_crt.c"]:
+        obj = out / (src.name + ".o")
+        if src.suffix == ".ino":
+            with_protos = ino_with_prototypes(src)
+            if with_protos is not None:
+                gen = out / (src.name + ".cpp")
+                gen.write_text(with_protos)
+                units.append((gen, obj, ["-include", "baseline.h", *defs]))
+                continue
+        units.append((src, obj, defs))
+
+    libs = resolve_libraries(proj, gcc, [(u, d) for u, _, d in units], base_dirs, flags_for, after, extra,
+                             cache=out / "libraries.json")
     inc = []
     for d in base_dirs + [d for lib in libs for d in lib_src_dirs(lib)]:
         inc += ["-I", str(d)]
-    if target.get("builder") == "teensy":
-        # Last on the path, after the SDK's own headers: Teensy's register definitions (imxrt.h).
-        inc += ["-idirafter", str(teensy_core_dir(gcc))]
-    defs = [f'-DBL_SKETCH_NAME="{cfg["label"]}"',f"-DBL_SKETCH_STACK={int(cfg['stack'])}", *secret_defines()]
+    inc += after
 
     def compile_one(src, obj, extra_defs=(), quiet=False):
-        if src.suffix == ".ino":
-            # Like Arduino: C++, with the core header included automatically.
-            lang = ["-x", "c++", *CXXFLAGS, "-include", "baseline.h"]
-        elif src.suffix == ".cpp":
-            lang = CXXFLAGS
-        else:
-            lang = CFLAGS
         obj.parent.mkdir(parents=True, exist_ok=True)
-        r = subprocess.run([gcc, *lang, *target["cflags"], *target.get("defines", PLATFORM_DEFINES), *inc,
+        r = subprocess.run([gcc, *flags_for(src), *inc,
                             *extra_defs, *(["-w"] if quiet else []), "-c", str(src), "-o", str(obj)],
                            capture_output=True, text=True, errors="replace")
         sys.stdout.write(r.stdout)
@@ -781,27 +860,8 @@ def build(proj, target_name=None):
             sys.exit(r.returncode)
 
     objs = []
-    if len(inos) > 1:
-        # Several .ino files are one translation unit, as in the Arduino IDE:
-        # they share globals, types and functions without headers.
-        main = proj / (proj.name + ".ino")
-        text, where = merge_inos(inos, main if main in inos else inos[0])
-        gen = out / (proj.name + ".ino.merged.cpp")
-        gen.write_text(ino_with_prototypes(main, text, where) or text)
-        obj = out / (proj.name + ".ino.o")
-        compile_one(gen, obj, ["-include", "baseline.h", *defs])
-        objs.append(str(obj))
-    for src in ([] if len(inos) > 1 else inos) + user[len(inos):] + [SDK / "src" / "sketch_crt.c"]:
-        obj = out / (src.name + ".o")
-        if src.suffix == ".ino":
-            with_protos = ino_with_prototypes(src)
-            if with_protos is not None:
-                gen = out / (src.name + ".cpp")
-                gen.write_text(with_protos)
-                compile_one(gen, obj, ["-include", "baseline.h", *defs])
-                objs.append(str(obj))
-                continue
-        compile_one(src, obj, defs)
+    for src, obj, d in units:
+        compile_one(src, obj, d)
         objs.append(str(obj))
     # Libraries: compiled into build/<target>/libs/<library>/, and only again when a
     # file of that library (or the SDK/flick) changes. Their warnings are not shown.
@@ -828,7 +888,7 @@ def build(proj, target_name=None):
         ["sketch_cxx.cpp", "sketch_arduino.cpp", "sketch_string.cpp", "sketch_espnow.cpp",
          "sketch_net.cpp", "sketch_io.cpp", "sketch_ble.cpp", "sketch_storage.cpp",
          "sketch_mqtt.cpp", "sketch_system.cpp", "sketch_fastled.cpp", "sketch_usb.cpp",
-         "sketch_extras.cpp", "sketch_usbhost.cpp"] if cxx else [])
+         "sketch_extras.cpp", "sketch_usbhost.cpp", "sketch_idf.cpp"] if cxx else [])
     for name in shared:
         src = SDK / "src" / name
         obj = cache / (name + ".o")

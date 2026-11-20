@@ -347,6 +347,44 @@ typedef struct bl_api {
     int (*queue_count)(void *queue, int spaces);
     int (*queue_reset)(void *queue);
     void (*queue_delete)(void *queue);
+    void * (*idf_heap_malloc)(size_t size, uint32_t caps);
+    void * (*idf_heap_calloc)(size_t n, size_t size, uint32_t caps);
+    void * (*idf_heap_realloc)(void *ptr, size_t size, uint32_t caps);
+    size_t (*idf_heap_info)(uint32_t caps, int what);
+    int (*idf_heap_check)(uint32_t caps, int print);
+    void (*idf_heap_extmem)(size_t limit);
+    int (*idf_read_mac)(uint8_t *mac, int type);
+    const char * (*idf_err_name)(int err);
+    int (*idf_partition)(int index, bl_partition_t *out);
+    int (*idf_task_wdt)(int op, void *task);
+    int (*idf_tls_check)(int what, const uint8_t *data, size_t len);
+    int (*uart_set_rx_fifo_full)(int port, uint8_t bytes);
+    int (*update_begin)(uint32_t size);
+    int (*update_write)(const uint8_t *data, size_t len);
+    int (*update_end)(int commit);
+    int (*update_error)(char *buf, size_t size);
+    int (*vsscanf)(const char *str, const char *fmt, va_list ap);
+    int (*net_if_get)(int iface, int what, void *out, size_t size);
+    int (*net_if_set)(int iface, int what, const void *value, size_t size);
+    const char * (*net_event_name)(int event);
+    int (*wifi_event_take_info)(void *info, size_t size);
+    int (*wifi_sta_connect)(const char *ssid, const char *password, int channel);
+    int (*wifi_ap_config)(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns);
+    int (*wifi_set_channel)(int primary, int secondary);
+    int (*wifi_get_channel)(int *secondary);
+    int (*wifi_set_long_range)(int iface, int on);
+    int (*wifi_scan_ex)(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel, const char *ssid, const uint8_t *bssid);
+    int (*espnow_receive_info)(bl_espnow_rx_t *info, uint8_t *data, size_t size);
+    int (*tcp_client_local)(int h, uint32_t *ip, uint16_t *port);
+    int (*tcp_client_tls_identity)(int h, const char *cert_pem, const char *key_pem);
+    int (*tcp_client_tls_timeout)(int h, uint32_t seconds);
+    int (*tcp_client_last_error)(int h, char *buf, size_t size);
+    int (*uart_set_baud)(int port, uint32_t baud);
+    int (*bt_spp_config)(size_t rx_size, size_t tx_size);
+    int (*bt_spp_ssp)(int enable, int input, int output);
+    int (*bt_spp_confirm)(int accept);
+    int (*bt_spp_disconnect)(void);
+    int (*bt_spp_unpair_all)(void);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -692,6 +730,44 @@ extern const bl_api_t *BL;
 #define BL_MINOR_queue_count 10
 #define BL_MINOR_queue_reset 10
 #define BL_MINOR_queue_delete 10
+#define BL_MINOR_idf_heap_malloc 10
+#define BL_MINOR_idf_heap_calloc 10
+#define BL_MINOR_idf_heap_realloc 10
+#define BL_MINOR_idf_heap_info 10
+#define BL_MINOR_idf_heap_check 10
+#define BL_MINOR_idf_heap_extmem 10
+#define BL_MINOR_idf_read_mac 10
+#define BL_MINOR_idf_err_name 10
+#define BL_MINOR_idf_partition 10
+#define BL_MINOR_idf_task_wdt 10
+#define BL_MINOR_idf_tls_check 10
+#define BL_MINOR_uart_set_rx_fifo_full 10
+#define BL_MINOR_update_begin 10
+#define BL_MINOR_update_write 10
+#define BL_MINOR_update_end 10
+#define BL_MINOR_update_error 10
+#define BL_MINOR_vsscanf 10
+#define BL_MINOR_net_if_get 10
+#define BL_MINOR_net_if_set 10
+#define BL_MINOR_net_event_name 10
+#define BL_MINOR_wifi_event_take_info 10
+#define BL_MINOR_wifi_sta_connect 10
+#define BL_MINOR_wifi_ap_config 10
+#define BL_MINOR_wifi_set_channel 10
+#define BL_MINOR_wifi_get_channel 10
+#define BL_MINOR_wifi_set_long_range 10
+#define BL_MINOR_wifi_scan_ex 10
+#define BL_MINOR_espnow_receive_info 10
+#define BL_MINOR_tcp_client_local 10
+#define BL_MINOR_tcp_client_tls_identity 10
+#define BL_MINOR_tcp_client_tls_timeout 10
+#define BL_MINOR_tcp_client_last_error 10
+#define BL_MINOR_uart_set_baud 10
+#define BL_MINOR_bt_spp_config 10
+#define BL_MINOR_bt_spp_ssp 10
+#define BL_MINOR_bt_spp_confirm 10
+#define BL_MINOR_bt_spp_disconnect 10
+#define BL_MINOR_bt_spp_unpair_all 10
 
 /* Milliseconds since boot. */
 static inline uint32_t millis(void) { return BL_CALL(millis)(); }
@@ -1722,6 +1798,152 @@ static inline int bl_queue_reset(void *queue) { return BL_CALL(queue_reset)(queu
 #if defined(BL_HAS_RTOS)
 /* Delete it. */
 static inline void bl_queue_delete(void *queue) { BL_CALL(queue_delete)(queue); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* heap_caps_malloc: from a heap with all of caps (MALLOC_CAP_*, ESP-IDF values). Free with free(). */
+static inline void * heap_caps_malloc(size_t size, uint32_t caps) { return BL_CALL(idf_heap_malloc)(size, caps); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* heap_caps_calloc. */
+static inline void * heap_caps_calloc(size_t n, size_t size, uint32_t caps) { return BL_CALL(idf_heap_calloc)(n, size, caps); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* heap_caps_realloc. */
+static inline void * heap_caps_realloc(void *ptr, size_t size, uint32_t caps) { return BL_CALL(idf_heap_realloc)(ptr, size, caps); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* Size of the heaps with all of caps: what = BL_HEAP_FREE, BL_HEAP_LARGEST (largest free block), BL_HEAP_MIN_FREE or BL_HEAP_TOTAL. */
+static inline size_t bl_idf_heap_info(uint32_t caps, int what) { return BL_CALL(idf_heap_info)(caps, what); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* heap_caps_check_integrity (caps MALLOC_CAP_INVALID: every heap). print 1 prints what is wrong. 1 intact, 0 corrupt. */
+static inline int bl_idf_heap_check(uint32_t caps, int print) { return BL_CALL(idf_heap_check)(caps, print); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* malloc() of limit bytes or more goes to PSRAM first (Baseline starts with 4096). For the whole board, Baseline too. */
+static inline void heap_caps_malloc_extmem_enable(size_t limit) { BL_CALL(idf_heap_extmem)(limit); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* esp_read_mac: the 6-byte MAC address of type (ESP_MAC_WIFI_STA, ESP_MAC_WIFI_SOFTAP, ESP_MAC_BT, ESP_MAC_ETH, ...). Returns an esp_err_t. */
+static inline int esp_read_mac(uint8_t *mac, int type) { return BL_CALL(idf_read_mac)(mac, type); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* esp_err_to_name: an esp_err_t's name ("ESP_ERR_NO_MEM"). */
+static inline const char * esp_err_to_name(int err) { return BL_CALL(idf_err_name)(err); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* The index-th entry of the flash partition table (backs esp_partition_find). 0, or BL_ERR_ARG past the last one. */
+static inline int bl_idf_partition(int index, bl_partition_t *out) { return BL_CALL(idf_partition)(index, out); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* The ESP-IDF task watchdog: op = BL_TWDT_ADD, BL_TWDT_DELETE, BL_TWDT_STATUS or BL_TWDT_RESET; task NULL = the calling task. Returns an esp_err_t. */
+static inline int bl_idf_task_wdt(int op, void *task) { return BL_CALL(idf_task_wdt)(op, task); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* Parse with Baseline's mbedTLS: what = BL_TLS_CERT (mbedtls_x509_crt_parse) or BL_TLS_KEY (mbedtls_pk_parse_key). 0, or the negative mbedTLS error. */
+static inline int bl_idf_tls_check(int what, const uint8_t *data, size_t len) { return BL_CALL(idf_tls_check)(what, data, len); }
+#endif
+/* Serial1/2 setRxFIFOFull: move received bytes out of the hardware FIFO every bytes bytes (1-127). Returns 0 or BL_ERR_*. */
+static inline int bl_uart_set_rx_fifo_full(int port, uint8_t bytes) { return BL_CALL(uart_set_rx_fifo_full)(port, bytes); }
+#if defined(BL_PLATFORM_ESP32)
+/* Start an update of size bytes (0 = not known). Returns 0 or BL_ERR_*. */
+static inline int bl_update_begin(uint32_t size) { return BL_CALL(update_begin)(size); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* The next bytes of the image. Returns len, or BL_ERR_* (the update is then abandoned). */
+static inline int bl_update_write(const uint8_t *data, size_t len) { return BL_CALL(update_write)(data, len); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* commit 1: check the image and start it at the next restart. commit 0: abandon it. Returns 0 or BL_ERR_*. */
+static inline int bl_update_end(int commit) { return BL_CALL(update_end)(commit); }
+#endif
+#if defined(BL_PLATFORM_ESP32)
+/* Why the last update call failed, as text. Returns its length (0: no error). */
+static inline int bl_update_error(char *buf, size_t size) { return BL_CALL(update_error)(buf, size); }
+#endif
+/* vsscanf with Baseline's C library (%d %u %x %f %s %c %[...] %n ...). Returns the number of fields assigned, or EOF. ESP32 and RP2 Baselines; BL_ERR_UNSUPPORTED on Teensy (no room for scanf). */
+static inline int bl_vsscanf(const char *str, const char *fmt, va_list ap) { return BL_CALL(vsscanf)(str, fmt, ap); }
+#if defined(BL_HAS_NET)
+/* Read one property of an interface: flags return 0/1; IPv4 addresses are written to out as a uint32_t (first octet in the low byte); MAC as 6 bytes; text NUL-terminated. Returns the value, the length written, or BL_ERR_*. iface -1 with BL_NETIF_Q_DEFAULT returns the default interface's BL_NETIF_*. */
+static inline int bl_net_if_get(int iface, int what, void *out, size_t size) { return BL_CALL(net_if_get)(iface, what, out, size); }
+#endif
+#if defined(BL_HAS_NET)
+/* Change one property: BL_NETIF_S_HOSTNAME (text), BL_NETIF_S_DEFAULT (make it the default route). 0 or BL_ERR_*. */
+static inline int bl_net_if_set(int iface, int what, const void *value, size_t size) { return BL_CALL(net_if_set)(iface, what, value, size); }
+#endif
+#if defined(BL_HAS_NET)
+/* Network.eventName(): the name of an ARDUINO_EVENT_* (text in Baseline's flash). */
+static inline const char * bl_net_event_name(int event) { return BL_CALL(net_event_name)(event); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* Like wifi_event_take, and copies up to size bytes of the event's arduino_event_info_t (ESP-IDF layout) into info. */
+static inline int bl_wifi_event_take_info(void *info, size_t size) { return BL_CALL(wifi_event_take_info)(info, size); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* WiFi.STA.connect(): start connecting (channel 0 = any). Returns 1 if started. */
+static inline int bl_wifi_sta_connect(const char *ssid, const char *password, int channel) { return BL_CALL(wifi_sta_connect)(ssid, password, channel); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* WiFi.AP.config(): the access point's addresses (dhcp_start/dns 0 = default). 0 or BL_ERR_*. */
+static inline int bl_wifi_ap_config(uint32_t ip, uint32_t gateway, uint32_t subnet, uint32_t dhcp_start, uint32_t dns) { return BL_CALL(wifi_ap_config)(ip, gateway, subnet, dhcp_start, dns); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* esp_wifi_set_channel (secondary: 0 none, 1 above, 2 below). 0 or BL_ERR_*. */
+static inline int bl_wifi_set_channel(int primary, int secondary) { return BL_CALL(wifi_set_channel)(primary, secondary); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* esp_wifi_get_channel: returns the primary channel, writes the secondary. */
+static inline int bl_wifi_get_channel(int *secondary) { return BL_CALL(wifi_get_channel)(secondary); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* WiFi.setLongRange(): add (on) or remove the ESP32 long range protocol (WIFI_PROTOCOL_LR) on BL_NETIF_STA or BL_NETIF_AP, keeping 802.11b/g/n. 0 or BL_ERR_*. */
+static inline int bl_wifi_set_long_range(int iface, int on) { return BL_CALL(wifi_set_long_range)(iface, on); }
+#endif
+#if defined(BL_HAS_WIFI)
+/* scanNetworks() with Arduino-ESP32's options: hidden networks, passive scan, time per channel (0 = default), one channel (0 = all), one SSID or BSSID (NULL = any). Blocks; returns the count or BL_ERR_*. */
+static inline int bl_wifi_scan_ex(int show_hidden, int passive, uint32_t max_ms_per_chan, int channel, const char *ssid, const uint8_t *bssid) { return BL_CALL(wifi_scan_ex)(show_hidden, passive, max_ms_per_chan, channel, ssid, bssid); }
+#endif
+#if defined(BL_HAS_ESPNOW)
+/* Like espnow_receive, with the destination MAC, RSSI and channel of the packet. Returns length or 0. */
+static inline int bl_espnow_receive_info(bl_espnow_rx_t *info, uint8_t *data, size_t size) { return BL_CALL(espnow_receive_info)(info, data, size); }
+#endif
+#if defined(BL_HAS_NET)
+/* Our end of the connection (localIP/localPort). */
+static inline int bl_tcp_client_local(int h, uint32_t *ip, uint16_t *port) { return BL_CALL(tcp_client_local)(h, ip, port); }
+#endif
+#if defined(BL_HAS_NET)
+/* TLS client certificate and private key (setCertificate/setPrivateKey). Must stay valid. 0 or BL_ERR_*. */
+static inline int bl_tcp_client_tls_identity(int h, const char *cert_pem, const char *key_pem) { return BL_CALL(tcp_client_tls_identity)(h, cert_pem, key_pem); }
+#endif
+#if defined(BL_HAS_NET)
+/* TLS handshake timeout (setHandshakeTimeout). */
+static inline int bl_tcp_client_tls_timeout(int h, uint32_t seconds) { return BL_CALL(tcp_client_tls_timeout)(h, seconds); }
+#endif
+#if defined(BL_HAS_NET)
+/* The last TLS error: its code (0 none), and its text in buf. */
+static inline int bl_tcp_client_last_error(int h, char *buf, size_t size) { return BL_CALL(tcp_client_last_error)(h, buf, size); }
+#endif
+/* Serial1/2 updateBaudRate: change the baud rate of a started port. 0 or BL_ERR_*. */
+static inline int bl_uart_set_baud(int port, uint32_t baud) { return BL_CALL(uart_set_baud)(port, baud); }
+#if defined(BL_HAS_BT_CLASSIC)
+/* Buffer sizes in bytes: receive (0 = 512) and send (0 = none: write() waits on the Bluetooth stack's own 32-packet queue, as in Arduino-ESP32). In PSRAM when there is some. Call before bt_spp_begin. 0 or BL_ERR_*. */
+static inline int bl_bt_spp_config(size_t rx_size, size_t tx_size) { return BL_CALL(bt_spp_config)(rx_size, tx_size); }
+#endif
+#if defined(BL_HAS_BT_CLASSIC)
+/* Secure Simple Pairing (enableSSP): input/output capabilities. Call before bt_spp_begin. */
+static inline int bl_bt_spp_ssp(int enable, int input, int output) { return BL_CALL(bt_spp_ssp)(enable, input, output); }
+#endif
+#if defined(BL_HAS_BT_CLASSIC)
+/* Answer a pairing confirmation request (confirmReply). */
+static inline int bl_bt_spp_confirm(int accept) { return BL_CALL(bt_spp_confirm)(accept); }
+#endif
+#if defined(BL_HAS_BT_CLASSIC)
+/* Drop the connected device. 1 if one was dropped. */
+static inline int bl_bt_spp_disconnect(void) { return BL_CALL(bt_spp_disconnect)(); }
+#endif
+#if defined(BL_HAS_BT_CLASSIC)
+/* Forget every bonded device (deleteAllBondedDevices; after begin). */
+static inline int bl_bt_spp_unpair_all(void) { return BL_CALL(bt_spp_unpair_all)(); }
 #endif
 #endif /* BASELINE_FIRMWARE */
 
