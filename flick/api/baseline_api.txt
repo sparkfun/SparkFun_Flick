@@ -509,3 +509,6 @@ abi_major = 1
 10 | int         | bt_spp_confirm    | int accept                                 | bl_bt_spp_confirm    | Answer a pairing confirmation request (confirmReply).
 10 | int         | bt_spp_disconnect | void                                       | bl_bt_spp_disconnect | Drop the connected device. 1 if one was dropped.
 10 | int         | bt_spp_unpair_all | void                                       | bl_bt_spp_unpair_all | Forget every bonded device (deleteAllBondedDevices; after begin).
+
+# ---- Baseline extensions (ABI 1.10; docs/EXTENSIONS.md) ----
+10 | void *      | ext_find          | const char *name                           | bl_ext_find          | What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it.

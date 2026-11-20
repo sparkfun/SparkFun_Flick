@@ -49,3 +49,11 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="main/partitions.csv"
 
 # Baseline has no BLE Mesh API; Arduino's base enables it (~6 KB of static RAM).
 # CONFIG_BLE_MESH is not set
+
+# mbedTLS allocates through Baseline (esp_mbedtls_mem_calloc in
+# baseline/src/bl_impl_idf.cpp): PSRAM first, internal RAM when there is no
+# PSRAM or it is full. Arduino's base keeps every block in internal RAM, which
+# runs out on the classic ESP32 with Bluetooth Classic and WiFi both running
+# ("SSL - Memory allocation failed", then WiFi itself stalls).
+# CONFIG_MBEDTLS_INTERNAL_MEM_ALLOC is not set
+CONFIG_MBEDTLS_CUSTOM_MEM_ALLOC=y

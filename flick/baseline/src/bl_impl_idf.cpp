@@ -22,6 +22,27 @@
 #include "bl_update.h"
 #include "sketch_loader.h"
 
+#ifdef CONFIG_MBEDTLS_CUSTOM_MEM_ALLOC
+/* mbedTLS's allocator (idf/sdkconfig.defaults): PSRAM first, then internal RAM.
+ * A TLS connection takes ~40 KB in many blocks; in internal RAM it competes
+ * with WiFi's receive buffers, and with Bluetooth Classic running on the
+ * classic ESP32 both fail. ESP-IDF's crypto drivers copy PSRAM buffers through
+ * internal ones where the hardware needs that.
+ * With CONFIG_MBEDTLS_CUSTOM_MEM_ALLOC, mbedTLS uses calloc() until the
+ * application sets its own, so this is installed before anything else runs. */
+#include "mbedtls/platform.h"
+
+static void *tls_calloc(size_t n, size_t size)
+{
+    return heap_caps_calloc_prefer(n, size, 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+}
+
+__attribute__((constructor)) static void tls_allocator_install(void)
+{
+    mbedtls_platform_set_calloc_free(tls_calloc, heap_caps_free);
+}
+#endif
+
 /* ---- heap ---- */
 
 void *bl_impl_idf_heap_malloc(size_t size, uint32_t caps)

@@ -385,6 +385,7 @@ typedef struct bl_api {
     int (*bt_spp_confirm)(int accept);
     int (*bt_spp_disconnect)(void);
     int (*bt_spp_unpair_all)(void);
+    void * (*ext_find)(const char *name);
 } bl_api_t;
 
 #ifndef BASELINE_FIRMWARE
@@ -768,6 +769,7 @@ extern const bl_api_t *BL;
 #define BL_MINOR_bt_spp_confirm 10
 #define BL_MINOR_bt_spp_disconnect 10
 #define BL_MINOR_bt_spp_unpair_all 10
+#define BL_MINOR_ext_find 10
 
 /* Milliseconds since boot. */
 static inline uint32_t millis(void) { return BL_CALL(millis)(); }
@@ -1945,6 +1947,8 @@ static inline int bl_bt_spp_disconnect(void) { return BL_CALL(bt_spp_disconnect)
 /* Forget every bonded device (deleteAllBondedDevices; after begin). */
 static inline int bl_bt_spp_unpair_all(void) { return BL_CALL(bt_spp_unpair_all)(); }
 #endif
+/* What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it. */
+static inline void * bl_ext_find(const char *name) { return BL_CALL(ext_find)(name); }
 #endif /* BASELINE_FIRMWARE */
 
 #endif /* BASELINE_API_H */

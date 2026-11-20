@@ -358,3 +358,4 @@ Include `baseline.h` in your sketch. Call the **Sketch name** column. Every call
 | `bl_bt_spp_confirm` | `int bt_spp_confirm(int accept)` | 1.10 | Answer a pairing confirmation request (confirmReply). |
 | `bl_bt_spp_disconnect` | `int bt_spp_disconnect(void)` | 1.10 | Drop the connected device. 1 if one was dropped. |
 | `bl_bt_spp_unpair_all` | `int bt_spp_unpair_all(void)` | 1.10 | Forget every bonded device (deleteAllBondedDevices; after begin). |
+| `bl_ext_find` | `void * ext_find(const char *name)` | 1.10 | What a Baseline extension registered under name (BL_EXTENSION in baseline_extension.h), or NULL when this Baseline was built without it. |

@@ -362,6 +362,7 @@ int bl_impl_bt_spp_ssp(int enable, int input, int output);
 int bl_impl_bt_spp_confirm(int accept);
 int bl_impl_bt_spp_disconnect(void);
 int bl_impl_bt_spp_unpair_all(void);
+void * bl_impl_ext_find(const char *name);
 
 #ifdef __cplusplus
 }

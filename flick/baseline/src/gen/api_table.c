@@ -357,4 +357,5 @@ const bl_api_t bl_api_table = {
     .bt_spp_confirm = bl_impl_bt_spp_confirm,
     .bt_spp_disconnect = bl_impl_bt_spp_disconnect,
     .bt_spp_unpair_all = bl_impl_bt_spp_unpair_all,
+    .ext_find = bl_impl_ext_find,
 };

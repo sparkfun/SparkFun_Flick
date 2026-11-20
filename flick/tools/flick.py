@@ -344,7 +344,9 @@ def cmd_wifi(args):
 
 def load_config(proj):
     """Name defaults to the folder name. An optional sketch.cfg may set
-    `name = ...`, `stack = <bytes>` and `target = <target>`."""
+    `name = ...`, `stack = <bytes>`, `target = <target>` and
+    `extensions = <folder>[, <folder>]` (Baseline extensions the sketch uses,
+    relative to the sketch: their headers are on its include path)."""
     cfg = {"name": proj.name, "stack": "8192"}
     f = proj / "sketch.cfg"
     if f.exists():
@@ -811,6 +813,12 @@ def build(proj, target_name=None):
     t0 = time.time()
 
     base_dirs = [SDK / "include", SDK / "include" / "compat", *target["sdk_dirs"], proj]
+    # Baseline extensions the sketch uses (docs/EXTENSIONS.md): their interface headers
+    for d in filter(None, (d.strip() for d in cfg.get("extensions", "").split(","))):
+        ext = (proj / d).resolve()
+        if not ext.is_dir():
+            sys.exit(f"error: sketch.cfg extensions: no folder {ext}")
+        base_dirs.append(ext)
     # Teensy: Teensyduino's bundled libraries too (FlexCAN_T4, Encoder, ...), after
     # the user's; headers the SDK provides (Wire.h, SD.h, Audio.h, ...) never come from them.
     extra = [teensy_core_dir(gcc).parents[1] / "libraries"] if target.get("builder") == "teensy" else []
@@ -1703,13 +1711,44 @@ def baseline_build_path(target_name):
     return BUILD_ROOT / target_name / "build"
 
 
-def stage_baseline(target):
+def with_extensions(target, dirs):
+    """The target with Baseline extensions (flick baseline ... --ext DIR,
+    docs/EXTENSIONS.md): folders of extra Baseline source a project keeps in
+    its own repository. Its build and files are named <target>-<ext>, so the
+    stock Baseline's are left alone; the board still reports the target's name."""
+    exts = []
+    for d in dirs or ():
+        d = Path(d).resolve()
+        if not d.is_dir():
+            sys.exit(f"error: --ext {d}: no such folder")
+        if not re.fullmatch(r"[a-z0-9_]+", d.name):
+            sys.exit(f"error: --ext {d}: the folder name is the extension's name: lowercase letters, digits and _ only")
+        if not any(f.suffix in (".c", ".cpp") for f in d.rglob("*")):
+            sys.exit(f"error: --ext {d}: no .c or .cpp files")
+        exts.append(d)
+    target = dict(target, extensions=exts)
+    target["build_name"] = "-".join([target["name"], *(d.name for d in exts)])
+    return target
+
+
+def build_name(target):
+    return target.get("build_name", target["name"])
+
+
+def extension_files(target, under):
+    """{staged path: file} for each extension's sources, below `under`."""
+    return {under / d.name / f.relative_to(d): f for d in target.get("extensions", ())
+            for f in d.rglob("*") if f.is_file()}
+
+
+def stage_baseline(target, with_ext=True):
     """Assemble one Baseline source folder per target: the shared Baseline
     source, then chips/<chip>/baseline (bl_port.h, bl_port_mmu.c, ...), then
     targets/<target>/baseline if it exists, later files winning; plus the
-    chip's partition table for the target's flash size as partitions.csv.
+    chip's partition table for the target's flash size as partitions.csv, and
+    (with_ext) the extensions' sources in src/ext/<name>/.
     Copies keep their timestamps, so the build recompiles only what changed."""
-    dst = BUILD_ROOT / target["name"] / "baseline"
+    dst = BUILD_ROOT / build_name(target) / "baseline"
     table = target["chip_dir"] / f"partitions-{target['flash_size']}.csv"
     if not table.exists():
         sys.exit(f"error: no partition table for {target['flash_size']} of flash: {table.relative_to(ROOT)}")
@@ -1720,6 +1759,8 @@ def stage_baseline(target):
         for f in root.rglob("*"):
             if f.is_file():
                 wanted[f.relative_to(root)] = f
+    if with_ext:
+        wanted.update(extension_files(target, Path("src") / "ext"))
     return sync_files(dst, wanted)
 
 
@@ -1780,6 +1821,8 @@ def build_baseline_teensy(target, flash, serial_port=None):
     wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
     for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
         wanted[Path(name)] = gen / name
+    wanted[Path("bl_ext.c")] = ROOT / "baseline" / "src" / "bl_ext.c"
+    wanted.update(extension_files(target, Path("src") / "ext"))
     # INFO build= (the download page skips flashing a board that already runs
     # this image): a hash of everything the build reads from Flick, as on RP2.
     h = hashlib.sha256()
@@ -1789,14 +1832,14 @@ def build_baseline_teensy(target, flash, serial_port=None):
         h.update(rel.as_posix().encode() + b"\0" + id_bytes(src))
     h.update(target["fqbn"].encode() + b"\0-DTEENSY_INIT_USB_DELAY_AFTER=0")
     h.update(id_bytes(target["chip_dir"] / "chip.json"))
-    id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
+    id_header = BUILD_ROOT / build_name(target) / "bl_build_id.h"
     text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
     if not id_header.exists() or id_header.read_text() != text:
         id_header.parent.mkdir(parents=True, exist_ok=True)
         id_header.write_text(text)
     wanted[Path("bl_build_id.h")] = id_header
-    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
-    build_path = baseline_build_path(target["name"])
+    sketch = sync_files(BUILD_ROOT / build_name(target) / "baseline", wanted)
+    build_path = baseline_build_path(build_name(target))
     # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
     # The staging folder too: arduino-cli does not copy .inc files into its build folder.
     inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))
@@ -1817,7 +1860,7 @@ def build_baseline_teensy(target, flash, serial_port=None):
            "--warnings", "default", str(sketch)]
     run(cmd)
     hexfile = build_path / "baseline.ino.hex"
-    out = DIST / target["name"] / f"baseline-{target['name']}.hex"
+    out = DIST / build_name(target) / f"baseline-{build_name(target)}.hex"
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(hexfile, out)
     print(f"Baseline image: {out.relative_to(WORK)} (Intel hex for Teensy's bootloader)")
@@ -1858,9 +1901,11 @@ def build_baseline_rp2(target, flash, port=None):
     wanted = {Path(f.name): f for f in (ROOT / target["baseline_source"]).glob("*") if f.is_file()}
     for name in ("api_table.c", "bl_impl.h", "bl_impl_weak.inc"):
         wanted[Path(name)] = gen / name
+    wanted[Path("bl_ext.c")] = ROOT / "baseline" / "src" / "bl_ext.c"
+    wanted.update(extension_files(target, Path("src") / "ext"))
     if target.get("ca_bundle"):
         wanted[Path("bl_ca_bundle.h")] = ca_bundle_header(ROOT / target["ca_bundle"], BUILD_ROOT / "rp2-ca")
-    build_path = baseline_build_path(target["name"])
+    build_path = baseline_build_path(build_name(target))
     board = header_defines(target["dir"] / "sdk" / "bl_board.h")
     chip = header_defines(target["chip_dir"] / "sdk" / "bl_target.h")
     ram_base = 0x20000000
@@ -1884,13 +1929,13 @@ def build_baseline_rp2(target, flash, port=None):
         h.update(rel.as_posix().encode() + b"\0" + id_bytes(src))
     h.update("\0".join([target["fqbn"], *props]).encode())
     h.update(id_bytes(target["chip_dir"] / "chip.json"))
-    id_header = BUILD_ROOT / target["name"] / "bl_build_id.h"
+    id_header = BUILD_ROOT / build_name(target) / "bl_build_id.h"
     text = f'#define BL_BUILD_ID "{h.hexdigest()[:16]}"\n'
     if not id_header.exists() or id_header.read_text() != text:
         id_header.parent.mkdir(parents=True, exist_ok=True)
         id_header.write_text(text)
     wanted[Path("bl_build_id.h")] = id_header
-    sketch = sync_files(BUILD_ROOT / target["name"] / "baseline", wanted)
+    sketch = sync_files(BUILD_ROOT / build_name(target) / "baseline", wanted)
     # Quoted: arduino-cli splits the expanded recipe on spaces (a user folder like "Jane Doe").
     # The staging folder too: arduino-cli does not copy .inc files into its build folder.
     inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"], sketch))
@@ -1906,12 +1951,12 @@ def build_baseline_rp2(target, flash, port=None):
         cmd += ["--build-property", prop]
     run(cmd + ["--warnings", "default", str(sketch)])
     uf2 = build_path / "baseline.ino.uf2"
-    out = DIST / target["name"] / f"baseline-{target['name']}.uf2"
+    out = DIST / build_name(target) / f"baseline-{build_name(target)}.uf2"
     out.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(uf2, out)
     print(f"Baseline image: {out.relative_to(WORK)} (UF2: drop it on the board's USB drive in BOOTSEL mode)")
     version = header_defines(ROOT / target["baseline_source"] / "bl_rp2.h")["BASELINE_VERSION"]
-    bsu = make_bsu(target, build_path / "baseline.ino.bin", DIST / target["name"] / f"baseline-{target['name']}.bsu",
+    bsu = make_bsu(target, build_path / "baseline.ino.bin", DIST / build_name(target) / f"baseline-{build_name(target)}.bsu",
                    version, build_path / "baseline.ino.elf")
     print(f"Baseline update: {bsu.relative_to(WORK)} ({bsu.stat().st_size} bytes, for flick baseline update)")
     if flash:
@@ -2094,7 +2139,7 @@ def staged_updates(target):
 
 def stage_idf(target, core_dir, libs_dir):
     """Assemble the IDF project for a target (layout: idf/CMakeLists.txt)."""
-    proj = BUILD_ROOT / target["name"] / "idf"
+    proj = BUILD_ROOT / build_name(target) / "idf"
     idf_src = ROOT / "idf"
     proj.mkdir(parents=True, exist_ok=True)
     shutil.copy2(idf_src / "CMakeLists.txt", proj / "CMakeLists.txt")
@@ -2102,12 +2147,25 @@ def stage_idf(target, core_dir, libs_dir):
     # main/: the same files the Arduino build stages, plus idf/main/.
     main = proj / "main"
     before = sorted(main.rglob("*")) if main.exists() else []
-    sync_tree(stage_baseline(target), main)
+    sync_tree(stage_baseline(target, with_ext=False), main)
     (main / "baseline.ino").replace(main / "baseline_main.cpp")
     for f in (idf_src / "main").iterdir():
         shutil.copy2(f, main / f.name)
     if sorted(main.rglob("*")) != before:
         (main / "CMakeLists.txt").touch()     # new or removed sources: make CMake glob again
+
+    # components/bl_ext_<name>: the extensions (docs/EXTENSIONS.md), with
+    # idf/ext_component.cmake as their CMakeLists.txt unless they bring one.
+    comps = proj / "components"
+    for d in target.get("extensions", ()):
+        comp = comps / f"bl_ext_{d.name}"
+        sync_tree(d, comp)
+        if not (d / "CMakeLists.txt").exists():
+            shutil.copy2(idf_src / "ext_component.cmake", comp / "CMakeLists.txt")
+    if comps.exists():
+        for comp in comps.glob("bl_ext_*"):
+            if comp.name[len("bl_ext_"):] not in {d.name for d in target.get("extensions", ())}:
+                shutil.rmtree(comp)
 
     # bootloader_components/bsu_stage: on 4 MB boards (one Baseline slot) the
     # bootloader installs staged Baseline updates (baseline/src/bl_update.cpp).
@@ -2224,14 +2282,14 @@ def build_baseline_idf(target, core):
 
     # One blob at 0x0: bootloader + partition table + Baseline.
     args = json.loads((b / "flasher_args.json").read_text())
-    out = DIST / target["name"] / f"baseline-{target['name']}.bin"
+    out = DIST / build_name(target) / f"baseline-{build_name(target)}.bin"
     out.parent.mkdir(parents=True, exist_ok=True)
     parts = []
     for off, f in sorted(args["flash_files"].items(), key=lambda kv: int(kv[0], 16)):
         parts += [off, str(b / f)]
     run([str(py), "-m", "esptool", "--chip", target["idf_target"], "merge_bin", "-o", str(out)] + parts, env=env)
     print(f"Baseline blob: {out.relative_to(WORK)} ({out.stat().st_size:,} bytes; flash at 0x0)")
-    bsu = make_bsu(target, b / args["app"]["file"], DIST / target["name"] / f"baseline-{target['name']}.bsu")
+    bsu = make_bsu(target, b / args["app"]["file"], DIST / build_name(target) / f"baseline-{build_name(target)}.bsu")
     print(f"Baseline update: {bsu.relative_to(WORK)} ({bsu.stat().st_size:,} bytes; flick baseline update, "
           "or ota_pull_baseline)")
     return proj, env, py, args
@@ -2732,7 +2790,7 @@ def cmd_baseline_update(args, target):
             build_baseline_idf(target, esp32_core_for(target))
         else:
             sys.exit(f"error: {target['name']} updates Baseline over USB only (flick baseline flash)")
-        bsu = DIST / target["name"] / f"baseline-{target['name']}.bsu"
+        bsu = DIST / build_name(target) / f"baseline-{build_name(target)}.bsu"
     pkg = bsu.read_bytes()
     h = parse_bsu(pkg)
     port, conn = open_link_port(args)
@@ -2793,6 +2851,8 @@ def cmd_baseline(args):
         with conn:
             args.target = info_fields(Link(conn, echo=False).request("INFO")).get("target")
     target = load_target(args.target or DEFAULT_TARGET)
+    if args.ext:
+        target = with_extensions(target, args.ext)
     if args.action == "update":
         return cmd_baseline_update(args, target)
     print(f"target {target['name']}: {target['description']}")
@@ -2809,7 +2869,7 @@ def cmd_baseline(args):
     print(f"using Arduino-ESP32 {'.'.join(map(str, core[0]))} from {core[1]}")
     os.environ["ARDUINO_DIRECTORIES_DATA"] = str(core[1])
     sketch = stage_baseline(target)
-    build_path = baseline_build_path(target["name"])
+    build_path = baseline_build_path(build_name(target))
     # Quoted: arduino-cli splits the expanded recipe on spaces (e.g. "C:\Users\Jane Doe").
     inc = " ".join(f'"-I{p}"' for p in (SDK / "include", *target["sdk_dirs"]))
     cmd = [find_arduino_cli(), "compile", "--fqbn", target["fqbn"],
@@ -2830,7 +2890,7 @@ def cmd_baseline(args):
     if merged.exists():
         blob = merged.read_bytes().rstrip(b"\xff")
         blob += b"\xff" * (-len(blob) % 4)
-        out = DIST / target["name"] / f"baseline-{target['name']}.bin"
+        out = DIST / build_name(target) / f"baseline-{build_name(target)}.bin"
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(blob)
         print(f"Baseline blob: {out.relative_to(WORK)} ({len(blob):,} bytes; flash at 0x0)")
@@ -2894,6 +2954,9 @@ def main():
     p.add_argument("--file", help="flash: a downloaded baseline-<target>.bin; update: a .bsu file "
                                   "(default: build it for --target)")
     p.add_argument("-b", "--baud", type=int, help="console baud rate (default: found automatically)")
+    p.add_argument("--ext", action="append", metavar="DIR",
+                   help="build in a Baseline extension: a folder of extra Baseline source (repeatable; "
+                        "docs/EXTENSIONS.md)")
     p.set_defaults(fn=cmd_baseline)
 
     p = sub.add_parser("setup", help="download the compiler sketches need (once)")

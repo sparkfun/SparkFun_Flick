@@ -165,6 +165,18 @@ void setup()
     CHECK("BluetoothSerial nothing received", SerialBT.available() == 0);
     Serial.printf("      internal heap with Bluetooth Classic: %u free, %u largest block\n",
                   heap_caps_get_free_size(MALLOC_CAP_INTERNAL), heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+    // mbedTLS takes its big buffers from PSRAM, so TLS still fits
+    WiFiClientSecure withBt;
+    withBt.setHandshakeTimeout(10);
+    bool tlsOk = withBt.connect("example.com", 443);
+    Serial.printf("      internal heap during TLS: %u free\n", heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+    if (!tlsOk) {
+        char why[100];
+        withBt.lastError(why, sizeof(why));
+        Serial.printf("      lastError: %s\n", why);
+    }
+    withBt.stop();
+    CHECK("WiFiClientSecure connects with Bluetooth Classic running (mbedTLS in PSRAM)", tlsOk);
 #endif
 
     Serial.printf("RESULT %d passed, %d failed\n", passed, failed);
