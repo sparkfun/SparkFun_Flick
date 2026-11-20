@@ -86,8 +86,11 @@ typedef union {
     wifi_event_ap_stadisconnected_t wifi_ap_stadisconnected;
     uint8_t raw[48];        /* as much as Baseline passes */
 } arduino_event_info_t;
+#if defined(BL_PLATFORM_ESP32)
+/* Baseline copies ESP-IDF's event data into these (other chips pass none) */
 static_assert(sizeof(wifi_event_sta_connected_t) == 48 && sizeof(wifi_event_sta_disconnected_t) == 41,
               "event details must have ESP-IDF's layout");
+#endif
 typedef arduino_event_info_t WiFiEventInfo_t;
 typedef struct {
     arduino_event_id_t event_id;
